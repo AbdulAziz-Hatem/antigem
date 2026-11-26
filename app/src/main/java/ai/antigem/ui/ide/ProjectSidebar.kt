@@ -4,9 +4,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.*
@@ -19,6 +22,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +51,8 @@ import ai.antigem.data.preferences.AuthPreferences
 import ai.antigem.theme.ClaudeTerracotta
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -82,11 +98,16 @@ fun ProjectSidebar(
     val treeScope = rememberCoroutineScope()
     val daemonStatus by ai.antigem.data.daemon.IdeDaemonManager.status.collectAsState()
 
+    val sidebarTitle = L.ide.projectSidebar.projectSidebar
     Column(
         modifier = modifier
             .fillMaxHeight()
             .width(280.dp)
             .background(MaterialTheme.colorScheme.surface)
+            .semantics {
+                paneTitle = sidebarTitle
+                isTraversalGroup = true
+            }
             .padding(8.dp)
     ) {
         // --- 1. Project Selector Header ---
@@ -100,7 +121,9 @@ fun ProjectSidebar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { projectsDropdownExpanded = true }
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Button) { projectsDropdownExpanded = true }
+                    .semantics(mergeDescendants = true) {}
                     .padding(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -136,6 +159,20 @@ fun ProjectSidebar(
                     expanded = projectsDropdownExpanded,
                     onDismissRequest = { projectsDropdownExpanded = false }
                 ) {
+                    val menuBg = MaterialTheme.colorScheme.surfaceContainer
+                    val projectPathColor = ensureAccessibleContrast(
+                        foreground = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        background = menuBg,
+                        minRatio = 4.5f,
+                        surfaceFallback = MaterialTheme.colorScheme.surface
+                    )
+                    val removeIconTint = ensureAccessibleContrast(
+                        foreground = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        background = menuBg,
+                        minRatio = 4.5f,
+                        surfaceFallback = MaterialTheme.colorScheme.surface
+                    )
+
                     DropdownMenuItem(
                         text = { Text(L.ide.projectSidebar.availableProjects, fontWeight = FontWeight.Bold) },
                         onClick = {},
@@ -169,7 +206,7 @@ fun ProjectSidebar(
                                             Text(
                                                 text = proj.path,
                                                 style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                color = projectPathColor,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -179,12 +216,12 @@ fun ProjectSidebar(
                                                 onClick = {
                                                     onRemoveProject(proj)
                                                 },
-                                                modifier = Modifier.size(24.dp)
+                                                modifier = Modifier.minTouchTarget(48.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Outlined.Close,
                                                     contentDescription = L.ide.projectSidebar.removeProject,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                    tint = removeIconTint,
                                                     modifier = Modifier.size(14.dp)
                                                 )
                                             }
@@ -211,7 +248,7 @@ fun ProjectSidebar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("+ New Project", color = MaterialTheme.colorScheme.primary) },
+                        text = { Text(L.ide.projectSidebar.newProject, color = MaterialTheme.colorScheme.primary) },
                         leadingIcon = {
                             Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         },
@@ -228,15 +265,19 @@ fun ProjectSidebar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .selectableGroup()
                 .padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            val explorerSelected = selectedTab == SidebarTab.EXPLORER
             Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = if (selectedTab == SidebarTab.EXPLORER) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                color = if (explorerSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { selectedTab = SidebarTab.EXPLORER }
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Tab) { selectedTab = SidebarTab.EXPLORER }
+                    .semantics(mergeDescendants = true) { selected = explorerSelected }
             ) {
                 Row(
                     modifier = Modifier.padding(vertical = 5.dp),
@@ -247,24 +288,27 @@ fun ProjectSidebar(
                         imageVector = Icons.Default.Folder,
                         contentDescription = null,
                         modifier = Modifier.size(13.dp),
-                        tint = if (selectedTab == SidebarTab.EXPLORER) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (explorerSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = L.ide.projectSidebar.explorer,
                         fontSize = 11.5.sp,
-                        fontWeight = if (selectedTab == SidebarTab.EXPLORER) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selectedTab == SidebarTab.EXPLORER) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = if (explorerSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (explorerSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
+            val gitSelected = selectedTab == SidebarTab.SOURCE_CONTROL
             Surface(
                 shape = RoundedCornerShape(6.dp),
-                color = if (selectedTab == SidebarTab.SOURCE_CONTROL) ClaudeTerracotta.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                color = if (gitSelected) ClaudeTerracotta.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 modifier = Modifier
                     .weight(1f)
-                    .clickable { selectedTab = SidebarTab.SOURCE_CONTROL }
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Tab) { selectedTab = SidebarTab.SOURCE_CONTROL }
+                    .semantics(mergeDescendants = true) { selected = gitSelected }
             ) {
                 Row(
                     modifier = Modifier.padding(vertical = 5.dp),
@@ -275,14 +319,14 @@ fun ProjectSidebar(
                         imageVector = Icons.Default.AltRoute,
                         contentDescription = null,
                         modifier = Modifier.size(13.dp),
-                        tint = if (selectedTab == SidebarTab.SOURCE_CONTROL) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (gitSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = L.ide.projectSidebar.git,
                         fontSize = 11.5.sp,
-                        fontWeight = if (selectedTab == SidebarTab.SOURCE_CONTROL) FontWeight.Bold else FontWeight.Medium,
-                        color = if (selectedTab == SidebarTab.SOURCE_CONTROL) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = if (gitSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (gitSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -302,7 +346,6 @@ fun ProjectSidebar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 2.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -310,10 +353,19 @@ fun ProjectSidebar(
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
-                    fontSize = 11.sp
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .semantics { heading() }
                 )
 
-                Row {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(
                         onClick = {
                             val rootPath = activeProject?.path ?: ""
@@ -322,7 +374,7 @@ fun ProjectSidebar(
                                 showCreateFileDialog = rootPath
                             }
                         },
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.NoteAdd,
@@ -339,7 +391,7 @@ fun ProjectSidebar(
                                 showCreateFileDialog = rootPath
                             }
                         },
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.CreateNewFolder,
@@ -353,7 +405,7 @@ fun ProjectSidebar(
                             val rootPath = activeProject?.path ?: ""
                             onOpenTerminal(rootPath)
                         },
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
@@ -364,7 +416,7 @@ fun ProjectSidebar(
                     }
                     IconButton(
                         onClick = onOpenFileManager,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.FolderOpen,
@@ -375,7 +427,7 @@ fun ProjectSidebar(
                     }
                     IconButton(
                         onClick = onRefreshTree,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -521,7 +573,7 @@ fun ProjectSidebar(
                     value = newItemName,
                     onValueChange = { newItemName = it },
                     label = { Text(if (isNewFolderMode) L.ide.projectSidebar.folderName else L.ide.projectSidebar.fileName) },
-                    placeholder = { Text(if (isNewFolderMode) L.ide.projectSidebar.eGComponents else "e.g. utils.py") },
+                    placeholder = { Text(if (isNewFolderMode) L.ide.projectSidebar.eGComponents else L.ide.projectSidebar.eGUtilsPy) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -619,7 +671,7 @@ fun ProjectSidebar(
             },
             title = {
                 Text(
-                    text = "Delete ${if (node.isDir) "Folder" else "File"}?",
+                    text = L.ide.projectSidebar.deleteKind(if (node.isDir) L.ide.projectSidebar.folder else L.ide.projectSidebar.file),
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -723,22 +775,51 @@ fun FileTreeNodeItem(
     var menuExpanded by remember { mutableStateOf(false) }
     val isActive = activeFilePath == node.path
 
+    val kindName = if (node.isDir) L.ide.projectSidebar.folderName2(node.name) else L.ide.projectSidebar.fileName2(node.name)
+    val nodeDesc = if (isActive) "$kindName, ${L.ide.projectSidebar.activeFile}" else kindName
+    val expandStateDesc = if (isExpanded) L.ide.projectSidebar.expanded else L.ide.projectSidebar.collapsed
+    val optionsLabel = L.common.options
+    val terminalLabel = L.common.terminal
+
     Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(32.dp)
+                .minTouchTarget(48.dp)
                 .padding(start = (depth * 14).dp)
                 .background(
                     if (isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
                     else Color.Transparent,
                     shape = RoundedCornerShape(4.dp)
                 )
-                .clickable {
+                .clickable(role = Role.Button) {
                     if (node.isDir) {
                         onToggleExpand(node.path)
                     } else {
                         onOpenFile(node)
+                    }
+                }
+                .semantics(mergeDescendants = true) {
+                    contentDescription = nodeDesc
+                    selected = isActive
+                    if (node.isDir) {
+                        stateDescription = expandStateDesc
+                    }
+                    customActions = buildList {
+                        add(
+                            CustomAccessibilityAction(optionsLabel) {
+                                menuExpanded = true
+                                true
+                            }
+                        )
+                        if (node.isDir) {
+                            add(
+                                CustomAccessibilityAction(terminalLabel) {
+                                    onOpenTerminal(node.path)
+                                    true
+                                }
+                            )
+                        }
                     }
                 }
                 .padding(horizontal = 4.dp),
@@ -782,14 +863,16 @@ fun FileTreeNodeItem(
                 color = if (isActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clearAndSetSemantics {}
             )
 
             // Context Menu Button
             Box {
                 IconButton(
                     onClick = { menuExpanded = true },
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,

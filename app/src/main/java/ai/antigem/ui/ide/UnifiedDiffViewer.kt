@@ -15,12 +15,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import java.io.File
 import ai.antigem.i18n.L
 
@@ -63,21 +67,41 @@ fun UnifiedDiffViewer(
         parsedLines.count { it.type == DiffLineType.Deletion }
     }
 
+    val editorBg = ai.antigem.theme.AppColors.editorBg
+    val panelBg = ai.antigem.theme.AppColors.editorPanel
+    val panelMuted = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, panelBg)
+    val panelText = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, panelBg)
+    val badgeBg = when {
+        commitHash != null -> ClaudeTerracotta.copy(alpha = 0.25f)
+        isStaged -> ai.antigem.theme.AppColors.success.copy(alpha = 0.25f)
+        else -> ai.antigem.theme.AppColors.warning.copy(alpha = 0.25f)
+    }
+    val badgeFg = ensureAccessibleContrast(
+        foreground = when {
+            commitHash != null -> ClaudeTerracotta
+            isStaged -> ai.antigem.theme.AppColors.success
+            else -> ai.antigem.theme.AppColors.warning
+        },
+        background = badgeBg,
+        minRatio = 4.5f,
+        surfaceFallback = panelBg
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ai.antigem.theme.AppColors.editorBg)
+            .background(editorBg)
     ) {
         // --- 1. Diff Header Toolbar ---
         Surface(
-            color = ai.antigem.theme.AppColors.editorPanel,
+            color = panelBg,
             tonalElevation = 2.dp,
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -98,32 +122,24 @@ fun UnifiedDiffViewer(
                             fontSize = 13.5.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = ai.antigem.theme.AppColors.editorText,
+                            color = panelText,
                             modifier = Modifier.weight(1f, fill = false)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = when {
-                                commitHash != null -> ClaudeTerracotta.copy(alpha = 0.25f)
-                                isStaged -> ai.antigem.theme.AppColors.success.copy(alpha = 0.25f)
-                                else -> ai.antigem.theme.AppColors.warning.copy(alpha = 0.25f)
-                            }
+                            color = badgeBg
                         ) {
                             Text(
                                 text = when {
-                                    commitHash != null -> "COMMIT ${commitHash.take(7)}"
-                                    isStaged -> "STAGED"
-                                    else -> "WORKING TREE"
+                                    commitHash != null -> L.ide.unifiedDiffViewer.commitHash(commitHash.take(7))
+                                    isStaged -> L.ide.unifiedDiffViewer.staged
+                                    else -> L.ide.unifiedDiffViewer.workingTree
                                 },
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
-                                color = when {
-                                    commitHash != null -> ClaudeTerracotta
-                                    isStaged -> ai.antigem.theme.AppColors.success
-                                    else -> ai.antigem.theme.AppColors.warning
-                                },
+                                color = badgeFg,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
@@ -133,7 +149,7 @@ fun UnifiedDiffViewer(
                         fontSize = 11.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = ai.antigem.theme.AppColors.editorMuted
+                        color = panelMuted
                     )
                 }
 
@@ -143,25 +159,41 @@ fun UnifiedDiffViewer(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .background(ai.antigem.theme.AppColors.editorBg, RoundedCornerShape(4.dp))
+                        .background(editorBg, RoundedCornerShape(4.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = L.ide.unifiedDiffViewer.additionsAddedDeletionsDeleted(
+                                additionsCount,
+                                deletionsCount
+                            )
+                        }
                 ) {
-                    Text(text = "+$additionsCount", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ai.antigem.theme.AppColors.success)
+                    Text(
+                        text = "+$additionsCount",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ensureAccessibleContrast(ai.antigem.theme.AppColors.success, editorBg)
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "-$deletionsCount", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ai.antigem.theme.AppColors.danger)
+                    Text(
+                        text = "-$deletionsCount",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, editorBg)
+                    )
                 }
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
                 // 1. Open Current Working File (Editable)
                 IconButton(
                     onClick = onOpenCurrentFile,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = L.ide.unifiedDiffViewer.openCurrentFileEditable,
-                        tint = ai.antigem.theme.AppColors.success,
+                        tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.success, panelBg),
                         modifier = Modifier.size(17.dp)
                     )
                 }
@@ -169,12 +201,12 @@ fun UnifiedDiffViewer(
                 // 2. Open Revision / Commit File (Read-Only)
                 IconButton(
                     onClick = onOpenHistoricalFile,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.History,
                         contentDescription = L.ide.unifiedDiffViewer.openRevisionFileReadOnly,
-                        tint = ClaudeTerracotta,
+                        tint = ensureAccessibleContrast(ClaudeTerracotta, panelBg),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -182,12 +214,12 @@ fun UnifiedDiffViewer(
                 // Close Button
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = L.ide.unifiedDiffViewer.closeDiff,
-                        tint = ai.antigem.theme.AppColors.editorMuted,
+                        tint = panelMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -205,7 +237,7 @@ fun UnifiedDiffViewer(
             ) {
                 Text(
                     text = L.ide.unifiedDiffViewer.noChangesDetectedOrBinaryFile,
-                    color = Color.Gray,
+                    color = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, editorBg),
                     fontSize = 14.sp
                 )
             }
@@ -231,26 +263,39 @@ fun UnifiedDiffViewer(
 
 @Composable
 private fun DiffLineRow(line: ParsedDiffLine) {
-    val (bgColor, textColor, gutterSign) = when (line.type) {
+    val editorBg = ai.antigem.theme.AppColors.editorBg
+    val (bgColor, rawTextColor, gutterSign) = when (line.type) {
         DiffLineType.Addition -> Triple(ai.antigem.theme.AppColors.editorAddedBg, ai.antigem.theme.AppColors.editorAddedText, "+")
         DiffLineType.Deletion -> Triple(ai.antigem.theme.AppColors.editorRemovedBg, ai.antigem.theme.AppColors.editorRemovedText, "-")
         DiffLineType.HunkHeader -> Triple(ai.antigem.theme.AppColors.editorInfoBg, ai.antigem.theme.AppColors.editorInfoText, "@")
         DiffLineType.Meta -> Triple(ai.antigem.theme.AppColors.editorPanel, ai.antigem.theme.AppColors.editorMuted, " ")
         DiffLineType.Context -> Triple(Color.Transparent, ai.antigem.theme.AppColors.editorText, " ")
     }
+    val textColor = ensureAccessibleContrast(rawTextColor, bgColor, 4.5f, editorBg)
+    val lineNumColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, editorBg)
+    val spokenDescription = when (line.type) {
+        DiffLineType.Addition -> L.ide.unifiedDiffViewer.addedLineLineText(line.newLineNum ?: 0, line.text)
+        DiffLineType.Deletion -> L.ide.unifiedDiffViewer.removedLineLineText(line.oldLineNum ?: 0, line.text)
+        DiffLineType.HunkHeader -> L.ide.unifiedDiffViewer.sectionHeaderText(line.text)
+        DiffLineType.Context -> L.ide.unifiedDiffViewer.lineLineText(line.newLineNum ?: line.oldLineNum ?: 0, line.text)
+        DiffLineType.Meta -> line.text
+    }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(bgColor)
-            .padding(vertical = 1.dp),
+            .padding(vertical = 1.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = spokenDescription
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Line numbers column
         Row(
             modifier = Modifier
                 .width(68.dp)
-                .background(ai.antigem.theme.AppColors.editorBg)
+                .background(editorBg)
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -258,13 +303,13 @@ private fun DiffLineRow(line: ParsedDiffLine) {
                 text = line.oldLineNum?.toString() ?: "",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
-                color = ai.antigem.theme.AppColors.editorMuted
+                color = lineNumColor
             )
             Text(
                 text = line.newLineNum?.toString() ?: "",
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp,
-                color = ai.antigem.theme.AppColors.editorMuted
+                color = lineNumColor
             )
         }
 

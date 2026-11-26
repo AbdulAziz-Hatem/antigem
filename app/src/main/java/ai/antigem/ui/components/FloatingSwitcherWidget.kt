@@ -51,10 +51,21 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selectableGroup
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -128,6 +139,8 @@ fun FloatingSwitcherWidget(
         Density(baseDensity.density * scale.coerceIn(0.5f, 2f), baseDensity.fontScale)
     }
     val haptic = LocalHapticFeedback.current
+    val view = LocalView.current
+    val accessibilityActive = rememberIsAccessibilityEnabled()
 
     var isExpanded by remember { mutableStateOf(false) }
     var lastInteractionTimestamp by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -141,7 +154,7 @@ fun FloatingSwitcherWidget(
     // - anchorRight/anchorBottom = which corner of the pill the expanded panel grows from. They are only
     //   re-evaluated while collapsed (init, drag end while collapsed, collapse), never from the expanded size,
     //   so expanding/collapsing can't flip sides and the arrow stays under the finger.
-    val defaultPillPx = with(density) { 44.dp.toPx() }
+    val defaultPillPx = with(density) { 48.dp.toPx() }
     val doubleTapRadiusPx = with(density) { 48.dp.toPx() }
     var collapsedSize by remember { mutableStateOf(IntSize(defaultPillPx.roundToInt(), defaultPillPx.roundToInt())) }
     var widgetSize by remember { mutableStateOf(IntSize.Zero) }
@@ -168,6 +181,15 @@ fun FloatingSwitcherWidget(
         val next = if (isVertical) "HORIZONTAL" else "VERTICAL"
         shownOrientation = next
         onOrientationChange(next)
+        val orientationName = if (next == "VERTICAL") {
+            L.components.floatingSwitcherWidget.vertical
+        } else {
+            L.components.floatingSwitcherWidget.horizontal
+        }
+        announceForAccessibility(
+            view,
+            L.components.floatingSwitcherWidget.orientationChangedToOrientation(orientationName)
+        )
     }
 
     val navigateTo: (String) -> Unit = { id ->
@@ -259,6 +281,7 @@ fun FloatingSwitcherWidget(
 
         fun expand() {
             isExpanded = true
+            announceForAccessibility(view, L.components.floatingSwitcherWidget.switcherExpanded)
         }
 
         fun collapse() {
@@ -266,6 +289,16 @@ fun FloatingSwitcherWidget(
             hitState.tapExpandPending = false
             // Pill returns to its anchored corner (where the collapse arrow sits); re-pick sides for next expand.
             recomputeAnchors()
+            announceForAccessibility(view, L.components.floatingSwitcherWidget.switcherCollapsed)
+        }
+
+        fun nudgePosition(dxRatio: Float, dyRatio: Float) {
+            val rangeX = (currentContainerW - collapsedSize.width).coerceAtLeast(1f)
+            val rangeY = (currentRatioH - collapsedSize.height).coerceAtLeast(1f)
+            pillX = (pillX + dxRatio * rangeX).coerceIn(0f, rangeX)
+            pillY = (pillY + dyRatio * rangeY).coerceIn(0f, rangeY)
+            recomputeAnchors()
+            savePosition()
         }
 
         // Moves the widget by a finger delta, mapping its new top-left back to the pill's anchored corner.
@@ -299,18 +332,23 @@ fun FloatingSwitcherWidget(
             }
         }
 
-        // Auto-collapse timer
-        if (autoCollapseTimeoutSec > 0 && isExpanded && !isDragging) {
+        // Auto-collapse timer (paused while TalkBack or another accessibility service is active — WCAG 2.2.1)
+        if (autoCollapseTimeoutSec > 0 && isExpanded && !isDragging && !accessibilityActive) {
             LaunchedEffect(isExpanded, lastInteractionTimestamp, autoCollapseTimeoutSec) {
                 delay(autoCollapseTimeoutSec * 1000L)
                 collapse()
             }
         }
 
+        val collapseTint = ensureAccessibleContrast(
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            MaterialTheme.colorScheme.surface,
+            minRatio = 3.0f
+        )
         val collapseButton: @Composable () -> Unit = {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .minTouchTarget(48.dp)
                     .clip(CircleShape)
                     .combinedClickable(
                         onClickLabel = L.components.floatingSwitcherWidget.collapseSwitcher,
@@ -320,13 +358,27 @@ fun FloatingSwitcherWidget(
                             lastInteractionTimestamp = System.currentTimeMillis()
                             collapse()
                         }
-                    ),
+                    )
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Button
+                        contentDescription = L.components.floatingSwitcherWidget.collapseSwitcher
+                        customActions = listOf(
+                            CustomAccessibilityAction(L.components.floatingSwitcherWidget.toggleSwitcherOrientation) {
+                                toggleOrientation()
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.floatingSwitcherWidget.switchToPreviousPage) {
+                                currentOnNavigateBack()
+                                true
+                            }
+                        )
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = collapseArrowIcon,
-                    contentDescription = L.components.floatingSwitcherWidget.collapseSwitcher,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    contentDescription = null,
+                    tint = collapseTint,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -367,13 +419,14 @@ fun FloatingSwitcherWidget(
                 }
                 FloatingSwitcherItemButton(
                     icon = iconVector,
-                    contentDescription = contentDesc,
+                    label = contentDesc,
                     isSelected = isSelected,
                     onClick = {
                         lastInteractionTimestamp = System.currentTimeMillis()
                         navigateTo(id)
                     },
-                    onLongClick = toggleOrientation
+                    onLongClick = toggleOrientation,
+                    onCollapse = { collapse() }
                 )
             }
         }
@@ -482,28 +535,58 @@ fun FloatingSwitcherWidget(
                     shadowElevation = 8.dp
                 ) {
                     if (!isExpanded) {
-                        // Collapsed Compact Pill with the chosen icon (never an arrow, so it can't be mistaken for the chat's
-                        // jump-to-top/bottom button). Touch is handled by the widget's gesture handler above
-                        // (tap / double-tap / drag).
-                        // 44dp = same footprint as the expanded panel's arrow cell, so the pill doesn't shift on toggle.
+                        val pillLabel = if (tapOpensOverview) {
+                            L.components.floatingSwitcherWidget.openPageOverview
+                        } else {
+                            L.components.floatingSwitcherWidget.expandSwitcher
+                        }
                         Row(
                             modifier = Modifier
+                                .minTouchTarget(48.dp)
                                 .clip(RoundedCornerShape(24.dp))
                                 .indication(pillInteractionSource, ripple())
-                                .semantics {
-                                    onClick(label = if (tapOpensOverview) L.components.floatingSwitcherWidget.openPageOverview else L.components.floatingSwitcherWidget.expandSwitcher) {
+                                .semantics(mergeDescendants = true) {
+                                    role = Role.Button
+                                    contentDescription = pillLabel
+                                    onClick(label = pillLabel) {
                                         if (tapOpensOverview) onOpenOverview() else expand()
                                         true
                                     }
+                                    customActions = listOf(
+                                        CustomAccessibilityAction(L.components.floatingSwitcherWidget.switchToPreviousPage) {
+                                            currentOnNavigateBack()
+                                            true
+                                        },
+                                        CustomAccessibilityAction(L.components.floatingSwitcherWidget.toggleSwitcherOrientation) {
+                                            toggleOrientation()
+                                            true
+                                        },
+                                        CustomAccessibilityAction(L.components.floatingSwitcherWidget.moveSwitcherLeft) {
+                                            nudgePosition(-0.25f, 0f)
+                                            true
+                                        },
+                                        CustomAccessibilityAction(L.components.floatingSwitcherWidget.moveSwitcherRight) {
+                                            nudgePosition(0.25f, 0f)
+                                            true
+                                        },
+                                        CustomAccessibilityAction(L.components.floatingSwitcherWidget.moveSwitcherUp) {
+                                            nudgePosition(0f, -0.2f)
+                                            true
+                                        },
+                                        CustomAccessibilityAction(L.components.floatingSwitcherWidget.moveSwitcherDown) {
+                                            nudgePosition(0f, 0.2f)
+                                            true
+                                        }
+                                    )
                                 }
-                                .padding(12.dp),
+                                .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = handleIconOverride ?: floatingSwitcherHandleIcon(handleIcon),
-                                contentDescription = if (tapOpensOverview) L.components.floatingSwitcherWidget.openPageOverview else L.components.floatingSwitcherWidget.expandSwitcher,
-                                tint = ClaudeTerracotta,
+                                contentDescription = null,
+                                tint = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, minRatio = 3.0f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -511,9 +594,15 @@ fun FloatingSwitcherWidget(
                         if (isVertical) {
                             // Collapse arrow sits at the anchored end (top when growing down, bottom when growing up).
                             Column(
-                                modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                modifier = Modifier
+                                    .padding(vertical = 4.dp, horizontal = 4.dp)
+                                    .semantics {
+                                        isTraversalGroup = true
+                                        selectableGroup()
+                                        paneTitle = L.components.floatingSwitcherWidget.floatingSwitcher
+                                    },
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 val divider: @Composable () -> Unit = {
                                     HorizontalDivider(
@@ -536,9 +625,15 @@ fun FloatingSwitcherWidget(
                         } else {
                             // Collapse arrow sits at the anchored end (right when growing left, left when growing right).
                             Row(
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                                    .semantics {
+                                        isTraversalGroup = true
+                                        selectableGroup()
+                                        paneTitle = L.components.floatingSwitcherWidget.floatingSwitcher
+                                    },
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 val divider: @Composable () -> Unit = {
                                     VerticalDivider(
@@ -569,31 +664,60 @@ fun FloatingSwitcherWidget(
 @Composable
 private fun FloatingSwitcherItemButton(
     icon: ImageVector,
-    contentDescription: String,
+    label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onCollapse: () -> Unit
 ) {
-    Surface(
-        shape = CircleShape,
-        color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.20f) else Color.Transparent,
-        border = if (isSelected) BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.5f)) else null,
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val iconTint = ensureAccessibleContrast(
+        if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        surfaceColor,
+        minRatio = 3.0f
+    )
+    Box(
         modifier = Modifier
-            .size(36.dp)
+            .minTouchTarget(48.dp)
             .clip(CircleShape)
             .combinedClickable(
+                onClickLabel = label,
                 onLongClickLabel = L.components.floatingSwitcherWidget.toggleSwitcherOrientation,
                 onLongClick = onLongClick,
                 onClick = onClick
             )
+            .semantics(mergeDescendants = true) {
+                role = Role.Tab
+                selected = isSelected
+                contentDescription = label
+                if (isSelected) stateDescription = L.components.floatingSwitcherWidget.activePage
+                customActions = listOf(
+                    CustomAccessibilityAction(L.components.floatingSwitcherWidget.toggleSwitcherOrientation) {
+                        onLongClick()
+                        true
+                    },
+                    CustomAccessibilityAction(L.components.floatingSwitcherWidget.collapseSwitcher) {
+                        onCollapse()
+                        true
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                modifier = Modifier.size(20.dp)
-            )
+        Surface(
+            shape = CircleShape,
+            color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.20f) else Color.Transparent,
+            border = if (isSelected) BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.5f)) else null,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

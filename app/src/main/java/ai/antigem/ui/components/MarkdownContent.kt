@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -71,6 +72,19 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
@@ -269,14 +283,25 @@ fun MarkdownBlockView(
                 5 -> Triple(13.sp, 6.dp, 2.dp)
                 else -> Triple(12.5.sp, 5.dp, 2.dp)
             }
+            val headerColor = if (block.level <= 3) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                ensureAccessibleContrast(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    MaterialTheme.colorScheme.surface,
+                    4.5f
+                )
+            }
             FormattedInlineText(
                 text = block.text,
                 style = TextStyle(
                     fontSize = fontSize,
                     fontWeight = FontWeight.Bold,
-                    color = if (block.level <= 3) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                    color = headerColor
                 ),
-                modifier = modifier.padding(top = topPad, bottom = bottomPad)
+                modifier = modifier
+                    .padding(top = topPad, bottom = bottomPad)
+                    .semantics { heading() }
             )
         }
         is MarkdownBlock.Bullet -> {
@@ -290,9 +315,10 @@ fun MarkdownBlockView(
                 Text(
                     text = if (block.indent == 0) "• " else "◦ ",
                     fontWeight = FontWeight.Bold,
-                    color = ClaudeTerracotta,
+                    color = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, 3.0f),
                     fontSize = 14.sp,
                     lineHeight = 21.sp,
+                    modifier = Modifier.semantics { hideFromAccessibility() },
                     style = TextStyle(
                         platformStyle = PlatformTextStyle(includeFontPadding = false),
                         lineHeightStyle = LineHeightStyle(
@@ -317,7 +343,7 @@ fun MarkdownBlockView(
                 Text(
                     text = "${block.number} ",
                     fontWeight = FontWeight.Bold,
-                    color = ClaudeTerracotta,
+                    color = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, 4.5f),
                     fontSize = 13.5.sp,
                     lineHeight = 21.sp,
                     style = TextStyle(
@@ -338,13 +364,21 @@ fun MarkdownBlockView(
             Row(
                 modifier = modifier
                     .fillMaxWidth()
-                    .padding(vertical = 2.dp, horizontal = 2.dp),
+                    .padding(vertical = 2.dp, horizontal = 2.dp)
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Checkbox
+                        toggleableState = if (block.isChecked) ToggleableState.On else ToggleableState.Off
+                    },
                 verticalAlignment = Alignment.Top
             ) {
                 Icon(
                     imageVector = if (block.isChecked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank,
-                    contentDescription = if (block.isChecked) L.components.markdown.completed else L.components.markdown.incomplete,
-                    tint = if (block.isChecked) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    contentDescription = null,
+                    tint = if (block.isChecked) {
+                        ensureAccessibleContrast(QuotaGreen, MaterialTheme.colorScheme.surface, 3.0f)
+                    } else {
+                        ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), MaterialTheme.colorScheme.surface, 3.0f)
+                    },
                     modifier = Modifier
                         .padding(top = 1.5.dp, end = 6.dp)
                         .size(17.dp)
@@ -455,13 +489,20 @@ fun MarkdownAlertView(
     }
 
     val displayTitle = alert.title ?: style.defaultTitle
+    val alertBg = if (isDark) style.darkBg else style.lightBg
+    val accessibleAccent = ensureAccessibleContrast(
+        foreground = style.accentColor,
+        background = alertBg,
+        minRatio = 4.5f,
+        surfaceFallback = MaterialTheme.colorScheme.surface
+    )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 5.dp),
         shape = RoundedCornerShape(8.dp),
-        color = if (isDark) style.darkBg else style.lightBg,
+        color = alertBg,
         border = BorderStroke(1.dp, style.accentColor.copy(alpha = if (isDark) 0.35f else 0.25f))
     ) {
         Row(modifier = Modifier.height(IntrinsicSize.Min)) {
@@ -469,7 +510,7 @@ fun MarkdownAlertView(
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(4.dp)
-                    .background(style.accentColor)
+                    .background(accessibleAccent)
             )
             Column(
                 modifier = Modifier
@@ -478,12 +519,14 @@ fun MarkdownAlertView(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = if (alert.text.isNotBlank()) 4.dp else 0.dp)
+                    modifier = Modifier
+                        .padding(bottom = if (alert.text.isNotBlank()) 4.dp else 0.dp)
+                        .semantics(mergeDescendants = true) { heading() }
                 ) {
                     Icon(
                         imageVector = style.icon,
-                        contentDescription = displayTitle,
-                        tint = style.accentColor,
+                        contentDescription = null,
+                        tint = accessibleAccent,
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -491,7 +534,7 @@ fun MarkdownAlertView(
                         text = displayTitle,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
-                        color = style.accentColor,
+                        color = accessibleAccent,
                         letterSpacing = 0.3.sp
                     )
                 }
@@ -564,6 +607,7 @@ fun NativeMathView(
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
+    val screenAccessible = LocalScreenAccessible.current
     val textColor = if (isDark) android.graphics.Color.parseColor("#ECECF1") else android.graphics.Color.parseColor("#1A1A1A")
     val density = LocalDensity.current
     val textSizePx = with(density) { (if (isDisplay) 18.sp else 15.sp).toPx() }
@@ -634,10 +678,22 @@ fun NativeMathView(
                     factory = { ctx ->
                         ImageView(ctx).apply {
                             adjustViewBounds = true
+                            contentDescription = cleanLatex
+                            importantForAccessibility = if (screenAccessible) {
+                                View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                            } else {
+                                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                            }
                             setImageDrawable(jLatexDrawable)
                         }
                     },
                     update = { view ->
+                        view.contentDescription = cleanLatex
+                        view.importantForAccessibility = if (screenAccessible) {
+                            View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                        } else {
+                            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                        }
                         view.setImageDrawable(jLatexDrawable)
                     }
                 )
@@ -1333,17 +1389,27 @@ fun MarkdownDetailsView(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
+            val summaryStateDesc = if (isExpanded) L.components.markdown.expanded else L.components.markdown.collapsed
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Button) { isExpanded = !isExpanded }
+                    .semantics(mergeDescendants = true) {
+                        stateDescription = summaryStateDesc
+                    }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.ExpandMore,
-                    contentDescription = if (isExpanded) L.common.collapse else L.common.expand,
-                    tint = ClaudeTerracotta,
+                    contentDescription = null,
+                    tint = ensureAccessibleContrast(
+                        ClaudeTerracotta,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        3.0f,
+                        MaterialTheme.colorScheme.surface
+                    ),
                     modifier = Modifier
                         .size(20.dp)
                         .rotate(rotationAngle)
@@ -2116,6 +2182,12 @@ fun MarkdownTableView(
             finalWidths.fold(0.dp) { acc, dp -> acc + dp } + (numCols - 1).coerceAtLeast(0).dp
         }
 
+        val tableBg = MaterialTheme.colorScheme.surface
+        val tableHeaderBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f)
+        val tableAltRowBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+        val tableSummary = L.components.markdown.tableRowsRowsColsColumns(normalizedRows.size, numCols)
+        val columnHeaderDesc = L.components.markdown.columnHeader
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
@@ -2126,13 +2198,17 @@ fun MarkdownTableView(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
                     .width(tableTotalWidth)
+                    .semantics {
+                        collectionInfo = CollectionInfo(rowCount = normalizedRows.size + 1, columnCount = numCols)
+                        contentDescription = tableSummary
+                    }
             ) {
                 // Table Header Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(IntrinsicSize.Min)
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f))
+                        .background(tableHeaderBg)
                 ) {
                     cachedHeaders.forEachIndexed { colIdx, headerResult ->
                         if (colIdx > 0) {
@@ -2162,11 +2238,27 @@ fun MarkdownTableView(
                             Text(
                                 text = headerResult.annotatedString,
                                 inlineContent = headerResult.inlineContent,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .semantics {
+                                        heading()
+                                        collectionItemInfo = CollectionItemInfo(
+                                            rowIndex = 0,
+                                            rowSpan = 1,
+                                            columnIndex = colIdx,
+                                            columnSpan = 1
+                                        )
+                                        stateDescription = columnHeaderDesc
+                                    },
                                 style = TextStyle(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                                    color = ensureAccessibleContrast(
+                                        MaterialTheme.colorScheme.onSurface,
+                                        tableHeaderBg,
+                                        4.5f,
+                                        tableBg
+                                    ),
                                     textAlign = textAlign
                                 )
                             )
@@ -2184,7 +2276,7 @@ fun MarkdownTableView(
                             .height(IntrinsicSize.Min)
                             .background(
                                 if (rowIdx % 2 == 0) Color.Transparent
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+                                else tableAltRowBg
                             )
                     ) {
                         rowCells.forEachIndexed { colIdx, cellResult ->
@@ -2204,6 +2296,9 @@ fun MarkdownTableView(
                                 TableAlignment.RIGHT -> TextAlign.End
                                 TableAlignment.LEFT -> TextAlign.Start
                             }
+                            val headerPlain = cachedHeaders.getOrNull(colIdx)?.annotatedString?.text?.trim().orEmpty()
+                            val cellPositionLabel = L.components.markdown.rowRowColumnCol(rowIdx + 1, colIdx + 1)
+                            val cellStateLabel = if (headerPlain.isNotEmpty()) "$headerPlain, $cellPositionLabel" else cellPositionLabel
 
                             Box(
                                 modifier = Modifier
@@ -2215,7 +2310,17 @@ fun MarkdownTableView(
                                 Text(
                                     text = cellResult.annotatedString,
                                     inlineContent = cellResult.inlineContent,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .semantics {
+                                            collectionItemInfo = CollectionItemInfo(
+                                                rowIndex = rowIdx + 1,
+                                                rowSpan = 1,
+                                                columnIndex = colIdx,
+                                                columnSpan = 1
+                                            )
+                                            stateDescription = cellStateLabel
+                                        },
                                     style = TextStyle(
                                         fontSize = 13.sp,
                                         lineHeight = 19.sp,
@@ -2650,7 +2755,7 @@ private fun buildRichAnnotatedString(
             val parsedColor = parseHexOrRgbColor(codeContent)
             if (parsedColor != null) {
                 val swatchId = "color_swatch_${inlineContentMap.size}"
-                builder.appendInlineContent(swatchId, alternateText = "● ")
+                builder.appendInlineContent(swatchId, alternateText = "")
                 inlineContentMap[swatchId] = InlineTextContent(
                     placeholder = Placeholder(
                         width = 14.sp,

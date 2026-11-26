@@ -47,9 +47,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.decode.SvgDecoder
@@ -128,16 +133,19 @@ fun ImageAssetViewer(
             .build()
     }
 
+    val canvasBg = if (bgMode == 1) Color.White else ai.antigem.theme.AppColors.editorBg
+    val panelBg = ai.antigem.theme.AppColors.editorPanel.copy(alpha = 0.93f)
+    val panelFallback = ai.antigem.theme.AppColors.editorBg
+    val panelTitleColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, panelBg, 4.5f, panelFallback)
+    val panelSubtitleColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, panelBg, 4.5f, panelFallback)
+    val panelPrimaryColor = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, panelBg, 4.5f, panelFallback)
+    val errorIconTint = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, canvasBg)
+    val errorTextTint = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, canvasBg)
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                when (bgMode) {
-                    1 -> Color.White
-                    2 -> ai.antigem.theme.AppColors.editorBg
-                    else -> ai.antigem.theme.AppColors.editorBg
-                }
-            )
+            .background(canvasBg)
     ) {
         // 1. Checkerboard Canvas for transparency
         if (bgMode == 0) {
@@ -161,7 +169,7 @@ fun ImageAssetViewer(
         ) {
             AsyncImage(
                 model = imageRequest,
-                contentDescription = fileName,
+                contentDescription = L.ide.imageAssetViewer.nameZoomZoom(fileName, (scale * 100).toInt()),
                 onState = { imageState = it },
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
@@ -189,14 +197,14 @@ fun ImageAssetViewer(
                         Icon(
                             imageVector = Icons.Default.BrokenImage,
                             contentDescription = L.ide.imageAssetViewer.failedToLoadImage,
-                            tint = Color.Gray,
+                            tint = errorIconTint,
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = L.ide.imageAssetViewer.couldNotPreviewImageAsset,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color.LightGray
+                            color = errorTextTint
                         )
                     }
                 }
@@ -209,33 +217,38 @@ fun ImageAssetViewer(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(12.dp)
-                .fillMaxWidth(0.92f),
+                .fillMaxWidth(0.95f),
             shape = RoundedCornerShape(10.dp),
-            color = ai.antigem.theme.AppColors.editorPanel.copy(alpha = 0.93f),
+            color = panelBg,
             tonalElevation = 6.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 // Info Section
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Image,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = panelPrimaryColor,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = fileName,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = panelTitleColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         val dimText = imageDimensions?.let { "${it.first} × ${it.second} px" } ?: if (isSvg) L.ide.imageAssetViewer.vectorSvg else ""
                         val sizeText = fileSizeText?.let { " • $it" } ?: ""
@@ -243,8 +256,10 @@ fun ImageAssetViewer(
                         Text(
                             text = "$dimText$sizeText$zoomText",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.LightGray,
-                            fontSize = 11.sp
+                            color = panelSubtitleColor,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -252,29 +267,35 @@ fun ImageAssetViewer(
                 // Controls Section
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Background Canvas Switcher
+                    val bgToggleTint = ensureAccessibleContrast(
+                        foreground = when (bgMode) {
+                            1 -> Color.White
+                            2 -> ai.antigem.theme.AppColors.editorMuted
+                            else -> MaterialTheme.colorScheme.primary
+                        },
+                        background = panelBg,
+                        minRatio = 4.5f,
+                        surfaceFallback = panelFallback
+                    )
                     IconButton(
                         onClick = { bgMode = (bgMode + 1) % 3 },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Contrast,
                             contentDescription = L.ide.imageAssetViewer.toggleBackground,
-                            tint = when (bgMode) {
-                                1 -> Color.White
-                                2 -> Color.DarkGray
-                                else -> MaterialTheme.colorScheme.primary
-                            },
+                            tint = bgToggleTint,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                     IconButton(
                         onClick = { scale = (scale - 0.25f).coerceAtLeast(0.25f) },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ZoomOut,
                             contentDescription = L.ide.imageAssetViewer.zoomOut,
-                            tint = Color.LightGray,
+                            tint = panelTitleColor,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -284,36 +305,37 @@ fun ImageAssetViewer(
                             offsetX = 0f
                             offsetY = 0f
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier
+                            .minTouchTarget(48.dp)
+                            .semantics { contentDescription = L.ide.imageAssetViewer.resetZoom }
                     ) {
                         Text(
                             text = "1:1",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            color = panelPrimaryColor
                         )
                     }
                     IconButton(
                         onClick = { scale = (scale + 0.25f).coerceAtMost(10f) },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ZoomIn,
                             contentDescription = L.ide.imageAssetViewer.zoomIn,
-                            tint = Color.LightGray,
+                            tint = panelTitleColor,
                             modifier = Modifier.size(18.dp)
                         )
                     }
                     if (isSvg && onToggleXmlSource != null) {
-                        Spacer(modifier = Modifier.width(4.dp))
                         IconButton(
                             onClick = onToggleXmlSource,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Code,
                                 contentDescription = L.ide.imageAssetViewer.viewSvgXmlSource,
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = panelPrimaryColor,
                                 modifier = Modifier.size(18.dp)
                             )
                         }

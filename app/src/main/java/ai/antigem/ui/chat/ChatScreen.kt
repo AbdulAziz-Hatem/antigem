@@ -18,6 +18,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,6 +61,27 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.traversalIndex
+import ai.antigem.ui.components.announceForAccessibility
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.formatCountForSpeech
+import ai.antigem.ui.components.minTouchTarget
+import ai.antigem.ui.components.rememberIsAccessibilityEnabled
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -960,6 +982,8 @@ fun ChatScreen(
     // so another chat (or coming back) starts with every pill closed
     val openStepGroups = remember(currentConv?.id) { mutableStateMapOf<String, Boolean>() }
     val expandedStepGroups = openStepGroups.keys.toSet()
+    val view = androidx.compose.ui.platform.LocalView.current
+    val accessibilityEnabled = rememberIsAccessibilityEnabled()
     val feedItems = remember(messages, selectedModelId, modelNameOf, voiceCallItems, groupAgentSteps, groupStepsMin, expandedStepGroups) {
         // the date and model dividers are always on
         val items = ChatFeedCache.buildFeedItems(messages, selectedModelId, dividers = true, modelName = modelNameOf, voiceCalls = voiceCallItems)
@@ -968,6 +992,57 @@ fun ChatScreen(
 
     // Fresh LazyListState per conversation — restores saved position if returning, or initializes directly at bottom
     val convKey = currentConv?.id ?: "empty"
+    val youTurnLabel = L.chat.screen.you
+    val assistantTurnLabel = L.chat.screen.assistant
+    val summaryTurnLabel = L.chat.screen.summary
+    val eventTurnLabel = L.chat.screen.event
+    val voiceTurnLabel = L.common.voice
+    val (turnAnchors, turnByFeedIndex) = remember(feedItems, youTurnLabel, assistantTurnLabel, summaryTurnLabel, eventTurnLabel, voiceTurnLabel) {
+        val anchors = ArrayList<ChatTurnAnchor>()
+        val byFeed = IntArray(feedItems.size) { -1 }
+        val assistantIdToTurn = HashMap<String, Int>()
+        feedItems.forEachIndexed { idx, item ->
+            when (item) {
+                is ChatFeedItem.Divider, is ChatFeedItem.AssistantTyping -> Unit
+                is ChatFeedItem.User -> {
+                    val t = anchors.size
+                    anchors.add(ChatTurnAnchor(t, idx, item.key, youTurnLabel))
+                    byFeed[idx] = t
+                }
+                is ChatFeedItem.Summary -> {
+                    val t = anchors.size
+                    anchors.add(ChatTurnAnchor(t, idx, item.key, summaryTurnLabel))
+                    byFeed[idx] = t
+                }
+                is ChatFeedItem.JarvisEvent -> {
+                    val t = anchors.size
+                    anchors.add(ChatTurnAnchor(t, idx, item.key, eventTurnLabel))
+                    byFeed[idx] = t
+                }
+                is ChatFeedItem.VoiceCall -> {
+                    val t = anchors.size
+                    anchors.add(ChatTurnAnchor(t, idx, item.key, voiceTurnLabel))
+                    byFeed[idx] = t
+                }
+                else -> {
+                    val assistantId = item.assistantTurnMessageIdOrNull()
+                    if (assistantId != null) {
+                        val t = assistantIdToTurn.getOrPut(assistantId) {
+                            val nextTurn = anchors.size
+                            anchors.add(ChatTurnAnchor(nextTurn, idx, item.key, assistantTurnLabel))
+                            nextTurn
+                        }
+                        byFeed[idx] = t
+                    }
+                }
+            }
+        }
+        anchors.toList() to byFeed
+    }
+    val anchorByFeedIndex = remember(turnAnchors) { turnAnchors.associateBy { it.feedIndex } }
+    val turnFocusRequesters = remember(convKey) { mutableMapOf<Int, FocusRequester>() }
+    var pendingFocusTurnIndex by remember(convKey) { mutableStateOf<Int?>(null) }
+
     val hasFeedItems = feedItems.isNotEmpty()
     val initialSavedPos = remember(convKey) { ConversationScrollCache.get(convKey) }
     val listState = remember(convKey, hasFeedItems) {
@@ -1009,6 +1084,45 @@ fun ChatScreen(
     var showScrollButton by remember { mutableStateOf(false) }
     var shouldAutoScroll by remember(convKey) { mutableStateOf(initialSavedPos?.isNearBottom ?: true) }
     var isUserDragging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(pendingFocusTurnIndex, turnAnchors) {
+        val targetTurn = pendingFocusTurnIndex ?: return@LaunchedEffect
+        val anchor = turnAnchors.getOrNull(targetTurn) ?: run {
+            pendingFocusTurnIndex = null
+            return@LaunchedEffect
+        }
+        listState.scrollToItem(anchor.feedIndex)
+        withFrameNanos { }
+        withFrameNanos { }
+        try {
+            turnFocusRequesters[targetTurn]?.requestFocus()
+        } catch (_: Exception) {}
+        announceForAccessibility(
+            view,
+            L.chat.screen.messageIndexOfTotalSender(anchor.turnIndex + 1, turnAnchors.size, anchor.senderLabel)
+        )
+        pendingFocusTurnIndex = null
+    }
+    val jumpToTurn: (Int) -> Unit = { targetTurnIdx ->
+        if (targetTurnIdx in turnAnchors.indices) {
+            shouldAutoScroll = false
+            pendingFocusTurnIndex = targetTurnIdx
+        }
+    }
+    val activeTurnIndex by remember(listState, turnByFeedIndex, turnAnchors) {
+        derivedStateOf {
+            if (turnAnchors.isEmpty()) -1
+            else {
+                val firstIdx = listState.firstVisibleItemIndex.coerceIn(0, maxOf(0, turnByFeedIndex.lastIndex))
+                val mapped = turnByFeedIndex.getOrElse(firstIdx) { -1 }
+                if (mapped >= 0) mapped else {
+                    listState.layoutInfo.visibleItemsInfo
+                        .firstNotNullOfOrNull { info -> turnByFeedIndex.getOrNull(info.index)?.takeIf { it >= 0 } }
+                        ?: (turnAnchors.size - 1)
+                }
+            }
+        }
+    }
 
     val density = LocalDensity.current
     val imeInsets = WindowInsets.imeAnimationTarget
@@ -1115,9 +1229,11 @@ fun ChatScreen(
         }
     }
 
-    // Hide scroll button after scroll stops
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress && showScrollButton) {
+    // Hide scroll button after scroll stops unless an accessibility service needs persistent controls
+    LaunchedEffect(listState.isScrollInProgress, accessibilityEnabled) {
+        if (accessibilityEnabled) {
+            showScrollButton = false
+        } else if (!listState.isScrollInProgress && showScrollButton) {
             delay(4000)
             showScrollButton = false
         }
@@ -1165,8 +1281,14 @@ fun ChatScreen(
     var tailFinishing by remember(convKey) { mutableStateOf(false) }
     var wasRunning by remember(convKey) { mutableStateOf(isRunningOrStreaming) }
     LaunchedEffect(convKey, isRunningOrStreaming) {
+        val started = !wasRunning && isRunningOrStreaming
         val finished = wasRunning && !isRunningOrStreaming
         wasRunning = isRunningOrStreaming
+        if (started) {
+            announceForAccessibility(view, L.chat.screen.generatingResponse)
+        } else if (finished && messages.lastOrNull()?.role == ai.antigem.domain.model.MessageRole.ASSISTANT) {
+            announceForAccessibility(view, L.chat.screen.responseReady)
+        }
         if (!finished) {
             tailFinishing = false
             return@LaunchedEffect
@@ -1689,17 +1811,19 @@ fun ChatScreen(
                 TopAppBar(
                     // shorter than Material's 64dp: one line of title and the small project pill need less
                     expandedHeight = 52.dp,
-                    modifier = Modifier.drawWithContent {
-                        drawContent()
-                        if (topBarLineAlpha > 0f) {
-                            drawLine(
-                                color = topBarLineColor.copy(alpha = topBarLineColor.alpha * topBarLineAlpha),
-                                start = androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f),
-                                end = androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f),
-                                strokeWidth = 1f
-                            )
-                        }
-                    },
+                    modifier = Modifier
+                        .semantics { isTraversalGroup = true }
+                        .drawWithContent {
+                            drawContent()
+                            if (topBarLineAlpha > 0f) {
+                                drawLine(
+                                    color = topBarLineColor.copy(alpha = topBarLineColor.alpha * topBarLineAlpha),
+                                    start = androidx.compose.ui.geometry.Offset(0f, size.height - 0.5f),
+                                    end = androidx.compose.ui.geometry.Offset(size.width, size.height - 0.5f),
+                                    strokeWidth = 1f
+                                )
+                            }
+                        },
                     title = {
                         val displayedChatTitle = remember(currentConv?.title, conversations, currentConv?.id) {
                             val fromList = conversations.firstOrNull { it.id == currentConv?.id }
@@ -1738,18 +1862,53 @@ fun ChatScreen(
                         ) {
                             // long-press the title: this chat on the home screen (an icon, or a widget)
                             var titleMenuOpen by remember { mutableStateOf(false) }
+                            val canPinChat = currentConv != null && isChatStarted && !currentConv!!.readOnly && !isInFloatingWindow
+                            val pinToHomeScreen: () -> Unit = {
+                                currentConv?.let { ai.antigem.data.homescreen.HomeShortcuts.pinChat(context, it.id, it.agent, displayedChatTitle) }
+                            }
+                            val pinAsWidget: () -> Unit = {
+                                val conv = currentConv
+                                if (conv != null) {
+                                    if (ai.antigem.ui.homescreen.HomeWidgets.canPin(context)) {
+                                        ai.antigem.ui.homescreen.HomeWidgets.pin(
+                                            context, ai.antigem.ui.homescreen.WidgetKind.CHAT, Triple(conv.id, conv.agent, displayedChatTitle)
+                                        )
+                                    } else {
+                                        ai.antigem.ui.components.AppToastHelper.showToast(
+                                            L.chat.screen.longPressYourHomeScreenWidgets,
+                                            ai.antigem.ui.components.ChatToastType.INFO
+                                        )
+                                    }
+                                }
+                            }
+                            val titleCustomActions = if (canPinChat) {
+                                listOf(
+                                    CustomAccessibilityAction(L.common.addToHomeScreen) {
+                                        pinToHomeScreen()
+                                        true
+                                    },
+                                    CustomAccessibilityAction(L.chat.screen.addAsAWidget) {
+                                        pinAsWidget()
+                                        true
+                                    }
+                                )
+                            } else emptyList()
                             Box(Modifier.weight(1f)) {
                             // the real title fades in when the chat gets one (instead of jumping from "New Chat")
                             Crossfade(
                                 targetState = displayedChatTitle,
                                 animationSpec = tween(250),
                                 label = "chat_title",
-                                modifier = Modifier.pointerInput(currentConv?.id, isChatStarted) {
-                                    detectTapGestures(onLongPress = {
-                                        val conv = currentConv
-                                        if (conv != null && isChatStarted && !conv.readOnly && !isInFloatingWindow) titleMenuOpen = true
-                                    })
-                                }
+                                modifier = Modifier
+                                    .pointerInput(currentConv?.id, isChatStarted) {
+                                        detectTapGestures(onLongPress = {
+                                            if (canPinChat) titleMenuOpen = true
+                                        })
+                                    }
+                                    .semantics {
+                                        heading()
+                                        if (titleCustomActions.isNotEmpty()) customActions = titleCustomActions
+                                    }
                             ) { chatTitle ->
                                 Text(
                                     text = chatTitle,
@@ -1766,7 +1925,7 @@ fun ChatScreen(
                                     leadingIcon = { Icon(Icons.Outlined.AppShortcut, null, modifier = Modifier.size(18.dp)) },
                                     onClick = {
                                         titleMenuOpen = false
-                                        currentConv?.let { ai.antigem.data.homescreen.HomeShortcuts.pinChat(context, it.id, it.agent, displayedChatTitle) }
+                                        pinToHomeScreen()
                                     }
                                 )
                                 DropdownMenuItem(
@@ -1774,137 +1933,188 @@ fun ChatScreen(
                                     leadingIcon = { Icon(Icons.Outlined.Widgets, null, modifier = Modifier.size(18.dp)) },
                                     onClick = {
                                         titleMenuOpen = false
-                                        val conv = currentConv
-                                        if (conv != null) {
-                                            if (ai.antigem.ui.homescreen.HomeWidgets.canPin(context)) {
-                                                ai.antigem.ui.homescreen.HomeWidgets.pin(
-                                                    context, ai.antigem.ui.homescreen.WidgetKind.CHAT, Triple(conv.id, conv.agent, displayedChatTitle)
-                                                )
-                                            } else {
-                                                ai.antigem.ui.components.AppToastHelper.showToast(
-                                                    L.chat.screen.longPressYourHomeScreenWidgets,
-                                                    ai.antigem.ui.components.ChatToastType.INFO
-                                                )
-                                            }
-                                        }
+                                        pinAsWidget()
                                     }
                                 )
                             }
                             }
                             Spacer(modifier = Modifier.width(10.dp))
+                            val topBarBg = MaterialTheme.colorScheme.background
+                            val pillBg = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            val pillTextColor = ensureAccessibleContrast(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = if (isChatStarted) 0.65f else 0.8f),
+                                pillBg,
+                                4.5f,
+                                topBarBg
+                            )
+                            val pillArrowTint = ensureAccessibleContrast(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                pillBg,
+                                3.0f,
+                                topBarBg
+                            )
+                            val cleanProjectName = displayedProjectName.removePrefix("☁ ").ifBlank { displayedProjectName }
+                            val pillContentDesc = buildString {
+                                append(cleanProjectName)
+                                if (!isChatStarted) {
+                                    append(", ")
+                                    append(L.chat.screen.chooseProject)
+                                } else if (showStatusDot) {
+                                    append(", ")
+                                    append(L.chat.screen.agentsStatus)
+                                }
+                                if (isAnyGenerationOrTaskActive) {
+                                    append(", ")
+                                    append(L.chat.screen.screenStaysOn)
+                                }
+                            }
+                            val pillCustomActions = buildList {
+                                if (showStatusDot) {
+                                    add(
+                                        CustomAccessibilityAction(L.chat.screen.agentsStatus) {
+                                            statusMenuOpen = true
+                                            true
+                                        }
+                                    )
+                                }
+                                if (isAnyGenerationOrTaskActive) {
+                                    add(
+                                        CustomAccessibilityAction(L.chat.screen.screenStaysOn) {
+                                            screenAwakeInfoOpen = true
+                                            true
+                                        }
+                                    )
+                                }
+                            }
                             Box {
                                 // before the chat starts a tap picks the project; after, it shows the agents' status
-                                Row(
+                                Box(
                                     modifier = Modifier
-                                        .widthIn(max = 150.dp)
+                                        .minTouchTarget(48.dp)
                                         .clip(RoundedCornerShape(50))
-                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                                        .clickable {
+                                        .clickable(role = Role.Button) {
                                             if (!isChatStarted) showProjectPickerDialog = true
                                             else if (showStatusDot) statusMenuOpen = true
                                         }
-                                        .padding(start = if (showStatusDot) 4.dp else 10.dp, end = if (isChatStarted) 10.dp else 4.dp, top = 3.dp, bottom = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .semantics(mergeDescendants = true) {
+                                            contentDescription = pillContentDesc
+                                            if (pillCustomActions.isNotEmpty()) customActions = pillCustomActions
+                                        },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    if (showStatusDot) {
-                                        // upper half Antigravity, lower half Claude Code (one solid dot when they agree);
-                                        // the dot itself always opens the agents' status, also before the chat starts
-                                        // one slice per enabled agent (Antigravity, Claude Code, OpenCode)
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .clickable { statusMenuOpen = true },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            ai.antigem.ui.agents.AgentStatusDot(
-                                                colors = agentEntries.map { it.color },
-                                                size = if (agentEntries.size > 2) 10.dp else 8.dp,
-                                                pulsing = agentEntries.any { it.pending }
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                    }
-                                    if (isAnyGenerationOrTaskActive) {
-                                        // the screen is kept on (work is running): a sun, tap it to see why
-                                        Box(
-                                            modifier = Modifier
-                                                .size(20.dp)
-                                                .clip(CircleShape)
-                                                .clickable { screenAwakeInfoOpen = true },
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.LightMode,
-                                                contentDescription = L.chat.screen.screenStaysOn,
-                                                tint = ai.antigem.theme.AppColors.warning,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            DropdownMenu(
-                                                expanded = screenAwakeInfoOpen,
-                                                onDismissRequest = { screenAwakeInfoOpen = false }
+                                    Row(
+                                        modifier = Modifier
+                                            .widthIn(max = 150.dp)
+                                            .clip(RoundedCornerShape(50))
+                                            .background(pillBg)
+                                            .padding(start = if (showStatusDot) 4.dp else 10.dp, end = if (isChatStarted) 10.dp else 4.dp, top = 3.dp, bottom = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (showStatusDot) {
+                                            // upper half Antigravity, lower half Claude Code (one solid dot when they agree);
+                                            // the dot itself always opens the agents' status, also before the chat starts
+                                            // one slice per enabled agent (Antigravity, Claude Code, OpenCode)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .pointerInput(Unit) {
+                                                        detectTapGestures { statusMenuOpen = true }
+                                                    },
+                                                contentAlignment = Alignment.Center
                                             ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .widthIn(min = 220.dp, max = 300.dp)
-                                                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                                                ai.antigem.ui.agents.AgentStatusDot(
+                                                    colors = agentEntries.map { it.color },
+                                                    size = if (agentEntries.size > 2) 10.dp else 8.dp,
+                                                    pulsing = agentEntries.any { it.pending }
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                        }
+                                        if (isAnyGenerationOrTaskActive) {
+                                            // the screen is kept on (work is running): a sun, tap it to see why
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .pointerInput(Unit) {
+                                                        detectTapGestures { screenAwakeInfoOpen = true }
+                                                    },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Rounded.LightMode,
+                                                    contentDescription = null,
+                                                    tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, pillBg, 3.0f, topBarBg),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                DropdownMenu(
+                                                    expanded = screenAwakeInfoOpen,
+                                                    onDismissRequest = { screenAwakeInfoOpen = false }
                                                 ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Icon(
-                                                            imageVector = Icons.Rounded.LightMode,
-                                                            contentDescription = null,
-                                                            tint = ai.antigem.theme.AppColors.warning,
-                                                            modifier = Modifier.size(16.dp)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .widthIn(min = 220.dp, max = 300.dp)
+                                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                                    ) {
+                                                        val menuBg = MaterialTheme.colorScheme.surface
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(
+                                                                imageVector = Icons.Rounded.LightMode,
+                                                                contentDescription = null,
+                                                                tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, menuBg, 3.0f),
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                            Text(
+                                                                text = L.chat.screen.screenStaysOn,
+                                                                fontSize = 14.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                color = MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.height(6.dp))
                                                         Text(
-                                                            text = L.chat.screen.screenStaysOn,
-                                                            fontSize = 14.sp,
-                                                            fontWeight = FontWeight.SemiBold,
-                                                            color = MaterialTheme.colorScheme.onSurface
-                                                        )
-                                                    }
-                                                    Spacer(modifier = Modifier.height(6.dp))
-                                                    Text(
-                                                        text = L.chat.screen.theScreenWontTurnOffBy,
-                                                        fontSize = 12.5.sp,
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                                    )
-                                                    screenAwakeReasons.forEach { reason ->
-                                                        Text(
-                                                            text = "• $reason",
+                                                            text = L.chat.screen.theScreenWontTurnOffBy,
                                                             fontSize = 12.5.sp,
-                                                            color = MaterialTheme.colorScheme.onSurface,
-                                                            modifier = Modifier.padding(top = 4.dp)
+                                                            color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), menuBg, 4.5f)
+                                                        )
+                                                        screenAwakeReasons.forEach { reason ->
+                                                            Text(
+                                                                text = "• $reason",
+                                                                fontSize = 12.5.sp,
+                                                                color = MaterialTheme.colorScheme.onSurface,
+                                                                modifier = Modifier.padding(top = 4.dp)
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                        Text(
+                                                            text = L.chat.screen.itTurnsOffNormallyAgainOnce,
+                                                            fontSize = 12.sp,
+                                                            color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), menuBg, 4.5f)
                                                         )
                                                     }
-                                                    Spacer(modifier = Modifier.height(6.dp))
-                                                    Text(
-                                                        text = L.chat.screen.itTurnsOffNormallyAgainOnce,
-                                                        fontSize = 12.sp,
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                                                    )
                                                 }
                                             }
+                                            Spacer(modifier = Modifier.width(2.dp))
                                         }
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                    }
-                                    Text(
-                                        text = displayedProjectName,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isChatStarted) 0.65f else 0.8f),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    if (!isChatStarted) {
-                                        Icon(
-                                            imageVector = Icons.Default.ArrowDropDown,
-                                            contentDescription = L.chat.screen.chooseProject,
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        Text(
+                                            text = displayedProjectName,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = pillTextColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
                                         )
+                                        if (!isChatStarted) {
+                                            Icon(
+                                                imageVector = Icons.Default.ArrowDropDown,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = pillArrowTint
+                                            )
+                                        }
                                     }
                                 }
                                 ai.antigem.ui.agents.AgentStatusMenu(
@@ -1928,13 +2138,27 @@ fun ChatScreen(
                             }
                             val runsGoing by ai.antigem.data.run.RunManager.runs.collectAsState()
                             val anyRunGoing = runsGoing.any { it.status == ai.antigem.data.run.RunStatus.RUNNING }
-                            if (headerShortcuts.isNotEmpty()) Spacer(modifier = Modifier.width(4.dp))
+                            if (headerShortcuts.isNotEmpty()) Spacer(modifier = Modifier.width(2.dp))
                             headerShortcuts.forEach { id ->
+                                val shortcutLabel = when (id) {
+                                    "ide" -> L.chat.screen.openIde
+                                    "terminal" -> L.chat.screen.openTerminal
+                                    "browser" -> L.chat.screen.openBrowser
+                                    "notes" -> L.chat.screen.openNotes
+                                    "files" -> L.chat.screen.openFiles
+                                    "run" -> if (anyRunGoing) L.chat.screen.runACommandIsRunning else L.chat.screen.openRunPanel
+                                    else -> L.chat.screen.newChat
+                                }
+                                val shortcutTint = if (id == "run" && anyRunGoing) {
+                                    ensureAccessibleContrast(ClaudeTerracotta, topBarBg, 3.0f)
+                                } else {
+                                    ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), topBarBg, 3.0f)
+                                }
                                 Box(
                                     modifier = Modifier
-                                        .size(34.dp)
+                                        .minTouchTarget(48.dp)
                                         .clip(CircleShape)
-                                        .clickable {
+                                        .clickable(role = Role.Button) {
                                             when (id) {
                                                 "newchat" -> {
                                                     // same as the sidebar's New chat
@@ -1972,7 +2196,7 @@ fun ChatScreen(
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(30.dp),
                                             strokeWidth = 2.dp,
-                                            color = ClaudeTerracotta
+                                            color = shortcutTint
                                         )
                                     }
                                     Icon(
@@ -1985,16 +2209,8 @@ fun ChatScreen(
                                             "files" -> Icons.Outlined.FolderOpen
                                             else -> Icons.Outlined.AddComment
                                         },
-                                        contentDescription = when (id) {
-                                            "ide" -> L.chat.screen.openIde
-                                            "terminal" -> L.chat.screen.openTerminal
-                                            "browser" -> L.chat.screen.openBrowser
-                                            "notes" -> L.chat.screen.openNotes
-                                            "files" -> L.chat.screen.openFiles
-                                            "run" -> if (anyRunGoing) L.chat.screen.runACommandIsRunning else L.chat.screen.openRunPanel
-                                            else -> L.chat.screen.newChat
-                                        },
-                                        tint = if (id == "run" && anyRunGoing) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                                        contentDescription = shortcutLabel,
+                                        tint = shortcutTint,
                                         modifier = Modifier.size(19.dp)
                                     )
                                 }
@@ -2069,10 +2285,10 @@ fun ChatScreen(
                         .weight(1f)
                         .fillMaxWidth()
                         .onGloballyPositioned { coords ->
-                            // This box ends where the input area starts; the jump button sits 12dp + 38dp above that.
+                            // This box ends where the input area starts; the jump button sits 12dp + 48dp above that.
                             // Y only: the chat is hidden by moving it sideways, which doesn't change it.
                             val bottomY = coords.localToRoot(Offset(0f, coords.size.height.toFloat())).y
-                            onBottomAreaTopChanged(bottomY - with(density) { (12 + 38).dp.toPx() })
+                            onBottomAreaTopChanged(bottomY - with(density) { (12 + 48).dp.toPx() })
                         }
                 ) {
                     val sysStatus = systemConnectionState.status
@@ -2148,14 +2364,19 @@ fun ChatScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(24.dp),
+                                .padding(24.dp)
+                                .semantics { liveRegion = LiveRegionMode.Assertive },
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CloudOff,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
+                                tint = ensureAccessibleContrast(
+                                    MaterialTheme.colorScheme.error,
+                                    MaterialTheme.colorScheme.background,
+                                    3.0f
+                                ),
                                 modifier = Modifier.size(48.dp)
                             )
                             Spacer(modifier = Modifier.height(12.dp))
@@ -2163,14 +2384,19 @@ fun ChatScreen(
                                 text = L.chat.screen.unableToLoadChat,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             SelectionContainer {
                                 Text(
                                     text = conversationError ?: L.chat.screen.failedToLoadConversationMessages,
                                     fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                                    color = ensureAccessibleContrast(
+                                        MaterialTheme.colorScheme.error.copy(alpha = 0.9f),
+                                        MaterialTheme.colorScheme.background,
+                                        4.5f
+                                    ),
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
@@ -2185,6 +2411,7 @@ fun ChatScreen(
                                         viewModel.retryConnections()
                                     }
                                 },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Icon(
@@ -2306,13 +2533,18 @@ fun ChatScreen(
                                             fontSize = 22.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            textAlign = TextAlign.Center
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.semantics { heading() }
                                         )
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
                                             text = L.chat.screen.askAQuestionBrainstormIdeasOr,
                                             fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                            color = ensureAccessibleContrast(
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                                MaterialTheme.colorScheme.background,
+                                                4.5f
+                                            ),
                                             textAlign = TextAlign.Center
                                         )
                                     }
@@ -2342,174 +2574,240 @@ fun ChatScreen(
                                 val chatBounce = ai.antigem.ui.components.rememberBouncyLazyScroll(listState)
                                 LazyColumn(
                                     state = listState,
-                                    modifier = Modifier.fillMaxSize().then(chatBounce.modifier),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .then(chatBounce.modifier)
+                                        .semantics {
+                                            isTraversalGroup = true
+                                            traversalIndex = 0f
+                                        },
                                     contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp),
                                     userScrollEnabled = chatBounce.userScrollEnabled,
                                     overscrollEffect = chatBounce.overscrollEffect
                                 ) {
                                     items(
-                                        items = feedItems,
-                                        key = { it.key },
-                                        contentType = { it.contentType }
-                                    ) { feedItem ->
-                                        when (feedItem) {
-                                        is ChatFeedItem.Summary -> {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                                            ) {
-                                                if (feedItem.message.isStreaming) {
-                                                    LiveSummarizingCard(
-                                                        modelName = summarizingModelName,
-                                                        pendingQueuedMessage = pendingQueuedUserMessage
+                                        count = feedItems.size,
+                                        key = { idx -> feedItems[idx].key },
+                                        contentType = { idx -> feedItems[idx].contentType }
+                                    ) { feedIdx ->
+                                        val feedItem = feedItems[feedIdx]
+                                        val itemTurnIdx = turnByFeedIndex.getOrElse(feedIdx) { -1 }
+                                        val turnAnchor = anchorByFeedIndex[feedIdx]
+                                        val prevMsgLabel = L.chat.screen.previousMessage
+                                        val nextMsgLabel = L.chat.screen.nextMessage
+                                        val navCustomActions = remember(itemTurnIdx, turnAnchors.size, prevMsgLabel, nextMsgLabel) {
+                                            if (itemTurnIdx < 0 || turnAnchors.size <= 1) emptyList()
+                                            else buildList {
+                                                if (itemTurnIdx > 0) {
+                                                    add(
+                                                        CustomAccessibilityAction(prevMsgLabel) {
+                                                            jumpToTurn(itemTurnIdx - 1)
+                                                            true
+                                                        }
                                                     )
-                                                } else {
-                                                    ActiveContextSummaryCard(
-                                                        summaryText = feedItem.message.content,
-                                                        onEditSummary = { viewModel.updateSummaryMessage(feedItem.message.id, it) },
-                                                        onDeleteSummary = { viewModel.deleteSummaryMessage(feedItem.message.id) }
+                                                }
+                                                if (itemTurnIdx < turnAnchors.lastIndex) {
+                                                    add(
+                                                        CustomAccessibilityAction(nextMsgLabel) {
+                                                            jumpToTurn(itemTurnIdx + 1)
+                                                            true
+                                                        }
                                                     )
                                                 }
                                             }
                                         }
-                                        is ChatFeedItem.Divider -> ai.antigem.ui.components.WaveDivider(label = feedItem.label)
-                                        is ChatFeedItem.VoiceCall -> ai.antigem.ui.voice.VoiceCallMarker(feedItem) {
-                                            if (feedItem.live) ai.antigem.data.voice.AgyVoiceCall.setMinimized(false)
-                                            else openVoiceTranscript = feedItem.record
-                                        }
-                                        is ChatFeedItem.JarvisEvent -> ai.antigem.ui.jarvis.JarvisEventCard(
-                                            raw = feedItem.message.content,
-                                            onOpenChat = openJarvisLinkedChat
-                                        )
-                                        is ChatFeedItem.User -> {
-                                            val msgIndex = messages.indexOfFirst { it.id == feedItem.message.id }
-                                            val willDeleteOutput = msgIndex < messages.lastIndex
-                                            UserMessageBubble(
-                                                message = feedItem.message,
-                                                isLastUserMessage = true,
-                                                isDevModeEnabled = isDevModeEnabled,
-                                                canEdit = !isReadOnlyChat,
-                                                onEdit = { targetMsg ->
-                                                    if (willDeleteOutput) {
-                                                        pendingMessageAction = PendingMessageAction(MessageActionType.EDIT, targetMsg)
-                                                    } else {
-                                                        viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
-                                                            inputState.setTextAndPlaceCursorAtEnd(restoredText)
-                                                        }
-                                                    }
-                                                },
-                                                onViewRawPayload = { payloadJson ->
-                                                    showRawPayloadDialog = payloadJson
-                                                },
-                                                checkpoint = messageCheckpoints[feedItem.message.id],
-                                                onRestoreCheckpoint = { msg ->
-                                                    messageCheckpoints[msg.id]?.let { restoreSheetFor = msg to it }
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .semantics {
+                                                    if (navCustomActions.isNotEmpty()) customActions = navCustomActions
                                                 }
-                                            )
-                                        }
-                                        is ChatFeedItem.AssistantThinking -> {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 2.dp)
-                                            ) {
-                                                ThinkingAccordion(
-                                                    thoughtText = feedItem.thoughtText,
-                                                    durationMs = feedItem.durationMs,
-                                                    isStreaming = feedItem.isStreaming
+                                        ) {
+                                            if (turnAnchor != null && accessibilityEnabled) {
+                                                val turnRequester = remember(turnAnchor.turnIndex, convKey) {
+                                                    turnFocusRequesters.getOrPut(turnAnchor.turnIndex) { FocusRequester() }
+                                                }
+                                                val turnHeaderLabel = L.chat.screen.messageIndexOfTotalSender(
+                                                    turnAnchor.turnIndex + 1,
+                                                    turnAnchors.size,
+                                                    turnAnchor.senderLabel
+                                                )
+                                                Text(
+                                                    text = turnHeaderLabel,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = ensureAccessibleContrast(
+                                                        MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        MaterialTheme.colorScheme.background,
+                                                        4.5f
+                                                    ),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 2.dp)
+                                                        .focusRequester(turnRequester)
+                                                        .focusable()
+                                                        .semantics { heading() }
                                                 )
                                             }
-                                        }
-                                        is ChatFeedItem.AssistantBlock -> {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 2.dp)
-                                            ) {
-                                                val isTool = feedItem.block is MarkdownBlock.AgentTool
-                                                val blockView: @Composable () -> Unit = {
-                                                    MarkdownBlockView(
-                                                        block = feedItem.block,
-                                                        onApproveTool = if (isTool) { { toolCall -> viewModel.approveAndExecuteTerminalTool(toolCall, feedItem.messageId) } } else null,
-                                                        onRejectTool = if (isTool) { { toolCall -> if (toolCall.toolType == ToolType.ASK_CHOICE) viewModel.cancelUserChoices(toolCall, feedItem.messageId) else viewModel.rejectTerminalTool(toolCall, feedItem.messageId) } } else null,
-                                                        onTerminateTool = if (isTool) { { toolCall -> viewModel.terminateRunningTerminalTool(toolCall, feedItem.messageId) } } else null,
-                                                        onSubmitChoices = if (isTool) { { toolCall, responses, summaryPayload -> viewModel.submitUserChoices(toolCall, feedItem.messageId, responses, summaryPayload) } } else null,
-                                                        onSkipChoices = if (isTool) { { toolCall, responses -> viewModel.skipUserChoices(toolCall, feedItem.messageId, responses) } } else null
-                                                    )
-                                                }
-                                                // Text is selectable per block: each list item has its own selection container, so a
-                                                // selection never outlives the item when it scrolls away (one container spanning many
-                                                // items crashed). Interactive blocks (tool cards, web views, media) keep their own gestures.
-                                                val selectable = when (feedItem.block) {
-                                                    is MarkdownBlock.Paragraph, is MarkdownBlock.Header, is MarkdownBlock.Bullet,
-                                                    is MarkdownBlock.Numbered, is MarkdownBlock.Task, is MarkdownBlock.Blockquote,
-                                                    is MarkdownBlock.Alert, is MarkdownBlock.Table -> true
-                                                    else -> false
-                                                }
-                                                CompositionLocalProvider(ai.antigem.ui.components.LocalWebViewSlot provides feedItem.key) {
-                                                    if (selectable) SelectionContainer { blockView() } else blockView()
+                                            when (feedItem) {
+                                            is ChatFeedItem.Summary -> {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                                ) {
+                                                    if (feedItem.message.isStreaming) {
+                                                        LiveSummarizingCard(
+                                                            modelName = summarizingModelName,
+                                                            pendingQueuedMessage = pendingQueuedUserMessage
+                                                        )
+                                                    } else {
+                                                        ActiveContextSummaryCard(
+                                                            summaryText = feedItem.message.content,
+                                                            onEditSummary = { viewModel.updateSummaryMessage(feedItem.message.id, it) },
+                                                            onDeleteSummary = { viewModel.deleteSummaryMessage(feedItem.message.id) }
+                                                        )
+                                                    }
                                                 }
                                             }
-                                        }
-                                        // with the working animation on, the working row below replaces these dots
-                                        // progress shows in the working row under the reply (the working animation is always on)
-                                        is ChatFeedItem.AssistantTyping -> Unit
-                                        is ChatFeedItem.StepGroup -> StepGroupPill(
-                                            group = feedItem,
-                                            onToggle = { if (openStepGroups.remove(feedItem.key) == null) openStepGroups[feedItem.key] = true },
-                                            modifier = Modifier.padding(horizontal = 16.dp)
-                                        )
-                                        is ChatFeedItem.AssistantFooter -> {
-                                            AssistantMessageFooter(
-                                                message = feedItem.message,
-                                                showStats = showMessageStats,
-                                                // fades in where the working row fades out (no pop-in at the end of a turn)
-                                                modifier = Modifier.animateItem(fadeInSpec = tween(220), placementSpec = null, fadeOutSpec = null),
-                                                isDevModeEnabled = isDevModeEnabled,
-                                                canRetry = !isReadOnlyChat,
-                                                onRetry = { targetMsg ->
-                                                    viewModel.retryMessage(targetMsg.id)
-                                                    userSentMessageTrigger++
-                                                },
-                                                onViewRawPayload = { payloadJson ->
-                                                    showRawPayloadDialog = payloadJson
-                                                },
-                                                onShowArtifacts = { showArtifactsDrawer = true },
-                                                artifactsCount = artifacts.size
+                                            is ChatFeedItem.Divider -> ai.antigem.ui.components.WaveDivider(label = feedItem.label)
+                                            is ChatFeedItem.VoiceCall -> ai.antigem.ui.voice.VoiceCallMarker(feedItem) {
+                                                if (feedItem.live) ai.antigem.data.voice.AgyVoiceCall.setMinimized(false)
+                                                else openVoiceTranscript = feedItem.record
+                                            }
+                                            is ChatFeedItem.JarvisEvent -> ai.antigem.ui.jarvis.JarvisEventCard(
+                                                raw = feedItem.message.content,
+                                                onOpenChat = openJarvisLinkedChat
                                             )
-                                        }
-                                        is ChatFeedItem.StreamingMessage -> {
-                                            MessageBubble(
-                                                message = feedItem.message,
-                                                modelId = selectedModelId,
-                                                showStats = showMessageStats,
-                                                isDevModeEnabled = isDevModeEnabled,
-                                                onApproveTool = { toolCall, msgId ->
-                                                    viewModel.approveAndExecuteTerminalTool(toolCall, msgId)
-                                                },
-                                                onRejectTool = { toolCall, msgId ->
-                                                    if (toolCall.toolType == ToolType.ASK_CHOICE) {
-                                                        viewModel.cancelUserChoices(toolCall, msgId)
-                                                    } else {
-                                                        viewModel.rejectTerminalTool(toolCall, msgId)
+                                            is ChatFeedItem.User -> {
+                                                val msgIndex = messages.indexOfFirst { it.id == feedItem.message.id }
+                                                val willDeleteOutput = msgIndex < messages.lastIndex
+                                                UserMessageBubble(
+                                                    message = feedItem.message,
+                                                    isLastUserMessage = true,
+                                                    isDevModeEnabled = isDevModeEnabled,
+                                                    canEdit = !isReadOnlyChat,
+                                                    onEdit = { targetMsg ->
+                                                        if (willDeleteOutput) {
+                                                            pendingMessageAction = PendingMessageAction(MessageActionType.EDIT, targetMsg)
+                                                        } else {
+                                                            viewModel.revertAndEditLastUserMessage(targetMsg) { restoredText ->
+                                                                inputState.setTextAndPlaceCursorAtEnd(restoredText)
+                                                            }
+                                                        }
+                                                    },
+                                                    onViewRawPayload = { payloadJson ->
+                                                        showRawPayloadDialog = payloadJson
+                                                    },
+                                                    checkpoint = messageCheckpoints[feedItem.message.id],
+                                                    onRestoreCheckpoint = { msg ->
+                                                        messageCheckpoints[msg.id]?.let { restoreSheetFor = msg to it }
                                                     }
-                                                },
-                                                onTerminateTool = { toolCall, msgId ->
-                                                    viewModel.terminateRunningTerminalTool(toolCall, msgId)
-                                                },
-                                                onSubmitChoices = { toolCall, msgId, responses, summaryPayload ->
-                                                    viewModel.submitUserChoices(toolCall, msgId, responses, summaryPayload)
-                                                },
-                                                onSkipChoices = { toolCall, msgId, responses ->
-                                                    viewModel.skipUserChoices(toolCall, msgId, responses)
-                                                },
-                                                summarizingModelName = summarizingModelName,
-                                                pendingQueuedUserMessage = pendingQueuedUserMessage,
-                                                onShowArtifacts = { showArtifactsDrawer = true },
-                                                artifactsCount = artifacts.size
+                                                )
+                                            }
+                                            is ChatFeedItem.AssistantThinking -> {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 2.dp)
+                                                ) {
+                                                    ThinkingAccordion(
+                                                        thoughtText = feedItem.thoughtText,
+                                                        durationMs = feedItem.durationMs,
+                                                        isStreaming = feedItem.isStreaming
+                                                    )
+                                                }
+                                            }
+                                            is ChatFeedItem.AssistantBlock -> {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 2.dp)
+                                                ) {
+                                                    val isTool = feedItem.block is MarkdownBlock.AgentTool
+                                                    val blockView: @Composable () -> Unit = {
+                                                        MarkdownBlockView(
+                                                            block = feedItem.block,
+                                                            onApproveTool = if (isTool) { { toolCall -> viewModel.approveAndExecuteTerminalTool(toolCall, feedItem.messageId) } } else null,
+                                                            onRejectTool = if (isTool) { { toolCall -> if (toolCall.toolType == ToolType.ASK_CHOICE) viewModel.cancelUserChoices(toolCall, feedItem.messageId) else viewModel.rejectTerminalTool(toolCall, feedItem.messageId) } } else null,
+                                                            onTerminateTool = if (isTool) { { toolCall -> viewModel.terminateRunningTerminalTool(toolCall, feedItem.messageId) } } else null,
+                                                            onSubmitChoices = if (isTool) { { toolCall, responses, summaryPayload -> viewModel.submitUserChoices(toolCall, feedItem.messageId, responses, summaryPayload) } } else null,
+                                                            onSkipChoices = if (isTool) { { toolCall, responses -> viewModel.skipUserChoices(toolCall, feedItem.messageId, responses) } } else null
+                                                        )
+                                                    }
+                                                    // Text is selectable per block: each list item has its own selection container, so a
+                                                    // selection never outlives the item when it scrolls away (one container spanning many
+                                                    // items crashed). Interactive blocks (tool cards, web views, media) keep their own gestures.
+                                                    val selectable = when (feedItem.block) {
+                                                        is MarkdownBlock.Paragraph, is MarkdownBlock.Header, is MarkdownBlock.Bullet,
+                                                        is MarkdownBlock.Numbered, is MarkdownBlock.Task, is MarkdownBlock.Blockquote,
+                                                        is MarkdownBlock.Alert, is MarkdownBlock.Table -> true
+                                                        else -> false
+                                                    }
+                                                    CompositionLocalProvider(ai.antigem.ui.components.LocalWebViewSlot provides feedItem.key) {
+                                                        if (selectable) SelectionContainer { blockView() } else blockView()
+                                                    }
+                                                }
+                                            }
+                                            // with the working animation on, the working row below replaces these dots
+                                            // progress shows in the working row under the reply (the working animation is always on)
+                                            is ChatFeedItem.AssistantTyping -> Unit
+                                            is ChatFeedItem.StepGroup -> StepGroupPill(
+                                                group = feedItem,
+                                                onToggle = { if (openStepGroups.remove(feedItem.key) == null) openStepGroups[feedItem.key] = true },
+                                                modifier = Modifier.padding(horizontal = 16.dp)
                                             )
-                                        }
+                                            is ChatFeedItem.AssistantFooter -> {
+                                                AssistantMessageFooter(
+                                                    message = feedItem.message,
+                                                    showStats = showMessageStats,
+                                                    // fades in where the working row fades out (no pop-in at the end of a turn)
+                                                    modifier = Modifier.animateItem(fadeInSpec = tween(220), placementSpec = null, fadeOutSpec = null),
+                                                    isDevModeEnabled = isDevModeEnabled,
+                                                    canRetry = !isReadOnlyChat,
+                                                    onRetry = { targetMsg ->
+                                                        viewModel.retryMessage(targetMsg.id)
+                                                        userSentMessageTrigger++
+                                                    },
+                                                    onViewRawPayload = { payloadJson ->
+                                                        showRawPayloadDialog = payloadJson
+                                                    },
+                                                    onShowArtifacts = { showArtifactsDrawer = true },
+                                                    artifactsCount = artifacts.size
+                                                )
+                                            }
+                                            is ChatFeedItem.StreamingMessage -> {
+                                                MessageBubble(
+                                                    message = feedItem.message,
+                                                    modelId = selectedModelId,
+                                                    showStats = showMessageStats,
+                                                    isDevModeEnabled = isDevModeEnabled,
+                                                    onApproveTool = { toolCall, msgId ->
+                                                        viewModel.approveAndExecuteTerminalTool(toolCall, msgId)
+                                                    },
+                                                    onRejectTool = { toolCall, msgId ->
+                                                        if (toolCall.toolType == ToolType.ASK_CHOICE) {
+                                                            viewModel.cancelUserChoices(toolCall, msgId)
+                                                        } else {
+                                                            viewModel.rejectTerminalTool(toolCall, msgId)
+                                                        }
+                                                    },
+                                                    onTerminateTool = { toolCall, msgId ->
+                                                        viewModel.terminateRunningTerminalTool(toolCall, msgId)
+                                                    },
+                                                    onSubmitChoices = { toolCall, msgId, responses, summaryPayload ->
+                                                        viewModel.submitUserChoices(toolCall, msgId, responses, summaryPayload)
+                                                    },
+                                                    onSkipChoices = { toolCall, msgId, responses ->
+                                                        viewModel.skipUserChoices(toolCall, msgId, responses)
+                                                    },
+                                                    summarizingModelName = summarizingModelName,
+                                                    pendingQueuedUserMessage = pendingQueuedUserMessage,
+                                                    onShowArtifacts = { showArtifactsDrawer = true },
+                                                    artifactsCount = artifacts.size
+                                                )
+                                            }
+                                            }
                                         }
                                     }
 
@@ -2532,49 +2830,101 @@ fun ChatScreen(
                         }
                     }
 
-                    // Floating Scroll Up / Scroll Down Button (Instant Movement)
+                    // Floating Message Turn Navigator (when accessibility is active) & 48dp Scroll Top/Bottom Button
                     val showUpArrow = showScrollButton && scrollDirection == ScrollDirection.UP && !isAtTop
                     val showDownArrow = showScrollButton && scrollDirection == ScrollDirection.DOWN && !isAtBottom
-                    val isVisible = (showUpArrow || showDownArrow) && feedItems.size > 2
-                                            
+                    val showTurnNavigator = accessibilityEnabled && turnAnchors.size > 1
+                    val showScrollJump = if (accessibilityEnabled) {
+                        feedItems.size > 2 && (!isAtTop || !isAtBottom)
+                    } else {
+                        (showUpArrow || showDownArrow) && feedItems.size > 2
+                    }
+                    val isNavigatorVisible = showTurnNavigator || showScrollJump
+
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = isVisible,
+                        visible = isNavigatorVisible,
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
                         exit = fadeOut() + scaleOut(targetScale = 0.8f),
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = 16.dp, bottom = 12.dp)
+                            .padding(end = 12.dp, bottom = 12.dp)
+                            .semantics {
+                                isTraversalGroup = true
+                                traversalIndex = 1f
+                            }
                     ) {
+                        val navBg = MaterialTheme.colorScheme.surface
+                        val navAccent = ensureAccessibleContrast(ClaudeTerracotta, navBg, 3.0f)
+                        val navDisabled = ensureAccessibleContrast(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                            navBg,
+                            3.0f
+                        )
                         Surface(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .clickable {
-                                    showScrollButton = false
-                                    scope.launch {
-                                        if (showUpArrow) {
-                                            listState.scrollToItem(0)
-                                        } else {
-                                            listState.scrollToItem(feedItems.size)
-                                        }
-                                    }
-                                },
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surface,
+                            shape = if (showTurnNavigator) RoundedCornerShape(24.dp) else CircleShape,
+                            color = navBg,
                             tonalElevation = 6.dp,
                             shadowElevation = 6.dp,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f))
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Icon(
-                                    imageVector = if (showUpArrow) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = if (showUpArrow) L.chat.screen.jumpToTop else L.chat.screen.jumpToBottom,
-                                    tint = ClaudeTerracotta,
-                                    modifier = Modifier.size(22.dp)
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (showTurnNavigator) {
+                                    val canPrev = activeTurnIndex > 0
+                                    val canNext = activeTurnIndex in 0 until turnAnchors.lastIndex
+                                    IconButton(
+                                        onClick = { jumpToTurn((activeTurnIndex - 1).coerceAtLeast(0)) },
+                                        enabled = canPrev,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowUp,
+                                            contentDescription = L.chat.screen.previousMessage,
+                                            tint = if (canPrev) navAccent else navDisabled,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { jumpToTurn((activeTurnIndex + 1).coerceAtMost(turnAnchors.lastIndex)) },
+                                        enabled = canNext,
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = L.chat.screen.nextMessage,
+                                            tint = if (canNext) navAccent else navDisabled,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                                if (showScrollJump) {
+                                    val jumpTop = if (accessibilityEnabled) isAtBottom else showUpArrow
+                                    IconButton(
+                                        onClick = {
+                                            showScrollButton = false
+                                            scope.launch {
+                                                if (jumpTop) {
+                                                    shouldAutoScroll = false
+                                                    listState.scrollToItem(0)
+                                                } else {
+                                                    shouldAutoScroll = true
+                                                    listState.scrollToItem(feedItems.size)
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.size(48.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (accessibilityEnabled) {
+                                                if (jumpTop) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward
+                                            } else {
+                                                if (jumpTop) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
+                                            },
+                                            contentDescription = if (jumpTop) L.chat.screen.jumpToTop else L.chat.screen.jumpToBottom,
+                                            tint = navAccent,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -2712,20 +3062,23 @@ fun ChatScreen(
                                     .padding(vertical = 4.dp)
                             ) {
                                 items(fileSuggestions, key = { file -> file.path }) { file ->
+                                    val mentionRowBg = MaterialTheme.colorScheme.surfaceVariant
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable {
+                                            .minTouchTarget(48.dp)
+                                            .clickable(role = Role.Button) {
                                                 val newText = inputState.text.substring(0, atIndex) + "@${file.path} "
                                                 inputState.setTextAndPlaceCursorAtEnd(newText)
                                             }
+                                            .semantics(mergeDescendants = true) {}
                                             .padding(horizontal = 12.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
                                             imageVector = if (file.isDir) Icons.Default.Folder else Icons.Default.Description,
                                             contentDescription = null,
-                                            tint = ClaudeTerracotta,
+                                            tint = ensureAccessibleContrast(ClaudeTerracotta, mentionRowBg, 3.0f),
                                             modifier = Modifier.size(16.dp)
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
@@ -2739,7 +3092,11 @@ fun ChatScreen(
                                         Text(
                                             text = file.path,
                                             fontSize = 11.sp,
-                                            color = Color.Gray,
+                                            color = ensureAccessibleContrast(
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                                mentionRowBg,
+                                                4.5f
+                                            ),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -2756,12 +3113,14 @@ fun ChatScreen(
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically()
                 ) {
+                    val bridgeBannerBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 3.dp),
+                            .padding(horizontal = 14.dp, vertical = 3.dp)
+                            .semantics { liveRegion = LiveRegionMode.Polite },
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+                        color = bridgeBannerBg,
                         border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.35f))
                     ) {
                         Row(
@@ -2771,13 +3130,13 @@ fun ChatScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(13.dp),
                                 strokeWidth = 2.dp,
-                                color = ClaudeTerracotta
+                                color = ensureAccessibleContrast(ClaudeTerracotta, bridgeBannerBg, 3.0f, MaterialTheme.colorScheme.background)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = bridgeStatusMessage ?: "",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant, bridgeBannerBg, 4.5f, MaterialTheme.colorScheme.background),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Medium
                             )
@@ -2791,18 +3150,24 @@ fun ChatScreen(
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
+                    val disconnectBannerBg = if (isReconnecting) {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+                    } else {
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.88f)
+                    }
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 3.dp),
+                            .padding(horizontal = 14.dp, vertical = 3.dp)
+                            .semantics { liveRegion = LiveRegionMode.Polite },
                         shape = RoundedCornerShape(10.dp),
-                        color = if (isReconnecting) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.88f),
+                        color = disconnectBannerBg,
                         border = BorderStroke(1.dp, if (isReconnecting) MaterialTheme.colorScheme.outline.copy(alpha = 0.2f) else MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -2828,28 +3193,40 @@ fun ChatScreen(
                                     text = if (isReconnecting) L.chat.screen.connectingToAntigravity else L.chat.screen.antigravityDisconnected,
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium,
-                                    color = if (isReconnecting) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onErrorContainer,
+                                    color = ensureAccessibleContrast(
+                                        if (isReconnecting) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onErrorContainer,
+                                        disconnectBannerBg,
+                                        4.5f,
+                                        MaterialTheme.colorScheme.background
+                                    ),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                             if (!isReconnecting) {
+                                val reconnectColor = ensureAccessibleContrast(
+                                    MaterialTheme.colorScheme.error,
+                                    disconnectBannerBg,
+                                    4.5f,
+                                    MaterialTheme.colorScheme.background
+                                )
                                 TextButton(
                                     onClick = { viewModel.retryConnections() },
+                                    modifier = Modifier.minTouchTarget(48.dp),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
                                         contentDescription = null,
                                         modifier = Modifier.size(13.dp),
-                                        tint = MaterialTheme.colorScheme.error
+                                        tint = reconnectColor
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = L.common.reconnect,
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.error
+                                        color = reconnectColor
                                     )
                                 }
                             }
@@ -2872,6 +3249,14 @@ fun ChatScreen(
                             onReject = { toolCall, msgId, reason -> viewModel.rejectTerminalTool(toolCall, msgId, reason) }
                         )
                     }
+                }
+                var hadApprovalItems by remember(convKey) { mutableStateOf(approvalItems.isNotEmpty()) }
+                LaunchedEffect(convKey, approvalItems.isNotEmpty()) {
+                    val hasNow = approvalItems.isNotEmpty()
+                    if (!hadApprovalItems && hasNow) {
+                        announceForAccessibility(view, L.chat.screen.approvalRequired)
+                    }
+                    hadApprovalItems = hasNow
                 }
                 // keep the last requests on screen while the panel animates away
                 val lastApprovalItems = remember { arrayOf(emptyList<ai.antigem.ui.agents.ApprovalItem>()) }
@@ -2910,8 +3295,16 @@ fun ChatScreen(
                         messages
                     )
                 }
+                val questionVisible = pendingQuestion != null && approvalItems.isEmpty()
+                var hadPendingQuestion by remember(convKey) { mutableStateOf(questionVisible) }
+                LaunchedEffect(convKey, questionVisible) {
+                    if (!hadPendingQuestion && questionVisible) {
+                        announceForAccessibility(view, L.chat.screen.agentQuestion)
+                    }
+                    hadPendingQuestion = questionVisible
+                }
                 AnimatedVisibility(
-                    visible = pendingQuestion != null && approvalItems.isEmpty(),
+                    visible = questionVisible,
                     enter = expandVertically() + fadeIn(),
                     exit = shrinkVertically() + fadeOut()
                 ) {
@@ -4163,7 +4556,8 @@ fun ChatToastBanner(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(elevation = 12.dp, shape = RoundedCornerShape(14.dp)),
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(14.dp))
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = RoundedCornerShape(14.dp),
         color = bgColor,
         border = BorderStroke(1.dp, borderColor)
@@ -4177,7 +4571,7 @@ fun ChatToastBanner(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = iconColor,
+                tint = ensureAccessibleContrast(iconColor, bgColor, 3.0f),
                 modifier = Modifier.size(20.dp)
             )
             Spacer(modifier = Modifier.width(10.dp))
@@ -4191,20 +4585,36 @@ fun ChatToastBanner(
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Close,
                     contentDescription = L.common.dismiss,
-                    tint = textColor.copy(alpha = 0.6f),
+                    tint = ensureAccessibleContrast(textColor.copy(alpha = 0.6f), bgColor, 3.0f),
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
     }
+}
+
+private data class ChatTurnAnchor(
+    val turnIndex: Int,
+    val feedIndex: Int,
+    val feedKey: String,
+    val senderLabel: String
+)
+
+private fun ChatFeedItem.assistantTurnMessageIdOrNull(): String? = when (this) {
+    is ChatFeedItem.AssistantThinking -> messageId
+    is ChatFeedItem.AssistantBlock -> messageId
+    is ChatFeedItem.StepGroup -> steps.firstOrNull()?.messageId
+    is ChatFeedItem.AssistantFooter -> message.id
+    is ChatFeedItem.StreamingMessage -> message.id
+    else -> null
 }
 
 enum class MessageActionType { EDIT, RETRY }

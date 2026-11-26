@@ -32,6 +32,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -43,6 +52,8 @@ import androidx.compose.ui.unit.sp
 import ai.antigem.data.remote.SlashCommandItem
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.ui.components.AgyAccent
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.theme.ClaudeTerracotta
 import ai.antigem.i18n.L
 
@@ -73,10 +84,18 @@ fun SlashCommandOverlay(
         .toList()
         .sortedBy { (type, _) -> order.indexOf(type).let { if (it < 0) order.size else it } }
 
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val countAnnouncement = L.chat.slashCommandOverlay.countCommandsAvailable(items.size)
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                isTraversalGroup = true
+                paneTitle = countAnnouncement
+                liveRegion = LiveRegionMode.Polite
+            },
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = surfaceBg,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
         shadowElevation = 10.dp,
         tonalElevation = 2.dp
@@ -89,7 +108,10 @@ fun SlashCommandOverlay(
                 val group = groupOf(type)
                 item(key = "h_$type") {
                     Row(
-                        Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 4.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 4.dp)
+                            .semantics(mergeDescendants = true) { heading() },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
@@ -97,10 +119,22 @@ fun SlashCommandOverlay(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.8.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = ensureAccessibleContrast(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                                surfaceBg,
+                                minRatio = 4.5f
+                            ),
                             modifier = Modifier.weight(1f)
                         )
-                        Text("${list.size}", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        Text(
+                            "${list.size}",
+                            fontSize = 10.sp,
+                            color = ensureAccessibleContrast(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                surfaceBg,
+                                minRatio = 4.5f
+                            )
+                        )
                     }
                 }
                 items(list, key = { "${it.type}_${it.command}" }) { item ->
@@ -113,12 +147,29 @@ fun SlashCommandOverlay(
 
 @Composable
 private fun SlashRow(item: SlashCommandItem, group: SlashGroup, query: String, runs: Boolean, onClick: () -> Unit) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val tag = item.pluginName ?: when {
+        item.type == "app" -> L.chat.slashCommandOverlay.opensInApp
+        runs -> L.chat.slashCommandOverlay.runsImmediately
+        else -> null
+    }
+    val spokenLabel = buildString {
+        append(item.command)
+        if (item.argumentHint.isNotBlank()) append(", ").append(item.argumentHint)
+        if (item.description.isNotBlank()) append(", ").append(item.description)
+        if (tag != null) append(", ").append(tag)
+    }
     Row(
         Modifier
             .fillMaxWidth()
+            .minTouchTarget(48.dp)
             .padding(horizontal = 6.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = spokenLabel
+            }
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -142,7 +193,16 @@ private fun SlashRow(item: SlashCommandItem, group: SlashGroup, query: String, r
                         append(name.substring(i + query.length))
                     }
                     if (item.argumentHint.isNotBlank()) {
-                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), fontWeight = FontWeight.Normal)) {
+                        withStyle(
+                            SpanStyle(
+                                color = ensureAccessibleContrast(
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                                    surfaceBg,
+                                    minRatio = 4.5f
+                                ),
+                                fontWeight = FontWeight.Normal
+                            )
+                        ) {
                             append(" ${item.argumentHint}")
                         }
                     }
@@ -158,25 +218,25 @@ private fun SlashRow(item: SlashCommandItem, group: SlashGroup, query: String, r
                     item.description,
                     fontSize = 11.5.sp,
                     lineHeight = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = ensureAccessibleContrast(
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                        surfaceBg,
+                        minRatio = 4.5f
+                    ),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
         }
-        val tag = item.pluginName ?: when {
-            item.type == "app" -> "opens"
-            runs -> "runs"
-            else -> null
-        }
         tag?.let {
             Spacer(Modifier.width(8.dp))
-            Surface(shape = RoundedCornerShape(6.dp), color = group.color.copy(alpha = 0.12f)) {
+            val tagBg = group.color.copy(alpha = 0.12f)
+            Surface(shape = RoundedCornerShape(6.dp), color = tagBg) {
                 Text(
                     it,
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
-                    color = group.color,
+                    color = ensureAccessibleContrast(group.color, tagBg, minRatio = 4.5f, surfaceFallback = surfaceBg),
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                 )
             }

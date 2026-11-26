@@ -17,6 +17,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import ai.antigem.theme.GeminiTheme
@@ -25,6 +29,9 @@ import ai.antigem.ui.browser.BrowserScreen
 import ai.antigem.ui.chat.ChatViewModel
 import ai.antigem.ui.chat.ChatViewModelHolder
 import ai.antigem.ui.ide.IdeScreen
+import ai.antigem.ui.components.LocalScreenAccessible
+import ai.antigem.ui.components.accessibleScreenVisibility
+import ai.antigem.ui.components.announceForAccessibility
 import ai.antigem.ui.components.pageSnapshotSource
 import ai.antigem.i18n.L
 
@@ -361,8 +368,12 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(currentViewMode) {
                             if (previousModeForFocus != currentViewMode) {
                                 val isKeyboardOpen = imeInsets.getBottom(density) > 0
-                                focusCoordinator.onScreenLeaving(previousModeForFocus, isKeyboardOpen)
+                                focusCoordinator.onScreenLeaving(previousModeForFocus, isKeyboardOpen, currentViewMode)
                                 focusCoordinator.onScreenEntering(currentViewMode, isKeyboardOpen)
+                                announceForAccessibility(
+                                    view,
+                                    L.app.mainActivity.switchedToScreen(appViewModeLabel(currentViewMode))
+                                )
                                 previousModeForFocus = currentViewMode
                             }
                         }
@@ -372,16 +383,12 @@ class MainActivity : ComponentActivity() {
                         ) {
                             Box(modifier = Modifier.fillMaxSize()) {
                                 // Persistent Chat Screen (Never destroyed on toggle)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.CHAT
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else -20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.CHAT, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.CHAT,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse,
+                                    offscreenTranslationSign = -1f
                                 ) {
                                     ChatScreen(
                                         viewModel = chatViewModel,
@@ -410,16 +417,11 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 // Persistent IDE Screen (Retains open tabs, daemon connection & state)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.IDE
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else 20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.IDE, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.IDE,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse
                                 ) {
                                     IdeScreen(
                                         viewModel = chatViewModel,
@@ -443,16 +445,11 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 // Persistent Terminal Screen (Retains terminal tmux sessions & state)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.TERMINAL
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else 20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.TERMINAL, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.TERMINAL,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse
                                 ) {
                                     if (currentViewMode == AppViewMode.TERMINAL || (hasEverOpenedTerminal && terminalSessions.isNotEmpty())) {
                                         ai.antigem.ui.components.LocalTerminalContent(
@@ -472,16 +469,11 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 // Persistent Web Preview Browser Screen (Retains open tabs, WebViews, state & navigation)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.BROWSER
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else 20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.BROWSER, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.BROWSER,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse
                                 ) {
                                     BrowserScreen(
                                         isVisible = currentViewMode == AppViewMode.BROWSER,
@@ -493,16 +485,11 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 // Persistent Notes Screen (Notes & to-do lists; open note and scroll survive switching away)
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.NOTES
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else 20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.NOTES, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.NOTES,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse
                                 ) {
                                     ai.antigem.ui.notes.NotesScreen(
                                         isVisible = currentViewMode == AppViewMode.NOTES,
@@ -516,16 +503,11 @@ class MainActivity : ComponentActivity() {
                                 // Persistent Files Screen (file explorer: folder, history and clipboard survive switching away)
                                 var hasEverOpenedFiles by remember { mutableStateOf(false) }
                                 if (currentViewMode == AppViewMode.FILES) hasEverOpenedFiles = true
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.FILES
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else 20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.FILES, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.FILES,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse
                                 ) {
                                     if (hasEverOpenedFiles) {
                                         ai.antigem.ui.files.FileExplorer(
@@ -572,16 +554,11 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .graphicsLayer {
-                                            val isVisible = currentViewMode == AppViewMode.RUN
-                                            alpha = if (isVisible) 1f else 0f
-                                            translationX = if (isVisible) 0f else 20000f
-                                        }
-                                        // its drawing, for its picture in the page overview (without the floating pills over it)
-                                        .pageSnapshotSource(AppViewMode.RUN, pageOverviewInUse)
+                                PersistentScreenSlot(
+                                    mode = AppViewMode.RUN,
+                                    currentViewMode = currentViewMode,
+                                    showPageOverview = showPageOverview,
+                                    pageOverviewInUse = pageOverviewInUse
                                 ) {
                                     if (hasEverOpenedRun) {
                                         ai.antigem.ui.run.RunScreen(
@@ -735,7 +712,8 @@ class MainActivity : ComponentActivity() {
                                     onPositionSaved = { x, y ->
                                         chatViewModel.saveFloatingSwitcherPosition(x, y)
                                     },
-                                    onOrientationChange = { chatViewModel.setFloatingSwitcherOrientation(it) }
+                                    onOrientationChange = { chatViewModel.setFloatingSwitcherOrientation(it) },
+                                    modifier = Modifier.semantics { traversalIndex = 1f }
                                 )
                                 // The overview pill: a second pill that only opens the page overview (Settings → Appearance)
                                 if (overviewPillEnabled) {
@@ -762,7 +740,8 @@ class MainActivity : ComponentActivity() {
                                         onNavigateBack = switcherNavigateBack,
                                         onPositionSaved = { x, y ->
                                             overviewPillScope.launch { switcherPrefs.saveOverviewPillPosition(x, y) }
-                                        }
+                                        },
+                                        modifier = Modifier.semantics { traversalIndex = 2f }
                                     )
                                 }
                                 if (showSwitcherToolsInstall) {
@@ -1019,6 +998,55 @@ class MainActivity : ComponentActivity() {
                 }
             }
             uri != null -> chatViewModel.openFileInIdeDirectly(this, uri)
+        }
+    }
+}
+
+private fun appViewModeLabel(mode: AppViewMode): String = when (mode) {
+    AppViewMode.CHAT -> L.common.chat
+    AppViewMode.IDE -> "IDE"
+    AppViewMode.TERMINAL -> L.common.terminal
+    AppViewMode.BROWSER -> L.common.browser
+    AppViewMode.NOTES -> L.common.notes
+    AppViewMode.FILES -> L.common.files
+    AppViewMode.RUN -> L.common.run
+}
+
+/**
+ * Wraps each persistent screen in [MainActivity] so inactive or overview-covered screens are
+ * removed from Compose semantics and keyboard/D-pad focus while staying mounted in memory.
+ */
+@Composable
+private fun PersistentScreenSlot(
+    mode: AppViewMode,
+    currentViewMode: AppViewMode,
+    showPageOverview: Boolean,
+    pageOverviewInUse: Boolean,
+    offscreenTranslationSign: Float = 1f,
+    content: @Composable () -> Unit
+) {
+    val isVisible = currentViewMode == mode
+    val isAccessible = isVisible && !showPageOverview
+    val title = appViewModeLabel(mode)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                alpha = if (isVisible) 1f else 0f
+                translationX = if (isVisible) 0f else offscreenTranslationSign * 20000f
+            }
+            .accessibleScreenVisibility(isAccessible)
+            .semantics {
+                if (isAccessible) {
+                    isTraversalGroup = true
+                    traversalIndex = 0f
+                    paneTitle = title
+                }
+            }
+            .pageSnapshotSource(mode, pageOverviewInUse)
+    ) {
+        CompositionLocalProvider(LocalScreenAccessible provides isAccessible) {
+            content()
         }
     }
 }

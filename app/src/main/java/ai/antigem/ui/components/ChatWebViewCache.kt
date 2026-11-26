@@ -88,6 +88,7 @@ class ChatWebViewCache(context: Context) {
             entry.owner = owner
             val oldParent = entry.view.parent
             (entry.view.parent as? ViewGroup)?.removeView(entry.view)
+            entry.view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
             entry.view.onResume()
             dlog("obtain REUSE(${if (wasParked) "parked" else "put-aside"}) slot=$slot ${wvInfo(entry.view)} oldParent=${oldParent?.let { it.javaClass.simpleName + "@" + wvId(it) }} savedH=${heights[slot]}")
             return entry.view
@@ -124,6 +125,7 @@ class ChatWebViewCache(context: Context) {
             return
         }
         entry.owner = null
+        view.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
         runCatching { view.onPause() }
         dlog("release PARK slot=${slot} ${wvInfo(view)} parked=${entries.values.count { !it.inUse }}")
         dropParked(if (isMemoryLow()) 0 else MAX_PARKED)

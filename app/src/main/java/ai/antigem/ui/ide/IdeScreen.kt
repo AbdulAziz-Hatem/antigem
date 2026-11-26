@@ -2,26 +2,47 @@ package ai.antigem.ui.ide
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import android.content.Context
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -49,7 +70,12 @@ import ai.antigem.data.daemon.OpenTab
 import ai.antigem.data.daemon.ProjectItem
 import ai.antigem.data.daemon.IdeDaemonManager
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.LocalScreenAccessible
 import ai.antigem.ui.components.LocalTerminalContent
+import ai.antigem.ui.components.announceForAccessibility
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
+import ai.antigem.ui.components.rememberIsAccessibilityEnabled
 import ai.antigem.data.local.LocalPtySession
 import androidx.compose.ui.zIndex
 import java.io.File
@@ -83,7 +109,7 @@ import ai.antigem.data.local.LocalTerminalManager
 import ai.antigem.ui.browser.BrowserSessionManager
 import ai.antigem.i18n.L
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun IdeScreen(
     viewModel: ChatViewModel? = null,
@@ -122,6 +148,20 @@ fun IdeScreen(
     var searchMatchCount by remember { mutableIntStateOf(0) }
     var currentMatchIndex by remember { mutableIntStateOf(-1) }
     val tabListState = rememberLazyListState()
+    val screenAccessible = LocalScreenAccessible.current
+    val isAccessibilityEnabled = rememberIsAccessibilityEnabled()
+    var cursorLine by remember(activeTabPath) { mutableIntStateOf(1) }
+    var cursorCol by remember(activeTabPath) { mutableIntStateOf(1) }
+    var totalLines by remember(activeTabPath) { mutableIntStateOf(1) }
+    var showGoToLineDialog by remember { mutableStateOf(false) }
+
+    fun closeTabAction(tab: OpenTab) {
+        if (tab.isModified) {
+            tabToClose = tab
+        } else {
+            IdeDaemonManager.closeTab(tab.path)
+        }
+    }
 
     var showRunMenu by remember { mutableStateOf(false) }
     var showAddProfileDialog by remember { mutableStateOf(false) }
@@ -272,10 +312,10 @@ fun IdeScreen(
         }
     }
 
-    // Auto-dismiss reload notification banner after 3 seconds
-    LaunchedEffect(autoUpdateNotification) {
+    // Auto-dismiss reload notification banner (longer timeout when an accessibility service is active)
+    LaunchedEffect(autoUpdateNotification, isAccessibilityEnabled) {
         if (autoUpdateNotification != null) {
-            delay(3000)
+            delay(if (isAccessibilityEnabled) 8000L else 3000L)
             autoUpdateNotification = null
         }
     }
@@ -308,6 +348,8 @@ fun IdeScreen(
     val isMarkdownFile = activeTab != null && FileKinds.of(activeTab.name) == ai.antigem.data.files.FileKind.MARKDOWN
     var showMarkdownPreview by remember(activeTabPath) { mutableStateOf(false) }
     val isMarkdownPreview = isMarkdownFile && showMarkdownPreview
+    val isTextFile = activeTab != null && !activeTab.isDiff && (!isImageFile || (isSvgFile && showSvgSource)) && !isMarkdownPreview
+    val isTextEditable = isTextFile && activeTab?.isReadOnly == false
     var binaryWarningDialog by remember { mutableStateOf<BinaryWarningTab?>(null) }
     var tooLargeDialog by remember { mutableStateOf<TooLargeFile?>(null) }
 
@@ -397,11 +439,12 @@ fun IdeScreen(
                     onCreateFile = { fullPath, name, isDir ->
                         coroutineScope.launch {
                             val ok = IdeApiClient.createFileOrDir(fullPath, isDir)
+                            val kindLabel = if (isDir) L.ide.screen.folder else L.ide.screen.file
                             if (ok) {
                                 fileTree.reload(parentPathOf(fullPath))
-                                Toast.makeText(context, "Created ${if (isDir) "folder" else "file"} '$name'", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, L.ide.screen.createdKindName(kindLabel, name), Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, L.ide.screen.failedToCreateValue(if (isDir) "folder" else "file"), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, L.ide.screen.failedToCreateValue(kindLabel), Toast.LENGTH_SHORT).show()
                             }
                         }
                     },
@@ -449,12 +492,16 @@ fun IdeScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
+                    modifier = Modifier.semantics { isTraversalGroup = true },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            coroutineScope.launch {
-                                if (drawerState.isClosed) drawerState.open() else drawerState.close()
-                            }
-                        }) {
+                        IconButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                                }
+                            },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
                                 contentDescription = L.ide.screen.toggleSidebar
@@ -468,50 +515,31 @@ fun IdeScreen(
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            softWrap = false
+                            softWrap = false,
+                            modifier = Modifier.semantics { heading() }
                         )
                     },
                     actions = {
-                        val isTextFile = activeTab != null && (!isImageFile || (isSvgFile && showSvgSource)) && !isMarkdownPreview
-                        val isTextEditable = isTextFile && !activeTab.isReadOnly
                         var showMoreOptionsMenu by remember { mutableStateOf(false) }
 
-                        // Markdown Source / Rendered Preview Toggle
-                        if (isMarkdownFile) {
+                        // Three-Dot More Options Menu (Word Wrap, Find in file, Go to line, SVG toggle, Run Configurations)
+                        Box {
                             IconButton(
-                                onClick = {
-                                    if (!showMarkdownPreview) showFindBar = false
-                                    showMarkdownPreview = !showMarkdownPreview
-                                },
-                                modifier = Modifier.size(36.dp)
+                                onClick = { showMoreOptionsMenu = true },
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
-                                    imageVector = if (showMarkdownPreview) Icons.Default.Code else Icons.Default.Visibility,
-                                    contentDescription = if (showMarkdownPreview) L.ide.screen.editMarkdownSource else L.ide.screen.previewMarkdown,
-                                    tint = if (showMarkdownPreview) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = L.ide.screen.moreEditorOptions,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        }
 
-                        // Three-Dot More Options Menu (Word Wrap, Find in file, SVG toggle)
-                        if (isTextFile) {
-                            Box {
-                                IconButton(
-                                    onClick = { showMoreOptionsMenu = true },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.MoreVert,
-                                        contentDescription = L.ide.screen.moreEditorOptions,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                DropdownMenu(
-                                    expanded = showMoreOptionsMenu,
-                                    onDismissRequest = { showMoreOptionsMenu = false }
-                                ) {
+                            DropdownMenu(
+                                expanded = showMoreOptionsMenu,
+                                onDismissRequest = { showMoreOptionsMenu = false }
+                            ) {
+                                if (isTextFile) {
                                     // Word Wrap with Checkbox
                                     DropdownMenuItem(
                                         text = { Text(L.ide.screen.wordWrap, fontSize = 13.sp) },
@@ -525,7 +553,7 @@ fun IdeScreen(
                                         trailingIcon = {
                                             Checkbox(
                                                 checked = isWordWrap,
-                                                onCheckedChange = { isWordWrap = it },
+                                                onCheckedChange = null,
                                                 modifier = Modifier.size(20.dp)
                                             )
                                         },
@@ -547,6 +575,22 @@ fun IdeScreen(
                                         onClick = {
                                             showMoreOptionsMenu = false
                                             showFindBar = true
+                                        }
+                                    )
+
+                                    // Go to Line
+                                    DropdownMenuItem(
+                                        text = { Text(L.ide.screen.goToLine, fontSize = 13.sp) },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.FormatListNumbered,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        },
+                                        onClick = {
+                                            showMoreOptionsMenu = false
+                                            showGoToLineDialog = true
                                         }
                                     )
 
@@ -572,35 +616,25 @@ fun IdeScreen(
                                             }
                                         )
                                     }
+
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                 }
-                            }
-                        }
 
-                        // Undo & Redo Buttons
-                        if (isTextFile) {
-                            IconButton(
-                                onClick = { currentEditorView?.undo() },
-                                enabled = canUndo && isTextEditable,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Undo,
-                                    contentDescription = L.common.undo,
-                                    tint = if (canUndo && isTextEditable) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { currentEditorView?.redo() },
-                                enabled = canRedo && isTextEditable,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Redo,
-                                    contentDescription = L.ide.screen.redo,
-                                    tint = if (canRedo && isTextEditable) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                                    modifier = Modifier.size(20.dp)
+                                // Fallback entry to Run Configurations for easy single-tap access
+                                DropdownMenuItem(
+                                    text = { Text(L.ide.screen.runConfigurations, fontSize = 13.sp) },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Tune,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
+                                    onClick = {
+                                        showMoreOptionsMenu = false
+                                        refreshRunConfigurations()
+                                        showRunMenu = true
+                                    }
                                 )
                             }
                         }
@@ -642,63 +676,94 @@ fun IdeScreen(
                                     }
                                 },
                                 enabled = activeTab.isModified || isExternal,
-                                modifier = Modifier.size(36.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Save,
                                     contentDescription = if (isExternal) L.ide.screen.saveAs else L.ide.screen.saveFile,
-                                    tint = if (activeTab.isModified || isExternal) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+                                    tint = if (activeTab.isModified || isExternal) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
 
-                        // Run Action Split Button & Dropdown Menu
+                        // Run Action Button (tap runs, long-press or custom action opens Run Configurations)
                         Box {
                             val isCustomMode = selectedProfileName != null
                             val customProfile = if (isCustomMode) runConfigurations.find { it.name == selectedProfileName } else null
+                            val runBg = if (isCustomMode) GeminiBlue.copy(alpha = 0.18f) else ai.antigem.theme.AppColors.success.copy(alpha = 0.14f)
+                            val runFg = ensureAccessibleContrast(
+                                foreground = if (isCustomMode) GeminiBlue else ai.antigem.theme.AppColors.success,
+                                background = runBg,
+                                minRatio = 4.5f,
+                                surfaceFallback = MaterialTheme.colorScheme.background
+                            )
+                            val runDescription = if (isCustomMode) {
+                                L.ide.screen.runProfileSelectedprofilename(selectedProfileName)
+                            } else {
+                                L.ide.screen.runActiveFile
+                            }
 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
+                            Box(
+                                contentAlignment = Alignment.Center,
                                 modifier = Modifier
+                                    .minTouchTarget(48.dp)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(if (isCustomMode) GeminiBlue.copy(alpha = 0.18f) else ai.antigem.theme.AppColors.success.copy(alpha = 0.14f))
-                            ) {
-                                IconButton(
-                                    onClick = {
-                                        if (isCustomMode && customProfile != null) {
-                                            executeRun(customProfile)
-                                        } else {
-                                            val activePath = activeTabPath
-                                            val projectPath = activeProject?.path ?: ""
-                                            if (!activePath.isNullOrBlank()) {
-                                                if (RunConfigManager.hasDefaultRunnerForFile(activePath)) {
-                                                    val runner = RunConfigManager.getDefaultRunnerForFile(activePath, projectPath)
-                                                    if (runner != null) {
-                                                        executeRun(runner)
+                                    .background(runBg)
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = LocalIndication.current,
+                                        role = Role.Button,
+                                        onClick = {
+                                            if (isCustomMode && customProfile != null) {
+                                                executeRun(customProfile)
+                                            } else {
+                                                val activePath = activeTabPath
+                                                val projectPath = activeProject?.path ?: ""
+                                                if (!activePath.isNullOrBlank()) {
+                                                    if (RunConfigManager.hasDefaultRunnerForFile(activePath)) {
+                                                        val runner = RunConfigManager.getDefaultRunnerForFile(activePath, projectPath)
+                                                        if (runner != null) {
+                                                            executeRun(runner)
+                                                        } else {
+                                                            showAddProfileDialog = true
+                                                        }
                                                     } else {
+                                                        val ext = File(activePath).extension
+                                                        Toast.makeText(context, L.ide.screen.noDefaultRunnerForExtConfigure(ext), Toast.LENGTH_SHORT).show()
                                                         showAddProfileDialog = true
                                                     }
                                                 } else {
-                                                    val ext = File(activePath).extension
-                                                    Toast.makeText(context, L.ide.screen.noDefaultRunnerForExtConfigure(ext), Toast.LENGTH_SHORT).show()
-                                                    showAddProfileDialog = true
+                                                    Toast.makeText(context, L.ide.screen.openAFileOrSelectA, Toast.LENGTH_SHORT).show()
                                                 }
-                                            } else {
-                                                Toast.makeText(context, L.ide.screen.openAFileOrSelectA, Toast.LENGTH_SHORT).show()
                                             }
+                                        },
+                                        onLongClick = {
+                                            refreshRunConfigurations()
+                                            showRunMenu = true
                                         }
-                                    },
-                                    modifier = Modifier.size(34.dp)
-                                ) {
+                                    )
+                                    .semantics {
+                                        contentDescription = runDescription
+                                        customActions = listOf(
+                                            CustomAccessibilityAction(L.ide.screen.runConfigurations) {
+                                                refreshRunConfigurations()
+                                                showRunMenu = true
+                                                true
+                                            }
+                                        )
+                                    }
+                                    .padding(horizontal = 8.dp)
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         contentAlignment = Alignment.Center,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(22.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.PlayArrow,
-                                            contentDescription = if (isCustomMode) L.ide.screen.runProfileSelectedprofilename(selectedProfileName) else L.ide.screen.runActiveFile,
-                                            tint = if (isCustomMode) GeminiBlue else ai.antigem.theme.AppColors.success,
+                                            contentDescription = null,
+                                            tint = runFg,
                                             modifier = Modifier.size(20.dp)
                                         )
                                         if (isCustomMode) {
@@ -707,26 +772,15 @@ fun IdeScreen(
                                                     .align(Alignment.TopEnd)
                                                     .size(6.dp)
                                                     .clip(CircleShape)
-                                                    .background(GeminiBlue)
+                                                    .background(runFg)
                                             )
                                         }
                                     }
-                                }
-
-                                IconButton(
-                                    onClick = {
-                                        refreshRunConfigurations()
-                                        showRunMenu = true
-                                    },
-                                    modifier = Modifier
-                                        .size(22.dp)
-                                        .padding(end = 4.dp)
-                                ) {
                                     Icon(
                                         imageVector = Icons.Default.ArrowDropDown,
-                                        contentDescription = L.ide.screen.runConfigurations,
-                                        tint = if (isCustomMode) GeminiBlue else ai.antigem.theme.AppColors.success,
-                                        modifier = Modifier.size(18.dp)
+                                        contentDescription = null,
+                                        tint = runFg,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
@@ -874,7 +928,7 @@ fun IdeScreen(
                                 if (suggestedRuns.isNotEmpty()) {
                                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                                     Text(
-                                        text = "SUGGESTED FOR THIS PROJECT",
+                                        text = L.ide.screen.suggestedForThisProject,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -958,7 +1012,7 @@ fun IdeScreen(
                         // AI Chat Drawer Toggle Button
                         IconButton(
                             onClick = onNavigateToChat,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
@@ -992,37 +1046,71 @@ fun IdeScreen(
                     .background(ai.antigem.theme.AppColors.editorBg)
             ) {
                 // Open File Tabs Bar
+                val editorBg = ai.antigem.theme.AppColors.editorBg
+                val panelBg = ai.antigem.theme.AppColors.editorPanel
                 if (openTabs.isNotEmpty()) {
                     LazyRow(
                         state = tabListState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(38.dp)
-                            .background(ai.antigem.theme.AppColors.editorPanel)
+                            .defaultMinSize(minHeight = 48.dp)
+                            .background(panelBg)
+                            .selectableGroup()
+                            .semantics { contentDescription = L.ide.screen.openFileTabs }
                     ) {
                         items(openTabs) { tab ->
                             val isSelected = tab.path == activeTabPath
+                            val tabBg = if (isSelected) editorBg else ai.antigem.theme.AppColors.editorLine
+                            val rawTabTextColor = when {
+                                isSelected && tab.isDiff -> ClaudeTerracotta
+                                isSelected && tab.isReadOnly -> ai.antigem.theme.AppColors.warning
+                                isSelected -> ai.antigem.theme.AppColors.editorText
+                                tab.isReadOnly -> ai.antigem.theme.AppColors.editorMuted
+                                else -> ai.antigem.theme.AppColors.editorText.copy(alpha = 0.85f)
+                            }
+                            val tabTextColor = ensureAccessibleContrast(rawTabTextColor, tabBg, 4.5f, editorBg)
+                            val tabCloseTint = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, tabBg, 4.5f, editorBg)
+                            val stateParts = buildList {
+                                if (tab.isModified) add(L.ide.screen.modified)
+                                if (tab.isReadOnly) add(L.ide.screen.readOnly)
+                                if (tab.isDiff) add(L.ide.screen.diff)
+                            }
                             Row(
                                 modifier = Modifier
-                                    .height(38.dp)
-                                    .background(if (isSelected) ai.antigem.theme.AppColors.editorBg else ai.antigem.theme.AppColors.editorLine)
-                                    .clickable { IdeDaemonManager.setActiveTabPath(tab.path) }
-                                    .padding(horizontal = 12.dp),
+                                    .minTouchTarget(48.dp)
+                                    .background(tabBg)
+                                    .selectable(
+                                        selected = isSelected,
+                                        role = Role.Tab,
+                                        onClick = { IdeDaemonManager.setActiveTabPath(tab.path) }
+                                    )
+                                    .semantics {
+                                        if (stateParts.isNotEmpty()) {
+                                            stateDescription = stateParts.joinToString(", ")
+                                        }
+                                        customActions = listOf(
+                                            CustomAccessibilityAction(L.common.closeTab) {
+                                                closeTabAction(tab)
+                                                true
+                                            }
+                                        )
+                                    }
+                                    .padding(start = 12.dp, end = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (tab.isDiff) {
                                     Icon(
                                         imageVector = Icons.Default.Difference,
                                         contentDescription = null,
-                                        tint = ClaudeTerracotta,
+                                        tint = ensureAccessibleContrast(ClaudeTerracotta, tabBg, 4.5f, editorBg),
                                         modifier = Modifier.size(13.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
                                 } else if (tab.isReadOnly) {
                                     Icon(
                                         imageVector = Icons.Default.Lock,
-                                        contentDescription = "Read-Only",
-                                        tint = ai.antigem.theme.AppColors.warning.copy(alpha = 0.85f),
+                                        contentDescription = L.ide.screen.readOnly,
+                                        tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, tabBg, 4.5f, editorBg),
                                         modifier = Modifier.size(12.dp)
                                     )
                                     Spacer(modifier = Modifier.width(5.dp))
@@ -1030,28 +1118,137 @@ fun IdeScreen(
                                 Text(
                                     text = if (tab.isModified) "${tab.name} *" else tab.name,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (isSelected) (if (tab.isDiff) ClaudeTerracotta else if (tab.isReadOnly) ai.antigem.theme.AppColors.warning else Color.White) else (if (tab.isReadOnly) ai.antigem.theme.AppColors.editorMuted else Color.LightGray),
+                                    color = tabTextColor,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = L.common.closeTab,
-                                    tint = Color.Gray,
-                                    modifier = Modifier
-                                        .size(14.dp)
-                                        .clickable {
-                                            if (tab.isModified) {
-                                                tabToClose = tab
-                                            } else {
-                                                IdeDaemonManager.closeTab(tab.path)
-                                            }
-                                        }
-                                )
+                                IconButton(
+                                    onClick = { closeTabAction(tab) },
+                                    modifier = Modifier.minTouchTarget(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = L.common.closeTab,
+                                        tint = tabCloseTint,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.width(1.dp))
                         }
                     }
+                }
+
+                // Editor Actions Strip (Undo, Redo, Find, Markdown Preview, Cursor Line/Col & Go To Line)
+                if (activeTab != null && !activeTab.isDiff && (!isImageFile || (isSvgFile && showSvgSource))) {
+                    val stripActiveTint = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, panelBg)
+                    val stripDisabledTint = ensureAccessibleContrast(
+                        ai.antigem.theme.AppColors.editorMuted.copy(alpha = 0.7f),
+                        panelBg,
+                        3.0f,
+                        editorBg
+                    )
+                    val stripAccentTint = ensureAccessibleContrast(ClaudeTerracotta, panelBg)
+                    Surface(
+                        color = panelBg,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 4.dp)
+                                .semantics { contentDescription = L.ide.screen.editorActions },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (isTextFile) {
+                                IconButton(
+                                    onClick = { currentEditorView?.undo() },
+                                    enabled = canUndo && isTextEditable,
+                                    modifier = Modifier.minTouchTarget(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                                        contentDescription = L.common.undo,
+                                        tint = if (canUndo && isTextEditable) stripActiveTint else stripDisabledTint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { currentEditorView?.redo() },
+                                    enabled = canRedo && isTextEditable,
+                                    modifier = Modifier.minTouchTarget(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Redo,
+                                        contentDescription = L.ide.screen.redo,
+                                        tint = if (canRedo && isTextEditable) stripActiveTint else stripDisabledTint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        if (showFindBar) {
+                                            showFindBar = false
+                                            findQuery = ""
+                                            currentEditorView?.stopSearch()
+                                            searchMatchCount = 0
+                                            currentMatchIndex = -1
+                                            keyboardController?.hide()
+                                        } else {
+                                            showFindBar = true
+                                        }
+                                    },
+                                    modifier = Modifier.minTouchTarget(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = L.ide.screen.findInFile,
+                                        tint = if (showFindBar) stripAccentTint else stripActiveTint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
+                            if (isMarkdownFile) {
+                                IconButton(
+                                    onClick = {
+                                        if (!showMarkdownPreview) showFindBar = false
+                                        showMarkdownPreview = !showMarkdownPreview
+                                    },
+                                    modifier = Modifier.minTouchTarget(48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (showMarkdownPreview) Icons.Default.Code else Icons.Default.Visibility,
+                                        contentDescription = if (showMarkdownPreview) L.ide.screen.editMarkdownSource else L.ide.screen.previewMarkdown,
+                                        tint = if (showMarkdownPreview) stripAccentTint else stripActiveTint,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+
+                            if (isTextFile) {
+                                TextButton(
+                                    onClick = { showGoToLineDialog = true },
+                                    modifier = Modifier
+                                        .minTouchTarget(48.dp)
+                                        .semantics {
+                                            contentDescription = "${L.ide.screen.lineLineColumnCol(cursorLine, cursorCol)}, ${L.ide.screen.goToLine}"
+                                        },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = L.ide.screen.lineLineColumnCol(cursorLine, cursorCol),
+                                        fontSize = 12.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = stripActiveTint
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(thickness = 0.5.dp, color = ai.antigem.theme.AppColors.editorBorder)
                 }
 
                 // Interactive Find in File Bar
@@ -1073,24 +1270,34 @@ fun IdeScreen(
                             imm?.showSoftInput(composeView, InputMethodManager.SHOW_IMPLICIT)
                         } catch (_: Exception) {}
                     }
+                    val findBoxBg = ai.antigem.theme.AppColors.editorLine
+                    val findTextColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, findBoxBg)
+                    val findMutedColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, findBoxBg)
+                    val findPanelMuted = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, panelBg)
+                    val findPanelActive = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, panelBg)
+                    val findDisabledColor = ensureAccessibleContrast(
+                        ai.antigem.theme.AppColors.editorMuted.copy(alpha = 0.7f),
+                        panelBg,
+                        3.0f,
+                        editorBg
+                    )
                     Surface(
-                        color = ai.antigem.theme.AppColors.editorPanel,
+                        color = panelBg,
                         shadowElevation = 4.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Search Input Box
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(34.dp)
-                                    .background(ai.antigem.theme.AppColors.editorLine, shape = RoundedCornerShape(4.dp))
+                                    .minTouchTarget(48.dp)
+                                    .background(findBoxBg, shape = RoundedCornerShape(4.dp))
                                     .clickable(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null
@@ -1103,12 +1310,12 @@ fun IdeScreen(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Search,
                                         contentDescription = null,
-                                        tint = Color.Gray,
+                                        tint = findMutedColor,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -1119,7 +1326,7 @@ fun IdeScreen(
                                             currentEditorView?.search(newQuery, isCaseSensitive)
                                         },
                                         textStyle = TextStyle(
-                                            color = Color.White,
+                                            color = findTextColor,
                                             fontSize = 13.sp,
                                             fontFamily = FontFamily.Monospace
                                         ),
@@ -1132,7 +1339,7 @@ fun IdeScreen(
                                             if (findQuery.isEmpty()) {
                                                 Text(
                                                     text = L.ide.screen.findInFile2,
-                                                    color = ai.antigem.theme.AppColors.editorMuted,
+                                                    color = findMutedColor,
                                                     fontSize = 13.sp,
                                                     fontFamily = FontFamily.Monospace
                                                 )
@@ -1148,13 +1355,13 @@ fun IdeScreen(
                                                 searchMatchCount = 0
                                                 currentMatchIndex = -1
                                             },
-                                            modifier = Modifier.size(24.dp)
+                                            modifier = Modifier.minTouchTarget(48.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Close,
                                                 contentDescription = L.common.clear,
-                                                tint = Color.LightGray,
-                                                modifier = Modifier.size(14.dp)
+                                                tint = findTextColor,
+                                                modifier = Modifier.size(16.dp)
                                             )
                                         }
                                     }
@@ -1163,17 +1370,28 @@ fun IdeScreen(
 
                             // Match Count Indicator
                             if (findQuery.isNotEmpty()) {
+                                val displayMatchIndex = if (currentMatchIndex >= 0) currentMatchIndex + 1 else 0
                                 val matchText = if (searchMatchCount > 0) {
-                                    "${if (currentMatchIndex >= 0) currentMatchIndex + 1 else 0}/$searchMatchCount"
+                                    "$displayMatchIndex/$searchMatchCount"
                                 } else {
-                                    "0 matches"
+                                    L.ide.screen.noMatches
+                                }
+                                val matchDescription = if (searchMatchCount > 0) {
+                                    L.ide.screen.matchCurrentOfTotal(displayMatchIndex, searchMatchCount)
+                                } else {
+                                    L.ide.screen.noMatches
                                 }
                                 Text(
                                     text = matchText,
-                                    color = if (searchMatchCount > 0) Color.LightGray else ai.antigem.theme.AppColors.danger,
+                                    color = if (searchMatchCount > 0) findPanelActive else ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, panelBg),
                                     fontSize = 11.5.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                    modifier = Modifier
+                                        .padding(horizontal = 4.dp)
+                                        .semantics {
+                                            liveRegion = LiveRegionMode.Polite
+                                            contentDescription = matchDescription
+                                        }
                                 )
                             }
 
@@ -1181,12 +1399,12 @@ fun IdeScreen(
                             IconButton(
                                 onClick = { currentEditorView?.findPrevious() },
                                 enabled = searchMatchCount > 0,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowUp,
                                     contentDescription = L.ide.screen.previousMatch,
-                                    tint = if (searchMatchCount > 0) Color.White else Color.DarkGray,
+                                    tint = if (searchMatchCount > 0) findPanelActive else findDisabledColor,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -1195,12 +1413,12 @@ fun IdeScreen(
                             IconButton(
                                 onClick = { currentEditorView?.findNext() },
                                 enabled = searchMatchCount > 0,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = L.ide.screen.nextMatch,
-                                    tint = if (searchMatchCount > 0) Color.White else Color.DarkGray,
+                                    tint = if (searchMatchCount > 0) findPanelActive else findDisabledColor,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -1212,11 +1430,17 @@ fun IdeScreen(
                                     isCaseSensitive = newCase
                                     currentEditorView?.search(findQuery, newCase)
                                 },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier
+                                    .minTouchTarget(48.dp)
+                                    .semantics {
+                                        role = Role.Switch
+                                        toggleableState = ToggleableState(isCaseSensitive)
+                                        contentDescription = L.ide.screen.caseSensitive
+                                    }
                             ) {
                                 Text(
                                     text = L.ide.screen.aa,
-                                    color = if (isCaseSensitive) ai.antigem.theme.AppColors.info else Color.Gray,
+                                    color = if (isCaseSensitive) ensureAccessibleContrast(ai.antigem.theme.AppColors.info, panelBg) else findPanelMuted,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
                                 )
@@ -1232,12 +1456,12 @@ fun IdeScreen(
                                     currentMatchIndex = -1
                                     keyboardController?.hide()
                                 },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = L.ide.screen.closeFind,
-                                    tint = Color.Gray,
+                                    tint = findPanelMuted,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -1247,9 +1471,12 @@ fun IdeScreen(
 
                 // Auto-Reload Info Banner
                 if (autoUpdateNotification != null) {
+                    val infoBg = ai.antigem.theme.AppColors.editorInfoBg
                     Surface(
-                        color = ai.antigem.theme.AppColors.editorInfoBg,
-                        modifier = Modifier.fillMaxWidth()
+                        color = infoBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                     ) {
                         Row(
                             modifier = Modifier
@@ -1260,14 +1487,14 @@ fun IdeScreen(
                             Icon(
                                 imageVector = Icons.Default.Sync,
                                 contentDescription = null,
-                                tint = ai.antigem.theme.AppColors.info,
+                                tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.info, infoBg),
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = autoUpdateNotification!!,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = ai.antigem.theme.AppColors.editorInfoText,
+                                color = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorInfoText, infoBg),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -1276,8 +1503,9 @@ fun IdeScreen(
 
                 // Read-Only Warning Banner
                 if (activeTab != null && activeTab.isReadOnly && !activeTab.isDiff) {
+                    val readOnlyBg = ai.antigem.theme.AppColors.editorBorder
                     Surface(
-                        color = ai.antigem.theme.AppColors.editorBorder,
+                        color = readOnlyBg,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
@@ -1289,7 +1517,7 @@ fun IdeScreen(
                             Icon(
                                 imageVector = Icons.Default.Lock,
                                 contentDescription = null,
-                                tint = ai.antigem.theme.AppColors.warning,
+                                tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, readOnlyBg),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -1297,7 +1525,7 @@ fun IdeScreen(
                                 text = L.ide.screen.historicalRevisionReadOnly,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 11.5.sp,
-                                color = ai.antigem.theme.AppColors.editorText,
+                                color = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, readOnlyBg),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -1306,34 +1534,39 @@ fun IdeScreen(
 
                 // Disk Conflict Warning Banner
                 if (activeTab != null && activeTab.diskConflict) {
+                    val conflictBg = ai.antigem.theme.AppColors.editorLine
+                    val conflictFg = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, conflictBg)
                     Surface(
-                        color = ai.antigem.theme.AppColors.editorLine,
-                        modifier = Modifier.fillMaxWidth()
+                        color = conflictBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Warning,
                                 contentDescription = null,
-                                tint = ai.antigem.theme.AppColors.warning,
+                                tint = conflictFg,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = L.ide.screen.fileModifiedOnDiskExternally,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = ai.antigem.theme.AppColors.warning,
+                                color = conflictFg,
                                 modifier = Modifier.weight(1f)
                             )
                             TextButton(
                                 onClick = { conflictDialogTab = activeTab },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) {
-                                Text(L.ide.screen.resolve, color = ai.antigem.theme.AppColors.warning, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(L.ide.screen.resolve, color = conflictFg, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -1434,6 +1667,13 @@ fun IdeScreen(
                     } else {
                         // the editor follows the app theme's IDE colors (re-applied when the theme changes)
                         val editorThemeColors = ai.antigem.ui.ide.EditorThemeColors.fromAppTheme()
+                        val editorAccessible = isVisible && screenAccessible
+                        val editorImportance = if (editorAccessible) {
+                            View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                        } else {
+                            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                        }
+                        val editorDescription = L.ide.screen.codeEditorFilename(activeTab.name)
                         key(activeTab.path) {
                             AndroidView<CodeEditorView>(
                                 factory = { ctx ->
@@ -1441,6 +1681,15 @@ fun IdeScreen(
                                         applyThemeColors(editorThemeColors)
                                         isWordWrapEnabled = isWordWrap
                                         isReadOnly = activeTab.isReadOnly
+                                        importantForAccessibility = editorImportance
+                                        editor.importantForAccessibility = editorImportance
+                                        contentDescription = editorDescription
+                                        editor.contentDescription = editorDescription
+                                        onCursorChangeListener = { line, col, lines ->
+                                            cursorLine = line
+                                            cursorCol = col
+                                            totalLines = lines.coerceAtLeast(1)
+                                        }
                                         setFile(activeTab.name, activeTab.content)
                                         onContentChangeListener = { newText ->
                                             if (!activeTab.isReadOnly) {
@@ -1461,15 +1710,24 @@ fun IdeScreen(
                                 update = { view ->
                                     currentEditorView = view
                                     view.applyThemeColors(editorThemeColors)
-                                    view.editor.isFocusable = isVisible
-                                    view.editor.isFocusableInTouchMode = isVisible
-                                    view.isFocusable = isVisible
-                                    view.isFocusableInTouchMode = isVisible
-                                    if (!isVisible && view.hasFocus()) {
+                                    view.editor.isFocusable = editorAccessible
+                                    view.editor.isFocusableInTouchMode = editorAccessible
+                                    view.isFocusable = editorAccessible
+                                    view.isFocusableInTouchMode = editorAccessible
+                                    view.importantForAccessibility = editorImportance
+                                    view.editor.importantForAccessibility = editorImportance
+                                    view.contentDescription = editorDescription
+                                    view.editor.contentDescription = editorDescription
+                                    if (!editorAccessible && view.hasFocus()) {
                                         view.clearFocus()
                                     }
                                     view.isWordWrapEnabled = isWordWrap
                                     view.isReadOnly = activeTab.isReadOnly
+                                    view.onCursorChangeListener = { line, col, lines ->
+                                        cursorLine = line
+                                        cursorCol = col
+                                        totalLines = lines.coerceAtLeast(1)
+                                    }
                                     view.setFile(activeTab.name, activeTab.content)
                                     canUndo = view.canUndo()
                                     canRedo = view.canRedo()
@@ -1503,6 +1761,7 @@ fun IdeScreen(
                     }
                 } else {
 
+                    val emptyStateColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, editorBg)
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -1513,14 +1772,14 @@ fun IdeScreen(
                             Icon(
                                 imageVector = Icons.Default.Code,
                                 contentDescription = null,
-                                tint = Color.DarkGray,
+                                tint = emptyStateColor,
                                 modifier = Modifier.size(64.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = L.ide.screen.selectAFileFromTheSidebar,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = Color.Gray
+                                color = emptyStateColor
                             )
                         }
                     }
@@ -1590,7 +1849,7 @@ fun IdeScreen(
                             Text(
                                 L.ide.screen.chooseWhetherToOverwriteTheDisk,
                                 fontSize = 12.sp,
-                                color = Color.Gray
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     },
@@ -1736,7 +1995,7 @@ fun IdeScreen(
                     text = {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                text = "\"${tabInfo.name}\" appears to be a non-text / binary file (${tabInfo.mimeType}).",
+                                text = L.ide.screen.nameAppearsToBeANon(tabInfo.name, tabInfo.mimeType),
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold
                             )
@@ -1810,6 +2069,52 @@ fun IdeScreen(
                 )
             }
 
+            // Go to Line Dialog
+            if (showGoToLineDialog) {
+                val maxLine = totalLines.coerceAtLeast(1)
+                var lineInput by remember(showGoToLineDialog) { mutableStateOf(cursorLine.toString()) }
+                AlertDialog(
+                    onDismissRequest = { showGoToLineDialog = false },
+                    title = { Text(L.ide.screen.goToLine, fontWeight = FontWeight.Bold) },
+                    text = {
+                        OutlinedTextField(
+                            value = lineInput,
+                            onValueChange = { input -> lineInput = input.filter { it.isDigit() } },
+                            label = { Text(L.ide.screen.lineNumber1ToMaxline(maxLine)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val targetLine = lineInput.toIntOrNull()
+                                if (targetLine != null) {
+                                    currentEditorView?.goToLine(targetLine)
+                                    announceForAccessibility(
+                                        composeView,
+                                        L.ide.screen.lineLineColumnCol(targetLine.coerceIn(1, maxLine), 1)
+                                    )
+                                }
+                                showGoToLineDialog = false
+                            },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) {
+                            Text(L.common.ok)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = { showGoToLineDialog = false },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) {
+                            Text(L.common.cancel)
+                        }
+                    }
+                )
+            }
+
             // In-IDE Full Working Isolated Terminal Overlay (Bottom Sheet / Maximize)
             runnerSession?.let { session ->
                 BoxWithConstraints(
@@ -1826,7 +2131,32 @@ fun IdeScreen(
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(panelHeightDp),
+                            .height(panelHeightDp)
+                            .semantics {
+                                customActions = listOf(
+                                    CustomAccessibilityAction(L.ide.screen.moveRunnerUp) {
+                                        if (!isRunnerMaximized) {
+                                            val next = (runnerHeightFraction + 0.15f).coerceIn(0.2f, 1.0f)
+                                            if (next >= 0.98f) {
+                                                isRunnerMaximized = true
+                                                runnerHeightFraction = 1.0f
+                                            } else {
+                                                runnerHeightFraction = next
+                                            }
+                                        }
+                                        true
+                                    },
+                                    CustomAccessibilityAction(L.ide.screen.moveRunnerDown) {
+                                        if (isRunnerMaximized) {
+                                            isRunnerMaximized = false
+                                            runnerHeightFraction = 0.75f
+                                        } else {
+                                            runnerHeightFraction = (runnerHeightFraction - 0.15f).coerceIn(0.2f, 1.0f)
+                                        }
+                                        true
+                                    }
+                                )
+                            },
                         shape = if (isRunnerMaximized) RoundedCornerShape(0.dp) else RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp),
                         color = ai.antigem.theme.AppColors.editorBg,
                         border = if (isRunnerMaximized) null else BorderStroke(1.dp, ai.antigem.theme.AppColors.editorText.copy(alpha = 0.2f)),
@@ -1838,6 +2168,7 @@ fun IdeScreen(
                             showFloatingPill = false,
                             backgroundColor = ai.antigem.theme.AppColors.terminalBg,
                             isMaximized = isRunnerMaximized,
+                            isVisible = isVisible && screenAccessible,
                             onToggleMaximize = {
                                 if (isRunnerMaximized) {
                                     isRunnerMaximized = false
@@ -1971,9 +2302,12 @@ private fun AddRunProfileDialog(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { isDefault = !isDefault }
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minTouchTarget(48.dp)
+                        .clickable(role = Role.Checkbox) { isDefault = !isDefault }
                 ) {
-                    Checkbox(checked = isDefault, onCheckedChange = { isDefault = it })
+                    Checkbox(checked = isDefault, onCheckedChange = null)
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(L.ide.screen.setAsDefaultRunProfile, fontSize = 12.5.sp)
                 }

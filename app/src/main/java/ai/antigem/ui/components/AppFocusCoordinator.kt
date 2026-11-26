@@ -34,12 +34,11 @@ class AppFocusCoordinator {
         clearFocusRequesters.remove(mode)
     }
 
-    fun onScreenLeaving(leavingMode: AppViewMode, isKeyboardOpen: Boolean) {
+    fun onScreenLeaving(leavingMode: AppViewMode, isKeyboardOpen: Boolean, enteringMode: AppViewMode? = null) {
         Log.d(TAG, "Screen $leavingMode leaving, isKeyboardOpen=$isKeyboardOpen")
-        // Only force clear focus if the keyboard is closed.
-        // If the keyboard is open, allowing the target screen to request focus transfers the IME seamlessly
-        // without triggering Compose's explicit hideSoftInputFromWindow call.
-        if (!isKeyboardOpen) {
+        // Only force clear focus if the keyboard is closed, or if the destination screen does not
+        // manage its own IME focus handoff (so an off-screen persistent view never retains focus).
+        if (!isKeyboardOpen || (enteringMode != null && enteringMode !in focusRequesters)) {
             clearFocusRequesters[leavingMode]?.invoke()
         }
     }

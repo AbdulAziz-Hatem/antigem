@@ -2,7 +2,10 @@ package ai.antigem.ui.ide
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,9 +13,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.i18n.L
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 
 data class ProjectTemplate(
     val id: String,
@@ -47,9 +55,16 @@ fun NewProjectDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val placeholderColor = ensureAccessibleContrast(
+                    foreground = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    minRatio = 4.5f,
+                    surfaceFallback = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -58,7 +73,9 @@ fun NewProjectDialog(
                         if (projectName.isNotBlank()) ai.antigem.theme.ClaudeTerracotta.copy(alpha = 0.6f)
                         else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minTouchTarget(48.dp)
                 ) {
                     androidx.compose.foundation.text.BasicTextField(
                         value = projectName,
@@ -80,7 +97,7 @@ fun NewProjectDialog(
                                         text = L.ide.newProject.projectNameEGMyAwesome,
                                         fontSize = 13.5.sp,
                                         lineHeight = 18.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = placeholderColor
                                     )
                                 }
                                 innerTextField()
@@ -95,58 +112,68 @@ fun NewProjectDialog(
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                PROJECT_TEMPLATES.forEach { template ->
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selectedTemplate = template.id },
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (selectedTemplate == template.id) {
-                            MaterialTheme.colorScheme.primaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        },
-                        tonalElevation = if (selectedTemplate == template.id) 4.dp else 0.dp
-                    ) {
-                        Row(
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    PROJECT_TEMPLATES.forEach { template ->
+                        val isSelected = selectedTemplate == template.id
+                        Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .minTouchTarget(48.dp)
+                                .clickable(role = Role.RadioButton) { selectedTemplate = template.id }
+                                .semantics(mergeDescendants = true) { selected = isSelected },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            },
+                            tonalElevation = if (isSelected) 4.dp else 0.dp
                         ) {
-                            Icon(
-                                imageVector = template.icon,
-                                contentDescription = null,
-                                tint = if (selectedTemplate == template.id) {
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = template.title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (selectedTemplate == template.id) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = template.icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) {
                                         MaterialTheme.colorScheme.onPrimaryContainer
                                     } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    }
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(24.dp)
                                 )
-                                Text(
-                                    text = template.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            if (selectedTemplate == template.id) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = template.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (isSelected) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                    Text(
+                                        text = template.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
                         }
                     }

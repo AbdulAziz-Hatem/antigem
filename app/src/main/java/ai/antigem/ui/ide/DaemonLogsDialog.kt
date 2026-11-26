@@ -16,12 +16,17 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.data.daemon.DaemonStatus
 import ai.antigem.data.daemon.IdeDaemonManager
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -73,43 +78,58 @@ fun DaemonLogsDialog(
                     .height(360.dp)
             ) {
                 // Status Header Card
+                val statusBgColor = when (status) {
+                    DaemonStatus.RUNNING -> ai.antigem.theme.AppColors.success
+                    DaemonStatus.STARTING -> ai.antigem.theme.AppColors.warning
+                    else -> ai.antigem.theme.AppColors.danger
+                }
+                val statusFgColor = ensureAccessibleContrast(Color.White, statusBgColor, 4.5f)
+                val retryContainerColor = statusFgColor.copy(alpha = 0.16f)
+                val retryContentColor = ensureAccessibleContrast(
+                    foreground = statusFgColor,
+                    background = retryContainerColor,
+                    minRatio = 4.5f,
+                    surfaceFallback = statusBgColor
+                )
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = when (status) {
-                        DaemonStatus.RUNNING -> ai.antigem.theme.AppColors.success
-                        DaemonStatus.STARTING -> ai.antigem.theme.AppColors.warning
-                        else -> ai.antigem.theme.AppColors.danger
-                    },
+                    color = statusBgColor,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite }
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(8.dp)
-                                    .background(Color.White, CircleShape)
+                                    .background(statusFgColor, CircleShape)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
                                     text = status.name,
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = Color.White,
+                                    color = statusFgColor,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
                                     text = statusMessage,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.White.copy(alpha = 0.9f)
+                                    color = statusFgColor
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Button(
                             onClick = {
@@ -118,15 +138,15 @@ fun DaemonLogsDialog(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White.copy(alpha = 0.2f),
-                                contentColor = Color.White
+                                containerColor = retryContainerColor,
+                                contentColor = retryContentColor
                             ),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
-                                contentDescription = L.common.retry,
+                                contentDescription = null,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
@@ -143,9 +163,10 @@ fun DaemonLogsDialog(
                 )
 
                 // Terminal Log Console
+                val logBgColor = ai.antigem.theme.AppColors.editorBg
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = ai.antigem.theme.AppColors.editorBg,
+                    color = logBgColor,
                     modifier = Modifier
                         .fillMaxSize()
                         .weight(1f)
@@ -155,7 +176,7 @@ fun DaemonLogsDialog(
                             Text(
                                 L.ide.daemonLogs.noLogEntriesYet,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
+                                color = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, logBgColor)
                             )
                         }
                     } else {

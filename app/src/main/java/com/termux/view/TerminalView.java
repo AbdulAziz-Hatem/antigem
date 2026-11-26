@@ -28,6 +28,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
 import android.view.accessibility.AccessibilityManager;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillValue;
 import android.view.inputmethod.BaseInputConnection;
@@ -43,6 +44,10 @@ import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.textselection.TextSelectionCursorController;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
 
 /** View displaying and interacting with a {@link TerminalSession}. */
 public final class TerminalView extends View {
@@ -162,7 +167,8 @@ public final class TerminalView extends View {
      */
     private String[] mAutoFillHints = new String[0];
 
-    private final boolean mAccessibilityEnabled;
+    private static final Pattern ANSI_CSI_PATTERN = Pattern.compile("\u001B\\[[0-9;?]*[ -/]*[@-~]");
+    private static final Pattern ANSI_OSC_PATTERN = Pattern.compile("\u001B\\][^\u0007\u001B]*(\u0007|\u001B\\\\)");
 
     /** The {@link KeyEvent} is generated from a virtual keyboard, like manually with the {@link KeyEvent#KeyEvent(int, int)} constructor. */
     public final static int KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD = KeyCharacterMap.VIRTUAL_KEYBOARD; // -1
@@ -355,8 +361,52 @@ public final class TerminalView extends View {
             }
         });
         mScroller = new OverScroller(context);
-        AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        mAccessibilityEnabled = am.isEnabled();
+    }
+
+    public boolean isAccessibilityActive() {
+        AccessibilityManager am = (AccessibilityManager) getContext().getSystemService(Context.ACCESSIBILITY_SERVICE);
+        return am != null && am.isEnabled();
+    }
+
+    public String getAccessibleScreenText() {
+        if (mEmulator == null || mEmulator.getScreen() == null) return "";
+        CharSequence raw = getText();
+        if (raw == null) return "";
+        String[] lines = raw.toString().split("\n", -1);
+        StringBuilder sb = new StringBuilder();
+        int lastNonEmpty = -1;
+        for (int i = 0; i < lines.length; i++) {
+            lines[i] = lines[i].replaceFirst("\\s+$", "");
+            if (!lines[i].isEmpty()) {
+                lastNonEmpty = i;
+            }
+        }
+        if (lastNonEmpty < 0) return "";
+        for (int i = 0; i <= lastNonEmpty; i++) {
+            if (lines[i].isEmpty()) continue;
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(lines[i]);
+        }
+        return sb.toString().trim();
+    }
+
+    public String getCleanTranscript(int maxLines) {
+        if (maxLines <= 0 || mEmulator == null || mEmulator.getScreen() == null) return "";
+        String transcript = mEmulator.getScreen().getTranscriptText();
+        if (transcript == null || transcript.isEmpty()) return "";
+        String stripped = ANSI_OSC_PATTERN.matcher(transcript).replaceAll("");
+        stripped = ANSI_CSI_PATTERN.matcher(stripped).replaceAll("");
+        String[] rawLines = stripped.split("\r?\n");
+        List<String> nonEmpty = new ArrayList<>();
+        for (String line : rawLines) {
+            String trimmed = line.replaceFirst("\\s+$", "");
+            if (!trimmed.trim().isEmpty()) {
+                nonEmpty.add(trimmed);
+            }
+        }
+        if (nonEmpty.isEmpty()) return "";
+        int start = Math.max(0, nonEmpty.size() - maxLines);
+        return TextUtils.join("\n", nonEmpty.subList(start, nonEmpty.size()));
     }
 
 
@@ -641,7 +691,22 @@ public final class TerminalView extends View {
         mEmulator.clearScrollCounter();
 
         invalidate();
-        if (mAccessibilityEnabled) setContentDescription(getText());
+        if (isAccessibilityActive()) setContentDescription(getAccessibleScreenText());
+    }
+
+    @Override
+    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfo(info);
+        info.setClassName(android.widget.EditText.class.getName());
+        info.setEditable(true);
+        info.setFocusable(true);
+        if (isAccessibilityActive()) {
+            String screenText = getAccessibleScreenText();
+            if (!screenText.isEmpty()) {
+                setContentDescription(screenText);
+                info.setContentDescription(screenText);
+            }
+        }
     }
 
     /** This must be called by the hosting activity in {@link Activity#onContextMenuClosed(Menu)}

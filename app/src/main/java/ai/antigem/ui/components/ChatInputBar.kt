@@ -55,6 +55,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import android.net.Uri
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -197,6 +207,7 @@ fun ChatInputBar(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val view = LocalView.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val coroutineScope = rememberCoroutineScope()
@@ -279,6 +290,7 @@ fun ChatInputBar(
             recordingDurationSeconds = 0
             waveformAmplitudes.clear()
             repeat(24) { waveformAmplitudes.add(0.08f) }
+            announceForAccessibility(view, L.components.chatInputBar.recordingStarted)
 
             recordingJob = coroutineScope.launch {
                 var msElapsed = 0L
@@ -322,6 +334,10 @@ fun ChatInputBar(
         if (recordMode == AudioRecordMode.TRANSCRIBE) {
             if (isRecordingPaused) speechManager?.resumeTranscriptionSession() else speechManager?.pauseTranscriptionSession()
             isRecordingPaused = !isRecordingPaused
+            announceForAccessibility(
+                view,
+                if (isRecordingPaused) L.components.chatInputBar.recordingPaused else L.components.chatInputBar.recordingResumed
+            )
             return
         }
         val rec = mediaRecorder ?: return
@@ -331,11 +347,13 @@ fun ChatInputBar(
                     rec.resume()
                 }
                 isRecordingPaused = false
+                announceForAccessibility(view, L.components.chatInputBar.recordingResumed)
             } else {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                     rec.pause()
                 }
                 isRecordingPaused = true
+                announceForAccessibility(view, L.components.chatInputBar.recordingPaused)
             }
         } catch (e: Exception) {
             Log.w("ChatInputBar", "Error toggling pause: ${e.message}")
@@ -394,6 +412,7 @@ fun ChatInputBar(
             recordMode = AudioRecordMode.VOICE_NOTE
         }
         file?.delete()
+        announceForAccessibility(view, L.components.chatInputBar.recordingCancelled)
     }
 
     fun startLiveDictation() {
@@ -418,6 +437,7 @@ fun ChatInputBar(
         isLiveDictating = true
         isDictationPaused = false
         recordMode = AudioRecordMode.LIVE_DICTATION
+        announceForAccessibility(view, L.components.chatInputBar.dictationStarted)
 
         val selStart = textFieldState.selection.start.coerceIn(0, textFieldState.text.length)
         val selEnd = textFieldState.selection.end.coerceIn(0, textFieldState.text.length)
@@ -461,6 +481,7 @@ fun ChatInputBar(
         isLiveDictating = false
         isDictationPaused = false
         recordMode = AudioRecordMode.VOICE_NOTE
+        announceForAccessibility(view, L.components.chatInputBar.dictationStopped)
     }
 
     fun startAutoTranscribe() {
@@ -630,11 +651,21 @@ fun ChatInputBar(
                 modifier = Modifier.padding(bottom = 6.dp)
             )
 
+            val cardBg = ai.antigem.theme.AppColors.card
+            val barBg = MaterialTheme.colorScheme.background
+            val accessiblePlaceholderColor = ensureAccessibleContrast(
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f),
+                cardBg,
+                4.5f,
+                barBg
+            )
             // Claude-style unified rounded input card
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { isTraversalGroup = true },
                 shape = RoundedCornerShape(24.dp),
-                color = ai.antigem.theme.AppColors.card,
+                color = cardBg,
                 border = BorderStroke(
                     1.dp,
                     if (isDark) Color.White.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
@@ -655,7 +686,7 @@ fun ChatInputBar(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                            .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Pulsing red recording dot (steady amber if paused)
@@ -677,14 +708,20 @@ fun ChatInputBar(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            color = if (isRecordingPaused) ai.antigem.theme.AppColors.warning else MaterialTheme.colorScheme.onSurface
+                            color = if (isRecordingPaused) {
+                                ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, cardBg, 4.5f, barBg)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            }
                         )
 
                         if (recordMode == AudioRecordMode.TRANSCRIBE) {
                             Spacer(modifier = Modifier.width(6.dp))
+                            val chipBg = ClaudeTerracotta.copy(alpha = 0.15f)
+                            val chipInk = ensureAccessibleContrast(ClaudeTerracotta, chipBg, 4.5f, cardBg)
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = ClaudeTerracotta.copy(alpha = 0.15f)
+                                color = chipBg
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
@@ -694,14 +731,14 @@ fun ChatInputBar(
                                         imageVector = Icons.Rounded.GraphicEq,
                                         contentDescription = null,
                                         modifier = Modifier.size(10.dp),
-                                        tint = ClaudeTerracotta
+                                        tint = chipInk
                                     )
                                     Spacer(modifier = Modifier.width(2.dp))
                                     Text(
                                         text = L.components.chatInputBar.transcribe,
                                         fontSize = 9.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = ClaudeTerracotta
+                                        color = chipInk
                                     )
                                 }
                             }
@@ -716,82 +753,74 @@ fun ChatInputBar(
                             modifier = Modifier
                                 .weight(1f)
                                 .height(26.dp)
-                                .padding(horizontal = 4.dp),
+                                .padding(horizontal = 4.dp)
+                                .semantics { hideFromAccessibility() },
                             barColor = if (isRecordingPaused) ai.antigem.theme.AppColors.warning else ai.antigem.theme.AppColors.danger
                         )
 
-                        Spacer(modifier = Modifier.width(4.dp))
-
                         // 1. Pause / Resume button
-                        Surface(
+                        val recPauseLabel = if (isRecordingPaused) L.components.chatInputBar.resume else L.common.pause
+                        InputBarCircleButton(
                             onClick = { togglePauseAudioRecording() },
-                            shape = CircleShape,
-                            color = if (isRecordingPaused) ai.antigem.theme.AppColors.warning.copy(alpha = 0.15f) else MaterialTheme.colorScheme.background,
-                            border = BorderStroke(1.dp, if (isRecordingPaused) ai.antigem.theme.AppColors.warning else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)),
-                            modifier = Modifier.size(34.dp)
+                            contentDescription = recPauseLabel,
+                            visualSize = 34.dp,
+                            containerColor = if (isRecordingPaused) ai.antigem.theme.AppColors.warning.copy(alpha = 0.15f) else barBg,
+                            border = BorderStroke(1.dp, if (isRecordingPaused) ai.antigem.theme.AppColors.warning else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                    contentDescription = if (isRecordingPaused) L.components.chatInputBar.resume else L.common.pause,
-                                    tint = if (isRecordingPaused) ai.antigem.theme.AppColors.warning else MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = if (isRecordingPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                contentDescription = recPauseLabel,
+                                tint = if (isRecordingPaused) {
+                                    ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, cardBg, 3.0f, barBg)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                modifier = Modifier.size(17.dp)
+                            )
                         }
-
-                        Spacer(modifier = Modifier.width(4.dp))
 
                         // 2. Cancel / Discard
                         IconButton(
                             onClick = { cancelAudioRecording() },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Close,
                                 contentDescription = L.components.chatInputBar.cancelRecording,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                tint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), cardBg, 3.0f, barBg),
                                 modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(4.dp))
-
                         // 3. Stop & Attach
-                        Surface(
+                        InputBarCircleButton(
                             onClick = { stopAudioRecording(andSend = false) },
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.background,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)),
-                            modifier = Modifier.size(34.dp)
+                            contentDescription = L.components.chatInputBar.stopAttach,
+                            visualSize = 34.dp,
+                            containerColor = barBg,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.Stop,
-                                    contentDescription = L.components.chatInputBar.stopAttach,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = L.components.chatInputBar.stopAttach,
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(17.dp)
+                            )
                         }
 
-                        Spacer(modifier = Modifier.width(6.dp))
-
                         // 4. Send directly
-                        Surface(
+                        InputBarCircleButton(
                             onClick = { stopAudioRecording(andSend = true) },
-                            shape = CircleShape,
-                            color = ClaudeTerracotta,
-                            modifier = Modifier.size(34.dp)
+                            contentDescription = L.components.chatInputBar.sendVoiceNote,
+                            visualSize = 34.dp,
+                            containerColor = ClaudeTerracotta
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowUpward,
-                                    contentDescription = L.components.chatInputBar.sendVoiceNote,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.ArrowUpward,
+                                contentDescription = L.components.chatInputBar.sendVoiceNote,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
                 } else {
@@ -812,9 +841,13 @@ fun ChatInputBar(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 4.dp, vertical = 4.dp)
+                                    .semantics {
+                                        traversalIndex = 0f
+                                        liveRegion = LiveRegionMode.Polite
+                                    }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Box(
@@ -833,47 +866,48 @@ fun ChatInputBar(
                                     )
 
                                     // Pause / Resume button
-                                    Surface(
+                                    val dictPauseLabel = if (isDictationPaused) L.components.chatInputBar.resume else L.common.pause
+                                    InputBarCircleButton(
                                         onClick = {
                                             if (isDictationPaused) {
                                                 speechManager?.resumeTranscriptionSession()
                                                 isDictationPaused = false
+                                                announceForAccessibility(view, L.components.chatInputBar.dictationResumed)
                                             } else {
                                                 speechManager?.pauseTranscriptionSession()
                                                 isDictationPaused = true
+                                                announceForAccessibility(view, L.components.chatInputBar.dictationPaused)
                                             }
                                         },
-                                        shape = CircleShape,
-                                        color = if (isDictationPaused) ai.antigem.theme.AppColors.warning.copy(alpha = 0.18f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                                        modifier = Modifier.size(26.dp)
+                                        contentDescription = dictPauseLabel,
+                                        visualSize = 26.dp,
+                                        containerColor = if (isDictationPaused) ai.antigem.theme.AppColors.warning.copy(alpha = 0.18f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = if (isDictationPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                                contentDescription = if (isDictationPaused) L.components.chatInputBar.resume else L.common.pause,
-                                                tint = if (isDictationPaused) ai.antigem.theme.AppColors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = if (isDictationPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                            contentDescription = dictPauseLabel,
+                                            tint = if (isDictationPaused) {
+                                                ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, cardBg, 3.0f, barBg)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            modifier = Modifier.size(15.dp)
+                                        )
                                     }
 
-                                    Spacer(modifier = Modifier.width(6.dp))
-
                                     // Stop button
-                                    Surface(
+                                    InputBarCircleButton(
                                         onClick = { stopLiveDictation() },
-                                        shape = CircleShape,
-                                        color = ai.antigem.theme.AppColors.danger.copy(alpha = 0.12f),
-                                        modifier = Modifier.size(26.dp)
+                                        contentDescription = L.common.stop,
+                                        visualSize = 26.dp,
+                                        containerColor = ai.antigem.theme.AppColors.danger.copy(alpha = 0.12f)
                                     ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Icon(
-                                                imageVector = Icons.Default.Stop,
-                                                contentDescription = L.common.stop,
-                                                tint = ai.antigem.theme.AppColors.danger,
-                                                modifier = Modifier.size(15.dp)
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.Stop,
+                                            contentDescription = L.common.stop,
+                                            tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, cardBg, 3.0f, barBg),
+                                            modifier = Modifier.size(15.dp)
+                                        )
                                     }
                                 }
                             }
@@ -881,13 +915,19 @@ fun ChatInputBar(
 
                         // Audio Transcribing Banner
                         if (isTranscribingAudio) {
+                            val transcribingBg = ClaudeTerracotta.copy(alpha = 0.12f)
+                            val transcribingInk = ensureAccessibleContrast(ClaudeTerracotta, transcribingBg, 4.5f, cardBg)
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = ClaudeTerracotta.copy(alpha = 0.12f),
+                                color = transcribingBg,
                                 border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.4f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 4.dp, vertical = 4.dp)
+                                    .semantics {
+                                        traversalIndex = 0f
+                                        liveRegion = LiveRegionMode.Polite
+                                    }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -896,13 +936,13 @@ fun ChatInputBar(
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(13.dp),
                                         strokeWidth = 2.dp,
-                                        color = ClaudeTerracotta
+                                        color = transcribingInk
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = L.components.chatInputBar.transcribingAudioViaAgyHub,
                                         fontSize = 12.sp,
-                                        color = ClaudeTerracotta,
+                                        color = transcribingInk,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -916,11 +956,12 @@ fun ChatInputBar(
                             Text(
                                 text = L.components.chatInputBar.replyToValue(selectedModel.displayName.split(" ").firstOrNull() ?: L.components.chatInputBar.gemini),
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.42f)
+                                color = accessiblePlaceholderColor
                             )
                         },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .semantics { traversalIndex = 2f }
                             .focusRequester(focusRequester)
                             .padding(horizontal = 4.dp, vertical = 2.dp),
                         colors = TextFieldDefaults.colors(
@@ -1125,12 +1166,16 @@ fun ChatInputBar(
                                         Spacer(modifier = Modifier.width(2.dp))
                                         IconButton(
                                             onClick = { onRemoveAttachment(att.id) },
-                                            modifier = Modifier.size(24.dp).padding(end = 4.dp)
+                                            modifier = Modifier.minTouchTarget(48.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Outlined.Close,
-                                                contentDescription = L.common.remove,
-                                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                contentDescription = L.components.chatInputBar.removeAttachmentName(att.name),
+                                                tint = ensureAccessibleContrast(
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                    barBg,
+                                                    3.0f
+                                                ),
                                                 modifier = Modifier.size(13.dp)
                                             )
                                         }
@@ -1145,16 +1190,18 @@ fun ChatInputBar(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .minTouchTarget(48.dp)
                                 .padding(horizontal = 6.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = onOpenModelSelector)
+                                .clickable(role = Role.Button, onClick = onOpenModelSelector)
+                                .semantics(mergeDescendants = true) {}
                                 .padding(horizontal = 4.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ImageNotSupported,
                                 contentDescription = null,
-                                tint = ClaudeTerracotta,
+                                tint = ensureAccessibleContrast(ClaudeTerracotta, cardBg, 3.0f, barBg),
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -1162,7 +1209,12 @@ fun ChatInputBar(
                                 text = L.components.chatInputBar.displaynameCantReadImagesSoIt(selectedModel.displayName),
                                 fontSize = 11.5.sp,
                                 lineHeight = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = ensureAccessibleContrast(
+                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                    cardBg,
+                                    4.5f,
+                                    barBg
+                                )
                             )
                         }
                     }
@@ -1171,128 +1223,168 @@ fun ChatInputBar(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 4.dp, end = 4.dp, bottom = 2.dp, top = 2.dp),
+                            .padding(start = 4.dp, end = 4.dp, bottom = 2.dp, top = 2.dp)
+                            .semantics { traversalIndex = 3f },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // [+] Attachment Button
-                        Surface(
+                        InputBarCircleButton(
                             onClick = onAttachClick,
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.background,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-                            modifier = Modifier.size(34.dp)
+                            contentDescription = L.components.chatInputBar.addAttachments,
+                            visualSize = 34.dp,
+                            containerColor = barBg,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Add,
-                                    contentDescription = L.components.chatInputBar.addAttachments,
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                    modifier = Modifier.size(19.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Outlined.Add,
+                                contentDescription = L.components.chatInputBar.addAttachments,
+                                tint = ensureAccessibleContrast(
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    barBg,
+                                    3.0f
+                                ),
+                                modifier = Modifier.size(19.dp)
+                            )
                         }
 
                         // Middle Area: Model Selector Pill (takes up to 100% of the available space between [+] and right actions)
+                        val left = quota?.pillRemaining
+                        val pctText = quota?.pillText
+                        val modelSpokenDesc = remember(selectedModel.displayName, left, pctText, quota?.pillIsWeekly) {
+                            buildString {
+                                append(L.components.chatInputBar.modelName(selectedModel.displayName))
+                                if (left != null && pctText != null) {
+                                    append(", ")
+                                    append(
+                                        if (quota?.pillIsWeekly == true) L.components.chatInputBar.n7DayQuotaPct(pctText)
+                                        else L.components.chatInputBar.n5HourQuotaPct(pctText)
+                                    )
+                                }
+                                append(", ")
+                                append(L.components.chatInputBar.switchModel)
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(horizontal = 6.dp),
+                                .padding(horizontal = 4.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
-                            Surface(
-                                onClick = {
-                                    focusManager.clearFocus(force = true)
-                                    keyboardController?.hide()
-                                    onOpenModelSelector()
-                                },
-                                shape = RoundedCornerShape(18.dp),
-                                color = MaterialTheme.colorScheme.background,
-                                border = BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.AutoAwesome,
-                                        contentDescription = null,
-                                        tint = familyColor,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = selectedModel.displayName,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-
-                                    // 5h or 7d share left (picked in the model sheet; 7d when the model has no 5h limit)
-                                    val left = quota?.pillRemaining
-                                    val pctText = quota?.pillText
-                                    if (left != null && pctText != null) {
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        // same colour as the model picker's meter for this limit
-                                        val badgeColor = ai.antigem.ui.models.quotaLeftColor(left)
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(badgeColor.copy(alpha = 0.15f))
-                                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                                        ) {
-                                            Text(
-                                                text = if (quota?.pillIsWeekly == true) "7d $pctText" else pctText,
-                                                fontSize = 9.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = badgeColor
-                                            )
-                                        }
+                            Box(
+                                modifier = Modifier
+                                    .minTouchTarget(48.dp)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .clickable(role = Role.Button) {
+                                        focusManager.clearFocus(force = true)
+                                        keyboardController?.hide()
+                                        onOpenModelSelector()
                                     }
-
-                                    Spacer(modifier = Modifier.width(2.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = L.components.chatInputBar.switchModel,
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                        modifier = Modifier.size(14.dp)
+                                    .semantics(mergeDescendants = true) {
+                                        contentDescription = modelSpokenDesc
+                                    },
+                                contentAlignment = Alignment.CenterStart
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = barBg,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                                     )
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = ensureAccessibleContrast(familyColor, barBg, 3.0f),
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = selectedModel.displayName,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+
+                                        // 5h or 7d share left (picked in the model sheet; 7d when the model has no 5h limit)
+                                        if (left != null && pctText != null) {
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            // same colour as the model picker's meter for this limit
+                                            val rawBadgeColor = ai.antigem.ui.models.quotaLeftColor(left)
+                                            val badgeBg = rawBadgeColor.copy(alpha = 0.15f)
+                                            val accessibleBadgeColor = ensureAccessibleContrast(rawBadgeColor, badgeBg, 4.5f, barBg)
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(badgeBg)
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (quota?.pillIsWeekly == true) "7d $pctText" else pctText,
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = accessibleBadgeColor
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = L.components.chatInputBar.switchModel,
+                                            tint = ensureAccessibleContrast(
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                                barBg,
+                                                3.0f
+                                            ),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
 
                         // Live voice call with the agent (Antigravity voice mode); also while the agent works
                         if (onStartVoiceCall != null && !isRecordingAudio && !isLiveDictating) {
-                            Surface(
+                            val voiceCallLabel = if (voiceCallActive) L.components.chatInputBar.openVoiceCall else L.components.chatInputBar.startVoiceCall
+                            InputBarCircleButton(
                                 onClick = onStartVoiceCall,
-                                shape = CircleShape,
-                                color = if (voiceCallActive) GeminiBlue else MaterialTheme.colorScheme.background,
+                                contentDescription = voiceCallLabel,
+                                visualSize = 34.dp,
+                                containerColor = if (voiceCallActive) GeminiBlue else barBg,
                                 border = BorderStroke(
                                     1.dp,
                                     if (voiceCallActive) GeminiBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                ),
-                                modifier = Modifier.size(34.dp)
+                                )
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.HeadsetMic,
-                                        contentDescription = if (voiceCallActive) L.components.chatInputBar.openVoiceCall else L.components.chatInputBar.startVoiceCall,
-                                        tint = if (voiceCallActive) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.HeadsetMic,
+                                    contentDescription = voiceCallLabel,
+                                    tint = if (voiceCallActive) {
+                                        Color.White
+                                    } else {
+                                        ensureAccessibleContrast(
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                            barBg,
+                                            3.0f
+                                        )
+                                    },
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
                         }
 
                         // Dedicated Speech-to-Text Live Dictation Button (AGY Hub)
                         if (voiceEnabled && !isStreaming && !isRecordingAudio) {
-                            Surface(
+                            val dictBtnLabel = if (isLiveDictating) L.components.chatInputBar.stopDictation else L.components.chatInputBar.liveDictation
+                            InputBarCircleButton(
                                 onClick = {
                                     if (isLiveDictating) {
                                         stopLiveDictation()
@@ -1300,107 +1392,118 @@ fun ChatInputBar(
                                         startLiveDictation()
                                     }
                                 },
-                                shape = CircleShape,
-                                color = if (isLiveDictating) GeminiBlue.copy(alpha = 0.15f) else MaterialTheme.colorScheme.background,
+                                contentDescription = dictBtnLabel,
+                                visualSize = 34.dp,
+                                containerColor = if (isLiveDictating) GeminiBlue.copy(alpha = 0.15f) else barBg,
                                 border = BorderStroke(
                                     1.dp,
                                     if (isLiveDictating) GeminiBlue.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                                ),
-                                modifier = Modifier.size(34.dp)
+                                )
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.GraphicEq,
-                                        contentDescription = if (isLiveDictating) L.components.chatInputBar.stopDictation else L.components.chatInputBar.liveDictation,
-                                        tint = if (isLiveDictating) GeminiBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.GraphicEq,
+                                    contentDescription = dictBtnLabel,
+                                    tint = if (isLiveDictating) {
+                                        ensureAccessibleContrast(GeminiBlue, barBg, 3.0f)
+                                    } else {
+                                        ensureAccessibleContrast(
+                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                            barBg,
+                                            3.0f
+                                        )
+                                    },
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
-                            Spacer(modifier = Modifier.width(6.dp))
                         }
 
                         // Action Button (Send / Stop / Voice Recorder). While the agent works, a typed message is
                         // sent (it is queued, or injected by Claude); Stop shows when the box is empty.
                         if (isStreaming && !canSend) {
-                            Surface(
+                            InputBarCircleButton(
                                 onClick = onStopStreaming,
-                                shape = CircleShape,
-                                color = ClaudeTerracotta,
-                                modifier = Modifier.size(36.dp)
+                                contentDescription = L.common.stop,
+                                visualSize = 36.dp,
+                                containerColor = ClaudeTerracotta
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.Stop,
-                                        contentDescription = L.common.stop,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = L.common.stop,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         } else if (canSend) {
                             // can't send yet (signed out, offline, attachments loading): the same faint circle as the inactive
                             // Send, so the arrow (textSecondary) stays visible; it used to be textSecondary on textSecondary
                             val sendBlocked = !isAuth || !isOnline || attachmentsBusy
                             val sendBtnColor = if (sendBlocked) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else if (isBackgroundActive) ai.antigem.theme.AppColors.warning else ClaudeTerracotta
-                            Surface(
+                            InputBarCircleButton(
                                 onClick = {
                                     val trimmed = textFieldState.text.toString().trim()
-                                        if (!isAuth) {
-                                            Toast.makeText(context, L.components.chatInputBar.pleaseSignInFirstToSend, Toast.LENGTH_SHORT).show()
-                                            return@Surface
-                                        }
-                                        if (attachmentsBusy) {
-                                            Toast.makeText(context, L.components.chatInputBar.waitUntilTheAttachmentsAreReady, Toast.LENGTH_SHORT).show()
-                                            return@Surface
-                                        }
-                                        if (!isOnline) {
-                                            Toast.makeText(context, offlineMessage, Toast.LENGTH_SHORT).show()
-                                            return@Surface
-                                        }
-                                        if (isLiveDictating) {
-                                            stopLiveDictation()
-                                        }
-                                        onSendMessage(trimmed)
-                                        textFieldState.clearText()
+                                    if (!isAuth) {
+                                        Toast.makeText(context, L.components.chatInputBar.pleaseSignInFirstToSend, Toast.LENGTH_SHORT).show()
+                                        return@InputBarCircleButton
+                                    }
+                                    if (attachmentsBusy) {
+                                        Toast.makeText(context, L.components.chatInputBar.waitUntilTheAttachmentsAreReady, Toast.LENGTH_SHORT).show()
+                                        return@InputBarCircleButton
+                                    }
+                                    if (!isOnline) {
+                                        Toast.makeText(context, offlineMessage, Toast.LENGTH_SHORT).show()
+                                        return@InputBarCircleButton
+                                    }
+                                    if (isLiveDictating) {
+                                        stopLiveDictation()
+                                    }
+                                    onSendMessage(trimmed)
+                                    textFieldState.clearText()
                                 },
-                                shape = CircleShape,
-                                color = sendBtnColor,
-                                modifier = Modifier.size(36.dp)
+                                contentDescription = L.common.send,
+                                visualSize = 36.dp,
+                                containerColor = sendBtnColor
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowUpward,
-                                        contentDescription = L.common.send,
-                                        tint = if (sendBlocked) ai.antigem.theme.AppColors.textSecondary else if (isBackgroundActive) ai.antigem.theme.AppColors.onBackground else Color.White,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.ArrowUpward,
+                                    contentDescription = L.common.send,
+                                    tint = if (sendBlocked) {
+                                        ensureAccessibleContrast(ai.antigem.theme.AppColors.textSecondary, sendBtnColor, 3.0f, barBg)
+                                    } else if (isBackgroundActive) {
+                                        ensureAccessibleContrast(ai.antigem.theme.AppColors.onBackground, sendBtnColor, 3.0f, barBg)
+                                    } else {
+                                        Color.White
+                                    },
+                                    modifier = Modifier.size(19.dp)
+                                )
                             }
                         } else if (!voiceEnabled) {
                             // no voice input for this agent: an inactive Send until something is typed
-                            Surface(
+                            val disabledSendBg = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                            InputBarCircleButton(
                                 onClick = {},
-                                enabled = false,
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                                modifier = Modifier.size(36.dp)
+                                contentDescription = L.common.send,
+                                visualSize = 36.dp,
+                                containerColor = disabledSendBg,
+                                enabled = false
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.ArrowUpward,
-                                        contentDescription = L.common.send,
-                                        tint = ai.antigem.theme.AppColors.textSecondary,
-                                        modifier = Modifier.size(19.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.ArrowUpward,
+                                    contentDescription = L.common.send,
+                                    tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.textSecondary, disabledSendBg, 3.0f, barBg),
+                                    modifier = Modifier.size(19.dp)
+                                )
                             }
                         } else {
                             // Claude-style Microphone Voice Recorder Button
                             val voiceBgColor = ai.antigem.theme.AppColors.onBackground
-                            val voiceIconColor = ai.antigem.theme.AppColors.background
+                            val voiceIconColor = ensureAccessibleContrast(
+                                ai.antigem.theme.AppColors.background,
+                                voiceBgColor,
+                                3.0f
+                            )
+                            val voiceBtnLabel = if (voiceNotesAsText) L.components.chatInputBar.recordAndTranscribe else L.components.chatInputBar.recordVoiceNote
 
-                            Surface(
+                            InputBarCircleButton(
                                 onClick = {
                                     if (voiceNotesAsText) {
                                         startAutoTranscribe()
@@ -1409,19 +1512,17 @@ fun ChatInputBar(
                                         triggerMicClick()
                                     }
                                 },
-                                shape = CircleShape,
-                                color = voiceBgColor,
-                                shadowElevation = 1.dp,
-                                modifier = Modifier.size(36.dp)
+                                contentDescription = voiceBtnLabel,
+                                visualSize = 36.dp,
+                                containerColor = voiceBgColor,
+                                shadowElevation = 1.dp
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Mic,
-                                        contentDescription = if (voiceNotesAsText) L.components.chatInputBar.recordAndTranscribe else L.components.chatInputBar.recordVoiceNote,
-                                        tint = voiceIconColor,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Rounded.Mic,
+                                    contentDescription = voiceBtnLabel,
+                                    tint = voiceIconColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
                     }
@@ -1430,6 +1531,40 @@ fun ChatInputBar(
         }
     }
 }
+}
+
+@Composable
+private fun InputBarCircleButton(
+    onClick: () -> Unit,
+    contentDescription: String,
+    visualSize: androidx.compose.ui.unit.Dp,
+    containerColor: Color,
+    border: BorderStroke? = null,
+    enabled: Boolean = true,
+    shadowElevation: androidx.compose.ui.unit.Dp = 0.dp,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .minTouchTarget(48.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                this.contentDescription = contentDescription
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = containerColor,
+            border = border,
+            shadowElevation = shadowElevation,
+            modifier = Modifier.size(visualSize)
+        ) {
+            Box(contentAlignment = Alignment.Center, content = content)
+        }
+    }
 }
 
 enum class AudioRecordMode { VOICE_NOTE, TRANSCRIBE, LIVE_DICTATION }

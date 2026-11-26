@@ -3,11 +3,16 @@ package ai.antigem.ui.ide
 import android.content.Context
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,9 +24,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,6 +41,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import ai.antigem.data.local.LocalPtySession
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.LocalScreenAccessible
+import ai.antigem.ui.components.announceForAccessibility
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
+import ai.antigem.ui.components.terminalKeyAccessibilityLabel
+import ai.antigem.ui.components.terminalModifierStateLabel
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
@@ -54,6 +71,8 @@ fun IdeExecutionRunnerSheet(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    val hostView = LocalView.current
+    val screenAccessible = LocalScreenAccessible.current
 
     var sessionKey by remember { mutableStateOf(request.id) }
     var terminalTextSize by remember { mutableIntStateOf((13 * density.density).toInt().coerceIn(16, 60)) }
@@ -148,6 +167,24 @@ fun IdeExecutionRunnerSheet(
         if (altState == IdeKeyModifierState.ONE_SHOT) altState = IdeKeyModifierState.OFF
     }
 
+    fun announceModifier(label: String, state: IdeKeyModifierState) {
+        val spoken = terminalKeyAccessibilityLabel(label)
+        val stateText = terminalModifierStateLabel(
+            isLocked = state == IdeKeyModifierState.LOCKED,
+            isActive = state != IdeKeyModifierState.OFF
+        )
+        announceForAccessibility(hostView, "$spoken $stateText")
+    }
+
+    val panelBg = ai.antigem.theme.AppColors.editorPanel
+    val headerTitleColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, panelBg)
+    val headerActionTint = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText, panelBg)
+    val headerMutedTint = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, panelBg)
+    val statusColor = ensureAccessibleContrast(
+        if (!isExited) ai.antigem.theme.AppColors.success else ai.antigem.theme.AppColors.danger,
+        panelBg
+    )
+
     Surface(
         color = ai.antigem.theme.AppColors.editorBg,
         modifier = modifier.fillMaxSize()
@@ -161,9 +198,9 @@ fun IdeExecutionRunnerSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(ai.antigem.theme.AppColors.editorPanel)
+                    .background(panelBg)
                     .border(BorderStroke(0.5.dp, ai.antigem.theme.AppColors.editorBorder))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -174,7 +211,7 @@ fun IdeExecutionRunnerSheet(
                         modifier = Modifier
                             .size(10.dp)
                             .clip(CircleShape)
-                            .background(if (!isExited) ai.antigem.theme.AppColors.success else ai.antigem.theme.AppColors.danger)
+                            .background(statusColor)
                     )
 
                     Column {
@@ -182,7 +219,7 @@ fun IdeExecutionRunnerSheet(
                             text = request.profileName,
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = headerTitleColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -191,14 +228,15 @@ fun IdeExecutionRunnerSheet(
                             fontSize = 11.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = if (!isExited) ai.antigem.theme.AppColors.success else ai.antigem.theme.AppColors.danger
+                            color = statusColor,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
                 ) {
                     // Re-run / Restart
                     IconButton(
@@ -206,12 +244,12 @@ fun IdeExecutionRunnerSheet(
                             closeWithChildren(ptySession)
                             sessionKey = UUID.randomUUID().toString()
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = L.common.restart,
-                            tint = Color.LightGray,
+                            tint = headerActionTint,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -225,12 +263,12 @@ fun IdeExecutionRunnerSheet(
                                 ptySession.close()
                             }
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Stop,
                             contentDescription = L.common.stop,
-                            tint = if (!isExited) ai.antigem.theme.AppColors.danger else Color.DarkGray,
+                            tint = if (!isExited) statusColor else headerMutedTint,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -243,12 +281,12 @@ fun IdeExecutionRunnerSheet(
                                 ptySession.write("\u000c")
                             } catch (_: Exception) {}
                         },
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.ClearAll,
                             contentDescription = L.common.clear,
-                            tint = Color.LightGray,
+                            tint = headerActionTint,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -256,12 +294,12 @@ fun IdeExecutionRunnerSheet(
                     // Close
                     IconButton(
                         onClick = onClose,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = L.common.close,
-                            tint = Color.LightGray,
+                            tint = headerActionTint,
                             modifier = Modifier.size(19.dp)
                         )
                     }
@@ -275,14 +313,21 @@ fun IdeExecutionRunnerSheet(
                     .fillMaxWidth()
                     .background(ai.antigem.theme.AppColors.terminalBg)
                     .padding(horizontal = 4.dp, vertical = 2.dp)
+                    .semantics { contentDescription = L.ide.executionRunner.executionOutput }
             ) {
                 key(sessionKey) {
                     AndroidView(
                         factory = { ctx ->
                             TerminalView(ctx, null).apply {
                                 setTextSize(terminalTextSize)
-                                isFocusable = true
-                                isFocusableInTouchMode = true
+                                isFocusable = screenAccessible
+                                isFocusableInTouchMode = screenAccessible
+                                contentDescription = L.ide.executionRunner.executionTerminal
+                                importantForAccessibility = if (screenAccessible) {
+                                    View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                                } else {
+                                    View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                }
 
                                 setTerminalViewClient(object : TerminalViewClient {
                                     override fun onScale(scale: Float): Float {
@@ -372,6 +417,14 @@ fun IdeExecutionRunnerSheet(
                         },
                         update = { tv ->
                             currentTerminalView = tv
+                            tv.isFocusable = screenAccessible
+                            tv.isFocusableInTouchMode = screenAccessible
+                            tv.contentDescription = L.ide.executionRunner.executionTerminal
+                            tv.importantForAccessibility = if (screenAccessible) {
+                                View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                            } else {
+                                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                            }
                             tv.setTextSize(terminalTextSize)
                             tv.setTerminalInputListener(object : TerminalView.TerminalInputListener {
                                 override fun onTerminalInput(text: String) {
@@ -422,9 +475,11 @@ fun IdeExecutionRunnerSheet(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             ctrlState = if (ctrlState == IdeKeyModifierState.OFF) IdeKeyModifierState.ONE_SHOT else IdeKeyModifierState.OFF
+                            announceModifier(L.ide.executionRunner.ctrl, ctrlState)
                         },
                         onLongClick = {
                             ctrlState = if (ctrlState == IdeKeyModifierState.LOCKED) IdeKeyModifierState.OFF else IdeKeyModifierState.LOCKED
+                            announceModifier(L.ide.executionRunner.ctrl, ctrlState)
                         }
                     )
                     IdeTermKey(
@@ -434,9 +489,11 @@ fun IdeExecutionRunnerSheet(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             altState = if (altState == IdeKeyModifierState.OFF) IdeKeyModifierState.ONE_SHOT else IdeKeyModifierState.OFF
+                            announceModifier(L.ide.executionRunner.alt, altState)
                         },
                         onLongClick = {
                             altState = if (altState == IdeKeyModifierState.LOCKED) IdeKeyModifierState.OFF else IdeKeyModifierState.LOCKED
+                            announceModifier(L.ide.executionRunner.alt, altState)
                         }
                     )
                     IdeTermKey(label = "↑", modifier = Modifier.weight(1f)) {
@@ -460,6 +517,7 @@ fun IdeExecutionRunnerSheet(
 /** Kills the command and everything it started (see RunManager.killTree). */
 private fun closeWithChildren(session: LocalPtySession) = ai.antigem.data.run.RunManager.killTree(session)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun IdeTermKey(
     label: String,
@@ -469,29 +527,10 @@ private fun IdeTermKey(
     onClick: () -> Unit = {},
     onLongClick: (() -> Unit)? = null
 ) {
-    var isPressed by remember { mutableStateOf(false) }
-
-    val currentOnClick by rememberUpdatedState(onClick)
-    val currentOnLongClick by rememberUpdatedState(onLongClick)
-
-    val keyModifier = modifier.pointerInput(Unit) {
-        detectTapGestures(
-            onPress = {
-                isPressed = true
-                try {
-                    tryAwaitRelease()
-                } finally {
-                    isPressed = false
-                }
-            },
-            onTap = {
-                currentOnClick()
-            },
-            onLongPress = {
-                currentOnLongClick?.invoke()
-            }
-        )
-    }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val spokenLabel = terminalKeyAccessibilityLabel(label)
+    val hasModifierState = onLongClick != null || isActive || isLocked
 
     val backgroundColor = when {
         isPressed -> ai.antigem.theme.AppColors.editorLine
@@ -500,12 +539,17 @@ private fun IdeTermKey(
         else -> ai.antigem.theme.AppColors.editorPanel
     }
 
-    val textColor = when {
-        isPressed -> Color.White
-        isLocked -> Color.White
+    val rawTextColor = when {
+        isPressed || isLocked -> Color.White
         isActive -> ClaudeTerracotta
         else -> ai.antigem.theme.AppColors.editorText
     }
+    val textColor = ensureAccessibleContrast(
+        foreground = rawTextColor,
+        background = backgroundColor,
+        minRatio = 4.5f,
+        surfaceFallback = ai.antigem.theme.AppColors.editorBg
+    )
 
     val border = when {
         isLocked -> BorderStroke(1.dp, ClaudeTerracotta)
@@ -514,15 +558,28 @@ private fun IdeTermKey(
     }
 
     Surface(
-        modifier = keyModifier
-            .height(32.dp)
-            .clip(RoundedCornerShape(6.dp)),
+        modifier = modifier
+            .minTouchTarget(48.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = LocalIndication.current,
+                role = Role.Button,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .semantics {
+                contentDescription = spokenLabel
+                if (hasModifierState) {
+                    stateDescription = terminalModifierStateLabel(isLocked, isActive)
+                }
+            },
         color = backgroundColor,
         border = border,
         shape = RoundedCornerShape(6.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(

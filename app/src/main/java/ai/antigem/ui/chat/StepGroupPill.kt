@@ -35,6 +35,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -49,6 +55,9 @@ import ai.antigem.theme.AppColors
 import ai.antigem.theme.ClaudeTerracotta
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.ui.components.MarkdownBlock
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.formatDurationForSpeech
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import ai.antigem.i18n.L
 
@@ -72,10 +81,10 @@ fun StepGroupPill(group: ChatFeedItem.StepGroup, onToggle: () -> Unit, modifier:
         buildAnnotatedString {
             val parts = mutableListOf<Pair<String, Color?>>()
             if (summary.tools > 0) parts += plural(summary.tools, L.chat.stepGroupPill.toolCall, L.chat.stepGroupPill.toolCalls) to null
-            if (summary.thoughts > 0) parts += plural(summary.thoughts, "thought", "thoughts") to null
-            if (summary.running > 0) parts += "${summary.running} running" to accent
-            else if (summary.thinking) parts += "thinking" to accent
-            if (summary.failed > 0) parts += "${summary.failed} failed" to danger
+            if (summary.thoughts > 0) parts += L.chat.stepGroupPill.countThoughts(summary.thoughts) to null
+            if (summary.running > 0) parts += L.chat.stepGroupPill.countRunning(summary.running) to accent
+            else if (summary.thinking) parts += L.chat.stepGroupPill.thinking to accent
+            if (summary.failed > 0) parts += L.chat.stepGroupPill.countFailed(summary.failed) to danger
             parts.forEachIndexed { i, (text, color) ->
                 if (i > 0 || hasClock) append(" · ")
                 if (color != null) withStyle(SpanStyle(color = color)) { append(text) } else append(text)
@@ -83,6 +92,7 @@ fun StepGroupPill(group: ChatFeedItem.StepGroup, onToggle: () -> Unit, modifier:
         }
     }
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val surfaceBg = MaterialTheme.colorScheme.background
     // tabular digits: the clock does not change width (and push the counts) as the seconds go by
     val titleStyle = remember(onSurface) {
         TextStyle(fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = onSurface, fontFeatureSettings = "tnum")
@@ -93,7 +103,28 @@ fun StepGroupPill(group: ChatFeedItem.StepGroup, onToggle: () -> Unit, modifier:
         animationSpec = tween(durationMillis = 180),
         label = "step_group_chevron"
     )
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val mutedTextColor = ensureAccessibleContrast(
+        MaterialTheme.colorScheme.onSurfaceVariant,
+        surfaceBg,
+        minRatio = 4.5f
+    )
+    val toggleLabel = if (group.expanded) L.chat.stepGroupPill.hideSteps else L.chat.stepGroupPill.showSteps
+    val spokenSummary = buildString {
+        if (group.live) {
+            append(L.chat.stepGroupPill.working)
+        } else if (worked) {
+            append(L.chat.stepGroupPill.workedElapsed(formatDurationForSpeech(group.endedAt - group.startedAt)))
+        }
+        val countsText = counts.text.trimStart(' ', '·')
+        if (countsText.isNotBlank()) {
+            if (isNotEmpty()) append(", ")
+            append(countsText)
+        }
+        if (summary.latest.isNotBlank()) {
+            if (isNotEmpty()) append(", ")
+            append(summary.latest)
+        }
+    }
 
     Surface(
         shape = RoundedCornerShape(10.dp),
@@ -105,8 +136,14 @@ fun StepGroupPill(group: ChatFeedItem.StepGroup, onToggle: () -> Unit, modifier:
     ) {
         Row(
             modifier = Modifier
+                .minTouchTarget(48.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .clickable(onClick = onToggle)
+                .clickable(onClickLabel = toggleLabel, onClick = onToggle)
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    stateDescription = if (group.expanded) L.chat.stepGroupPill.expanded else L.chat.stepGroupPill.collapsed
+                    contentDescription = spokenSummary
+                }
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -141,7 +178,7 @@ fun StepGroupPill(group: ChatFeedItem.StepGroup, onToggle: () -> Unit, modifier:
                 Text(
                     text = summary.latest,
                     fontSize = 11.sp,
-                    color = muted.copy(alpha = 0.8f),
+                    color = mutedTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -149,8 +186,8 @@ fun StepGroupPill(group: ChatFeedItem.StepGroup, onToggle: () -> Unit, modifier:
             Spacer(modifier = Modifier.width(6.dp))
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (group.expanded) L.chat.stepGroupPill.hideSteps else L.chat.stepGroupPill.showSteps,
-                tint = muted.copy(alpha = 0.7f),
+                contentDescription = null,
+                tint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant, surfaceBg, minRatio = 3.0f),
                 modifier = Modifier
                     .size(18.dp)
                     .rotate(rotation)
@@ -169,7 +206,12 @@ private fun WorkingClock(startedAt: Long, style: TextStyle) {
             delay(1_000L - (now - startedAt).mod(1_000L))
         }
     }
-    Text(L.chat.stepGroupPill.workingElapsed(elapsed(now - startedAt)), style = style, maxLines = 1)
+    Text(
+        L.chat.stepGroupPill.workingElapsed(elapsed(now - startedAt)),
+        style = style,
+        maxLines = 1,
+        modifier = Modifier.semantics { hideFromAccessibility() }
+    )
 }
 
 /** What the pill says about its steps. */

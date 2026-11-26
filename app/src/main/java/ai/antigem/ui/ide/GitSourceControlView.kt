@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +21,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.data.daemon.*
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -130,6 +141,13 @@ fun GitSourceControlView(
             .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
+        val terracottaOnSurfaceColor = ensureAccessibleContrast(
+            foreground = Color.White,
+            background = ClaudeTerracotta,
+            minRatio = 4.5f,
+            surfaceFallback = MaterialTheme.colorScheme.surface
+        )
+
         // --- 1. Branch & Sync Header ---
         Surface(
             shape = RoundedCornerShape(8.dp),
@@ -143,14 +161,23 @@ fun GitSourceControlView(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (status?.isGitRepo != false) {
-                    Box {
+                    val branchName = status?.branch ?: L.ide.gitSourceControlView.head
+                    val branchPickerDesc = L.ide.gitSourceControlView.branchBranch(branchName)
+                    Box(modifier = Modifier.widthIn(max = 128.dp)) {
                         Surface(
                             shape = RoundedCornerShape(6.dp),
                             color = ClaudeTerracotta.copy(alpha = 0.15f),
-                            modifier = Modifier.clickable { showBranchMenu = true }
+                            modifier = Modifier
+                                .minTouchTarget(48.dp)
+                                .clickable(role = Role.Button) { showBranchMenu = true }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = branchPickerDesc
+                                }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .minTouchTarget(48.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -161,12 +188,13 @@ fun GitSourceControlView(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = status?.branch ?: L.ide.gitSourceControlView.head,
+                                    text = branchName,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = ClaudeTerracotta,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
                                 Icon(
                                     imageVector = Icons.Default.ArrowDropDown,
@@ -182,7 +210,7 @@ fun GitSourceControlView(
                             onDismissRequest = { showBranchMenu = false }
                         ) {
                             DropdownMenuItem(
-                                text = { Text("+ Create New Branch", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
+                                text = { Text(L.ide.gitSourceControlView.createNewBranch, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) },
                                 onClick = {
                                     showBranchMenu = false
                                     newBranchName = ""
@@ -238,119 +266,127 @@ fun GitSourceControlView(
                     )
                 }
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(4.dp))
 
-                if (status?.isGitRepo != false) {
-                    // Pull Button
-                    IconButton(
-                        onClick = { showPullDialog = true },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.CloudDownload, contentDescription = L.ide.gitSourceControlView.pull, modifier = Modifier.size(16.dp))
-                    }
-
-                    // Push Button with Unpushed Commit Count Badge
-                    val unpushedCount = status?.unpushedCount ?: status?.ahead ?: 0
-                    Box {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (status?.isGitRepo != false) {
+                        // Pull Button
                         IconButton(
-                            onClick = { showPushDialog = true },
-                            modifier = Modifier.size(28.dp)
+                            onClick = { showPullDialog = true },
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudUpload,
-                                contentDescription = L.ide.gitSourceControlView.push,
-                                tint = if (unpushedCount > 0) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.size(16.dp)
-                            )
+                            Icon(imageVector = Icons.Default.CloudDownload, contentDescription = L.ide.gitSourceControlView.pull, modifier = Modifier.size(16.dp))
                         }
-                        if (unpushedCount > 0) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = ClaudeTerracotta,
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .offset(x = 2.dp, y = (-2).dp)
+
+                        // Push Button with Unpushed Commit Count Badge
+                        val unpushedCount = status?.unpushedCount ?: status?.ahead ?: 0
+                        Box {
+                            IconButton(
+                                onClick = { showPushDialog = true },
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
-                                Text(
-                                    text = if (unpushedCount > 99) "99+" else "$unpushedCount",
-                                    color = Color.White,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 3.5.dp, vertical = 0.5.dp)
+                                Icon(
+                                    imageVector = Icons.Default.CloudUpload,
+                                    contentDescription = L.ide.gitSourceControlView.push,
+                                    tint = if (unpushedCount > 0) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
-                        }
-                    }
-
-                    // Stash Menu
-                    Box {
-                        IconButton(
-                            onClick = { showStashMenu = true },
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Archive, contentDescription = L.ide.gitSourceControlView.stash, modifier = Modifier.size(16.dp))
-                        }
-
-                        DropdownMenu(
-                            expanded = showStashMenu,
-                            onDismissRequest = { showStashMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(L.ide.gitSourceControlView.stashChanges) },
-                                onClick = {
-                                    showStashMenu = false
-                                    stashMessage = ""
-                                    showStashDialog = true
+                            if (unpushedCount > 0) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = ClaudeTerracotta,
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(top = 4.dp, end = 4.dp)
+                                ) {
+                                    Text(
+                                        text = if (unpushedCount > 99) "99+" else "$unpushedCount",
+                                        color = terracottaOnSurfaceColor,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 3.5.dp, vertical = 0.5.dp)
+                                    )
                                 }
-                            )
-                            if (status?.hasStash == true) {
+                            }
+                        }
+
+                        // Stash Menu
+                        Box {
+                            IconButton(
+                                onClick = { showStashMenu = true },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Archive, contentDescription = L.ide.gitSourceControlView.stash, modifier = Modifier.size(16.dp))
+                            }
+
+                            DropdownMenu(
+                                expanded = showStashMenu,
+                                onDismissRequest = { showStashMenu = false }
+                            ) {
                                 DropdownMenuItem(
-                                    text = { Text(L.ide.gitSourceControlView.popStashApplyDrop) },
+                                    text = { Text(L.ide.gitSourceControlView.stashChanges) },
                                     onClick = {
                                         showStashMenu = false
-                                        val projPath = activeProject?.path ?: return@DropdownMenuItem
-                                        scope.launch {
-                                            isOperating = true
-                                            val ok = GitApiClient.stashPop(projPath)
-                                            refreshGitData()
-                                            Toast.makeText(context, if (ok) L.ide.gitSourceControlView.stashApplied else L.ide.gitSourceControlView.stashPopFailed, Toast.LENGTH_SHORT).show()
-                                            isOperating = false
-                                        }
+                                        stashMessage = ""
+                                        showStashDialog = true
                                     }
                                 )
+                                if (status?.hasStash == true) {
+                                    DropdownMenuItem(
+                                        text = { Text(L.ide.gitSourceControlView.popStashApplyDrop) },
+                                        onClick = {
+                                            showStashMenu = false
+                                            val projPath = activeProject?.path ?: return@DropdownMenuItem
+                                            scope.launch {
+                                                isOperating = true
+                                                val ok = GitApiClient.stashPop(projPath)
+                                                refreshGitData()
+                                                Toast.makeText(context, if (ok) L.ide.gitSourceControlView.stashApplied else L.ide.gitSourceControlView.stashPopFailed, Toast.LENGTH_SHORT).show()
+                                                isOperating = false
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // Config / Settings Button
-                IconButton(
-                    onClick = {
-                        val projPath = activeProject?.path ?: return@IconButton
-                        scope.launch {
-                            isLoadingConfig = true
-                            val cfg = GitApiClient.getConfig(projPath)
-                            if (cfg != null) {
-                                configUserName = cfg.userName
-                                configUserEmail = cfg.userEmail
-                                configPullRebase = cfg.pullRebase
-                                configRemoteUrl = cfg.remoteUrl
+                    // Config / Settings Button
+                    IconButton(
+                        onClick = {
+                            val projPath = activeProject?.path ?: return@IconButton
+                            scope.launch {
+                                isLoadingConfig = true
+                                val cfg = GitApiClient.getConfig(projPath)
+                                if (cfg != null) {
+                                    configUserName = cfg.userName
+                                    configUserEmail = cfg.userEmail
+                                    configPullRebase = cfg.pullRebase
+                                    configRemoteUrl = cfg.remoteUrl
+                                }
+                                isLoadingConfig = false
+                                showConfigDialog = true
                             }
-                            isLoadingConfig = false
-                            showConfigDialog = true
-                        }
-                    },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(imageVector = Icons.Outlined.Settings, contentDescription = L.ide.gitSourceControlView.gitConfig, modifier = Modifier.size(16.dp))
-                }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
+                        Icon(imageVector = Icons.Outlined.Settings, contentDescription = L.ide.gitSourceControlView.gitConfig, modifier = Modifier.size(16.dp))
+                    }
 
-                // Refresh Button
-                IconButton(
-                    onClick = { refreshGitData() },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = L.common.refresh, modifier = Modifier.size(16.dp))
+                    // Refresh Button
+                    IconButton(
+                        onClick = { refreshGitData() },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = L.common.refresh, modifier = Modifier.size(16.dp))
+                    }
                 }
             }
         }
@@ -414,10 +450,13 @@ fun GitSourceControlView(
                                 }
                             },
                             enabled = !isOperating,
-                            colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ClaudeTerracotta,
+                                contentColor = terracottaOnSurfaceColor
+                            )
                         ) {
                             if (isOperating) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = terracottaOnSurfaceColor, strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(8.dp))
                             } else {
                                 Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -430,6 +469,10 @@ fun GitSourceControlView(
             }
         } else {
             // --- 2. Commit Message Box ---
+            val commitPlaceholderColor = accessibleMutedTextColor(
+                alpha = 0.6f,
+                background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            )
             Surface(
                 shape = RoundedCornerShape(8.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
@@ -460,7 +503,7 @@ fun GitSourceControlView(
                                     text = L.ide.gitSourceControlView.commitMessage,
                                     fontSize = 13.sp,
                                     lineHeight = 18.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    color = commitPlaceholderColor
                                 )
                             }
                             innerTextField()
@@ -501,14 +544,14 @@ fun GitSourceControlView(
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = ClaudeTerracotta,
-                    contentColor = Color.White
+                    contentColor = terracottaOnSurfaceColor
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp)
+                    .minTouchTarget(48.dp)
             ) {
                 if (isOperating) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), color = terracottaOnSurfaceColor, strokeWidth = 2.dp)
                     Spacer(modifier = Modifier.width(6.dp))
                 } else {
                     Icon(imageVector = Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -530,14 +573,14 @@ fun GitSourceControlView(
                 if (staged.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "STAGED CHANGES",
+                            title = L.ide.gitSourceControlView.stagedChanges,
                             count = staged.size,
                             isExpanded = stagedExpanded,
                             onToggle = { stagedExpanded = !stagedExpanded },
                             actions = {
                                 IconButton(
                                     onClick = { showUnstageAllDialog = true },
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(imageVector = Icons.Default.Remove, contentDescription = L.ide.gitSourceControlView.unstageAll, modifier = Modifier.size(14.dp))
                                 }
@@ -569,7 +612,7 @@ fun GitSourceControlView(
                 if (unstaged.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "CHANGES",
+                            title = L.ide.gitSourceControlView.changes,
                             count = unstaged.size,
                             isExpanded = changesExpanded,
                             onToggle = { changesExpanded = !changesExpanded },
@@ -577,7 +620,7 @@ fun GitSourceControlView(
                                 Row {
                                     IconButton(
                                         onClick = { showDiscardAllDialog = true },
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.minTouchTarget(48.dp)
                                     ) {
                                         Icon(imageVector = Icons.Default.Undo, contentDescription = L.ide.gitSourceControlView.discardAll, modifier = Modifier.size(13.dp), tint = ai.antigem.theme.AppColors.danger)
                                     }
@@ -589,7 +632,7 @@ fun GitSourceControlView(
                                                 refreshGitData()
                                             }
                                         },
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.minTouchTarget(48.dp)
                                     ) {
                                         Icon(imageVector = Icons.Default.Add, contentDescription = L.ide.gitSourceControlView.stageAll, modifier = Modifier.size(14.dp), tint = ai.antigem.theme.AppColors.success)
                                     }
@@ -625,7 +668,7 @@ fun GitSourceControlView(
                 if (untracked.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "UNTRACKED",
+                            title = L.ide.gitSourceControlView.untracked,
                             count = untracked.size,
                             isExpanded = untrackedExpanded,
                             onToggle = { untrackedExpanded = !untrackedExpanded },
@@ -633,7 +676,7 @@ fun GitSourceControlView(
                                 Row {
                                     IconButton(
                                         onClick = { showDiscardAllUntrackedDialog = true },
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.minTouchTarget(48.dp)
                                     ) {
                                         Icon(imageVector = Icons.Default.Undo, contentDescription = L.ide.gitSourceControlView.discardAllUntracked, modifier = Modifier.size(13.dp), tint = ai.antigem.theme.AppColors.danger)
                                     }
@@ -645,7 +688,7 @@ fun GitSourceControlView(
                                                 refreshGitData()
                                             }
                                         },
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.minTouchTarget(48.dp)
                                     ) {
                                         Icon(imageVector = Icons.Default.Add, contentDescription = L.ide.gitSourceControlView.stageAllUntracked, modifier = Modifier.size(14.dp), tint = ai.antigem.theme.AppColors.success)
                                     }
@@ -698,7 +741,7 @@ fun GitSourceControlView(
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
                     SectionHeader(
-                        title = "COMMIT HISTORY",
+                        title = L.ide.gitSourceControlView.commitHistory,
                         count = commitLogs.size,
                         isExpanded = historyExpanded,
                         onToggle = {
@@ -906,12 +949,16 @@ fun GitSourceControlView(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { configIsGlobal = !configIsGlobal }
+                            .minTouchTarget(48.dp)
+                            .clickable(role = Role.Checkbox) { configIsGlobal = !configIsGlobal }
+                            .semantics(mergeDescendants = true) {
+                                toggleableState = if (configIsGlobal) ToggleableState.On else ToggleableState.Off
+                            }
                             .padding(vertical = 4.dp)
                     ) {
                         Checkbox(
                             checked = configIsGlobal,
-                            onCheckedChange = { configIsGlobal = it },
+                            onCheckedChange = null,
                             colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -1011,6 +1058,11 @@ fun GitSourceControlView(
             onDismissRequest = { showNewBranchDialog = false },
             title = { Text(L.ide.gitSourceControlView.createCheckoutBranch, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
             text = {
+                val newBranchPlaceholderColor = accessibleMutedTextColor(
+                    alpha = 0.6f,
+                    background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    surfaceFallback = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -1037,7 +1089,7 @@ fun GitSourceControlView(
                                         text = L.ide.gitSourceControlView.branchNameEGFeatureLogin,
                                         fontSize = 13.5.sp,
                                         lineHeight = 18.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = newBranchPlaceholderColor
                                     )
                                 }
                                 innerTextField()
@@ -1084,6 +1136,11 @@ fun GitSourceControlView(
             onDismissRequest = { showStashDialog = false },
             title = { Text(L.ide.gitSourceControlView.stashChanges2, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
             text = {
+                val stashPlaceholderColor = accessibleMutedTextColor(
+                    alpha = 0.6f,
+                    background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    surfaceFallback = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -1110,7 +1167,7 @@ fun GitSourceControlView(
                                         text = L.ide.gitSourceControlView.stashMessageOptional,
                                         fontSize = 13.5.sp,
                                         lineHeight = 18.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = stashPlaceholderColor
                                     )
                                 }
                                 innerTextField()
@@ -1433,10 +1490,16 @@ private fun SectionHeader(
     onToggle: () -> Unit,
     actions: @Composable (() -> Unit)? = null
 ) {
+    val expandStateDesc = if (isExpanded) L.ide.gitSourceControlView.expanded else L.ide.gitSourceControlView.collapsed
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button) { onToggle() }
+            .semantics {
+                heading()
+                stateDescription = expandStateDesc
+            }
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1483,6 +1546,11 @@ private fun GitFileRow(
 ) {
     val fileName = remember(file.path) { File(file.path).name }
     val parentDir = remember(file.path) { File(file.path).parent ?: "" }
+    val spokenStatus = gitStatusLabel(file.status)
+    val parentDirColor = accessibleMutedTextColor(
+        alpha = 0.7f,
+        background = MaterialTheme.colorScheme.surface
+    )
 
     val (statusBg, statusFg) = when (file.status) {
         "M" -> Pair(ai.antigem.theme.AppColors.warningContainer, ai.antigem.theme.AppColors.warning)
@@ -1495,15 +1563,19 @@ private fun GitFileRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(6.dp))
-            .clickable { onClick() }
+            .clickable(role = Role.Button) { onClick() }
             .padding(horizontal = 6.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Status badge (M, A, D, U)
         Surface(
             shape = RoundedCornerShape(3.dp),
-            color = statusBg
+            color = statusBg,
+            modifier = Modifier.clearAndSetSemantics {
+                contentDescription = spokenStatus
+            }
         ) {
             Text(
                 text = file.status,
@@ -1529,7 +1601,7 @@ private fun GitFileRow(
                 Text(
                     text = parentDir,
                     fontSize = 10.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = parentDirColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1539,7 +1611,7 @@ private fun GitFileRow(
         if (onDiscard != null) {
             IconButton(
                 onClick = onDiscard,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Undo,
@@ -1552,7 +1624,7 @@ private fun GitFileRow(
 
         IconButton(
             onClick = onAction,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.minTouchTarget(48.dp)
         ) {
             Icon(
                 imageVector = actionIcon,
@@ -1573,6 +1645,12 @@ private fun CommitLogRow(
     onToggle: () -> Unit = {},
     onOpenFileDiff: (filePath: String) -> Unit = {}
 ) {
+    val expandStateDesc = if (isExpanded) L.ide.gitSourceControlView.expanded else L.ide.gitSourceControlView.collapsed
+    val cardBg = if (isExpanded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surface
+    val dateColor = accessibleMutedTextColor(alpha = 0.6f, background = cardBg)
+    val expandIconTint = accessibleMutedTextColor(alpha = 0.7f, background = cardBg)
+    val emptyFilesColor = accessibleMutedTextColor(alpha = 0.7f, background = cardBg)
+
     Card(
         shape = RoundedCornerShape(6.dp),
         colors = CardDefaults.cardColors(
@@ -1580,7 +1658,11 @@ private fun CommitLogRow(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onToggle() }
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button) { onToggle() }
+            .semantics {
+                stateDescription = expandStateDesc
+            }
             .padding(vertical = 2.dp)
     ) {
         Column(
@@ -1643,14 +1725,14 @@ private fun CommitLogRow(
                 Text(
                     text = commit.date,
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = dateColor
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    tint = expandIconTint
                 )
             }
             Spacer(modifier = Modifier.height(2.dp))
@@ -1684,7 +1766,7 @@ private fun CommitLogRow(
 
                     if (details.changedFiles.isNotEmpty()) {
                         Text(
-                            text = "CHANGED FILES (${details.changedFiles.size})",
+                            text = L.ide.gitSourceControlView.changedFilesCount(details.changedFiles.size),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
@@ -1692,6 +1774,7 @@ private fun CommitLogRow(
                         )
 
                         details.changedFiles.forEach { fileChange ->
+                            val spokenStatus = gitStatusLabel(fileChange.status)
                             val (badgeBg, badgeFg) = when (fileChange.status) {
                                 "M" -> Pair(ai.antigem.theme.AppColors.warningContainer, ai.antigem.theme.AppColors.warning)
                                 "A" -> Pair(ai.antigem.theme.AppColors.successContainer, ai.antigem.theme.AppColors.success)
@@ -1702,12 +1785,19 @@ private fun CommitLogRow(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .minTouchTarget(48.dp)
                                     .clip(RoundedCornerShape(4.dp))
-                                    .clickable { onOpenFileDiff(fileChange.path) }
+                                    .clickable(role = Role.Button) { onOpenFileDiff(fileChange.path) }
                                     .padding(vertical = 3.dp, horizontal = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(shape = RoundedCornerShape(3.dp), color = badgeBg) {
+                                Surface(
+                                    shape = RoundedCornerShape(3.dp),
+                                    color = badgeBg,
+                                    modifier = Modifier.clearAndSetSemantics {
+                                        contentDescription = spokenStatus
+                                    }
+                                ) {
                                     Text(
                                         text = fileChange.status,
                                         fontSize = 9.sp,
@@ -1730,7 +1820,7 @@ private fun CommitLogRow(
                         Text(
                             text = L.ide.gitSourceControlView.noChangedFilesInThisCommit,
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            color = emptyFilesColor
                         )
                     }
                 }
@@ -1740,3 +1830,26 @@ private fun CommitLogRow(
         }
     }
 }
+
+/** Maps single-letter Git file status codes (`M`, `A`, `D`, `R`, `U`) to spoken descriptions. */
+private fun gitStatusLabel(status: String): String = when (status) {
+    "M" -> L.ide.gitSourceControlView.modified
+    "A" -> L.ide.gitSourceControlView.added
+    "D" -> L.ide.gitSourceControlView.deleted
+    "R" -> L.ide.gitSourceControlView.renamed
+    "U" -> L.ide.gitSourceControlView.untracked
+    else -> status
+}
+
+/** Returns an `onSurfaceVariant` tint at [alpha] adjusted to satisfy 4.5:1 WCAG contrast on [background]. */
+@Composable
+private fun accessibleMutedTextColor(
+    alpha: Float,
+    background: Color,
+    surfaceFallback: Color = MaterialTheme.colorScheme.surface
+): Color = ensureAccessibleContrast(
+    foreground = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha),
+    background = background,
+    minRatio = 4.5f,
+    surfaceFallback = surfaceFallback
+)

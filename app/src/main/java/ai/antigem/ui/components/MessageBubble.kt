@@ -37,6 +37,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -140,6 +151,12 @@ fun MessageBubble(
 
         // Message Content Bubble
         if (isUser) {
+            val legacyScreenBg = MaterialTheme.colorScheme.surface
+            val legacyMutedIconTint = ensureAccessibleContrast(
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                legacyScreenBg,
+                3.0f
+            )
             Column(horizontalAlignment = Alignment.End) {
                 Box(
                     modifier = Modifier
@@ -179,17 +196,15 @@ fun MessageBubble(
                                 Toast.makeText(context, L.components.messageBubble.copiedPrompt, Toast.LENGTH_SHORT).show()
                                 showUserActions = false
                             },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = L.common.copy,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                tint = legacyMutedIconTint,
                                 modifier = Modifier.size(15.dp)
                             )
                         }
-
-                        Spacer(modifier = Modifier.width(4.dp))
 
                         // Edit Prompt
                         IconButton(
@@ -197,17 +212,15 @@ fun MessageBubble(
                                 onEdit(message)
                                 showUserActions = false
                             },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Edit,
                                 contentDescription = L.components.messageBubble.editPrompt,
-                                tint = ClaudeTerracotta,
+                                tint = ensureAccessibleContrast(ClaudeTerracotta, legacyScreenBg, 3.0f),
                                 modifier = Modifier.size(15.dp)
                             )
                         }
-
-                        Spacer(modifier = Modifier.width(4.dp))
 
                         // Retry Prompt
                         IconButton(
@@ -215,30 +228,29 @@ fun MessageBubble(
                                 onRetry(message)
                                 showUserActions = false
                             },
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Refresh,
                                 contentDescription = L.components.messageBubble.retryPrompt,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                tint = legacyMutedIconTint,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
 
                         val payloadToShow = message.rawContent ?: message.rawPayload
                         if (!payloadToShow.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.width(4.dp))
                             IconButton(
                                 onClick = {
                                     onViewRawPayload?.invoke(payloadToShow)
                                     showUserActions = false
                                 },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.DataObject,
                                     contentDescription = L.components.messageBubble.viewRawRequestPayload,
-                                    tint = ai.antigem.theme.AppColors.accentTeal,
+                                    tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.accentTeal, legacyScreenBg, 3.0f),
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -285,6 +297,11 @@ fun MessageBubble(
                             Spacer(modifier = Modifier.height(4.dp))
                         }
 
+                        val footerIconTint = ensureAccessibleContrast(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            MaterialTheme.colorScheme.surface,
+                            3.0f
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Start,
@@ -297,56 +314,52 @@ fun MessageBubble(
                                     clipboard.setPrimaryClip(clip)
                                     Toast.makeText(context, L.components.messageBubble.copiedResponse, Toast.LENGTH_SHORT).show()
                                 },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.ContentCopy,
                                     contentDescription = L.components.messageBubble.copyMessage,
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    tint = footerIconTint,
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
 
-                            Spacer(modifier = Modifier.width(4.dp))
-
                             IconButton(
                                 onClick = { onRetry(message) },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Refresh,
                                     contentDescription = L.components.messageBubble.regenerateResponse,
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    tint = footerIconTint,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
 
                             val payloadToShow = message.rawContent ?: message.rawPayload
                             if (!payloadToShow.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.width(4.dp))
                                 IconButton(
                                     onClick = { onViewRawPayload?.invoke(payloadToShow) },
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.DataObject,
                                         contentDescription = L.components.messageBubble.viewRawRequestPayload,
-                                        tint = ai.antigem.theme.AppColors.accentTeal,
+                                        tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.accentTeal, MaterialTheme.colorScheme.surface, 3.0f),
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
 
                             if (onShowArtifacts != null && artifactsCount > 0) {
-                                Spacer(modifier = Modifier.width(4.dp))
                                 IconButton(
                                     onClick = onShowArtifacts,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Outlined.Layers,
-                                        contentDescription = "View Artifacts ($artifactsCount)",
-                                        tint = ClaudeTerracotta,
+                                        contentDescription = L.components.messageBubble.viewArtifactsCount(artifactsCount),
+                                        tint = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, 3.0f),
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -413,13 +426,64 @@ fun UserMessageBubble(
             }
         }
 
+        val bubbleBg = MaterialTheme.colorScheme.surfaceVariant
+        val screenBg = MaterialTheme.colorScheme.surface
+        val terracottaOnBubble = ensureAccessibleContrast(ClaudeTerracotta, bubbleBg, 4.5f, screenBg)
+        val mutedTextOnBubble = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), bubbleBg, 4.5f, screenBg)
+        val mutedTextOnScreen = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), screenBg, 4.5f)
+        val actionMutedIconTint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), screenBg, 3.0f)
+
+        val userBubbleActions = buildList {
+            add(
+                CustomAccessibilityAction(L.common.copy) {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("Copied Prompt", message.content)
+                    clipboard.setPrimaryClip(clip)
+                    Toast.makeText(context, L.components.messageBubble.copiedPrompt, Toast.LENGTH_SHORT).show()
+                    true
+                }
+            )
+            add(
+                CustomAccessibilityAction(L.components.messageBubble.viewFullPrompt) {
+                    showFullPrompt = true
+                    true
+                }
+            )
+            if (canEdit) {
+                add(
+                    CustomAccessibilityAction(L.components.messageBubble.undoAndEditPrompt) {
+                        onEdit(message)
+                        true
+                    }
+                )
+            }
+            if (checkpoint != null && onRestoreCheckpoint != null) {
+                add(
+                    CustomAccessibilityAction(L.components.messageBubble.restoreToBeforeThisMessage) {
+                        onRestoreCheckpoint(message)
+                        true
+                    }
+                )
+            }
+            val payloadToShowAction = message.rawContent ?: message.rawPayload
+            if (isDevModeEnabled && !payloadToShowAction.isNullOrBlank()) {
+                add(
+                    CustomAccessibilityAction(L.components.messageBubble.viewRawRequestPayload) {
+                        onViewRawPayload?.invoke(payloadToShowAction)
+                        true
+                    }
+                )
+            }
+        }
+
         Box(
             modifier = Modifier
                 .widthIn(max = 330.dp)
                 .bringIntoViewRequester(bubbleBringIntoView)
                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 16.dp, bottomEnd = 4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .background(bubbleBg)
                 .clickable { showUserActions = !showUserActions }
+                .semantics { customActions = userBubbleActions }
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -463,11 +527,16 @@ fun UserMessageBubble(
                         Icon(
                             imageVector = Icons.Rounded.HeadsetMic,
                             contentDescription = null,
-                            tint = GeminiBlue,
+                            tint = ensureAccessibleContrast(GeminiBlue, bubbleBg, 3.0f, screenBg),
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(L.common.voice, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = GeminiBlue)
+                        Text(
+                            L.common.voice,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ensureAccessibleContrast(GeminiBlue, bubbleBg, 4.5f, screenBg)
+                        )
                     }
                 }
 
@@ -487,7 +556,7 @@ fun UserMessageBubble(
                         ranges.forEach {
                             addStyle(
                                 androidx.compose.ui.text.SpanStyle(
-                                    color = ClaudeTerracotta,
+                                    color = terracottaOnBubble,
                                     fontWeight = FontWeight.SemiBold
                                 ),
                                 it.first, it.last + 1
@@ -510,12 +579,17 @@ fun UserMessageBubble(
                         }
                         if (isTextExpanded || isTextOverflowing) {
                             Spacer(modifier = Modifier.height(4.dp))
+                            val expandStateDesc = if (isTextExpanded) L.components.messageBubble.expanded else L.components.messageBubble.collapsed
                             Row(
                                 modifier = Modifier
+                                    .minTouchTarget(48.dp)
                                     .clip(RoundedCornerShape(6.dp))
-                                    .clickable {
+                                    .clickable(role = Role.Button) {
                                         if (isTextExpanded) collapseRequests++
                                         isTextExpanded = !isTextExpanded
+                                    }
+                                    .semantics(mergeDescendants = true) {
+                                        stateDescription = expandStateDesc
                                     }
                                     .padding(vertical = 2.dp, horizontal = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -524,7 +598,7 @@ fun UserMessageBubble(
                                     text = if (isTextExpanded) L.components.messageBubble.showLess else L.components.messageBubble.showMoreLinecountLines(lineCount),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = ClaudeTerracotta
+                                    color = terracottaOnBubble
                                 )
                             }
                         }
@@ -537,7 +611,7 @@ fun UserMessageBubble(
                         fontSize = 12.5.sp,
                         lineHeight = 17.sp,
                         fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                        color = mutedTextOnBubble
                     )
                 }
             }
@@ -548,22 +622,24 @@ fun UserMessageBubble(
             Row(
                 modifier = Modifier
                     .padding(top = 5.dp, end = 2.dp)
+                    .minTouchTarget(48.dp)
                     .clip(RoundedCornerShape(50))
-                    .clickable { onRestoreCheckpoint(message) }
+                    .clickable(role = Role.Button) { onRestoreCheckpoint(message) }
+                    .semantics(mergeDescendants = true) {}
                     .padding(horizontal = 8.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Outlined.History,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    tint = actionMutedIconTint,
                     modifier = Modifier.size(12.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = L.components.messageBubble.restorePoint,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    color = mutedTextOnScreen
                 )
             }
         }
@@ -588,64 +664,61 @@ fun UserMessageBubble(
                         Toast.makeText(context, L.components.messageBubble.copiedPrompt, Toast.LENGTH_SHORT).show()
                         showUserActions = false
                     },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = L.common.copy,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        tint = actionMutedIconTint,
                         modifier = Modifier.size(15.dp)
                     )
                 }
 
                 // The full prompt as sent, hidden parts included
-                Spacer(modifier = Modifier.width(4.dp))
                 IconButton(
                     onClick = {
                         showFullPrompt = true
                         showUserActions = false
                     },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Visibility,
                         contentDescription = L.components.messageBubble.viewFullPrompt,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        tint = actionMutedIconTint,
                         modifier = Modifier.size(16.dp)
                     )
                 }
 
                 // Edit Prompt
-                if (canEdit) Spacer(modifier = Modifier.width(4.dp))
                 if (canEdit) IconButton(
                     onClick = {
                         onEdit(message)
                         showUserActions = false
                     },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = L.components.messageBubble.undoAndEditPrompt,
-                        tint = ClaudeTerracotta,
+                        tint = ensureAccessibleContrast(ClaudeTerracotta, screenBg, 3.0f),
                         modifier = Modifier.size(15.dp)
                     )
                 }
 
                 // Go back to the project checkpoint saved before this message
                 if (checkpoint != null && onRestoreCheckpoint != null) {
-                    Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
                         onClick = {
                             onRestoreCheckpoint(message)
                             showUserActions = false
                         },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.History,
                             contentDescription = L.components.messageBubble.restoreToBeforeThisMessage,
-                            tint = ai.antigem.theme.AppColors.info,
+                            tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.info, screenBg, 3.0f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -653,18 +726,17 @@ fun UserMessageBubble(
 
                 val payloadToShow = message.rawContent ?: message.rawPayload
                 if (isDevModeEnabled && !payloadToShow.isNullOrBlank()) {
-                    Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
                         onClick = {
                             onViewRawPayload?.invoke(payloadToShow)
                             showUserActions = false
                         },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.DataObject,
                             contentDescription = L.components.messageBubble.viewRawRequestPayload,
-                            tint = ai.antigem.theme.AppColors.accentTeal,
+                            tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.accentTeal, screenBg, 3.0f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -706,6 +778,12 @@ fun AssistantMessageFooter(
             Spacer(modifier = Modifier.height(4.dp))
         }
 
+        val footerBg = MaterialTheme.colorScheme.surface
+        val footerMutedTint = ensureAccessibleContrast(
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+            footerBg,
+            3.0f
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Start,
@@ -718,28 +796,26 @@ fun AssistantMessageFooter(
                     clipboard.setPrimaryClip(clip)
                     Toast.makeText(context, L.components.messageBubble.copiedResponse, Toast.LENGTH_SHORT).show()
                 },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Outlined.ContentCopy,
                     contentDescription = L.components.messageBubble.copyMessage,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    tint = footerMutedTint,
                     modifier = Modifier.size(15.dp)
                 )
             }
-
-            Spacer(modifier = Modifier.width(4.dp))
 
             // the whole reply in one selection area (the feed selects one block at a time)
             var showSelectText by remember { mutableStateOf(false) }
             IconButton(
                 onClick = { showSelectText = true },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Outlined.SelectAll,
                     contentDescription = L.components.messageBubble.selectText,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    tint = footerMutedTint,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -747,18 +823,16 @@ fun AssistantMessageFooter(
                 SelectTextSheet(content = message.content) { showSelectText = false }
             }
 
-            if (canRetry) Spacer(modifier = Modifier.width(4.dp))
-
             // a mistaken tap must not replace the reply: ask first
             var confirmRetry by remember { mutableStateOf(false) }
             if (canRetry) IconButton(
                 onClick = { confirmRetry = true },
-                modifier = Modifier.size(28.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Refresh,
                     contentDescription = L.components.messageBubble.regenerateResponse,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    tint = footerMutedTint,
                     modifier = Modifier.size(16.dp)
                 )
             }
@@ -776,7 +850,13 @@ fun AssistantMessageFooter(
                         TextButton(onClick = {
                             confirmRetry = false
                             onRetry(message)
-                        }) { Text(L.components.messageBubble.regenerate, color = ClaudeTerracotta, fontWeight = FontWeight.Bold) }
+                        }) {
+                            Text(
+                                L.components.messageBubble.regenerate,
+                                color = ensureAccessibleContrast(ClaudeTerracotta, footerBg, 4.5f),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     },
                     dismissButton = { TextButton(onClick = { confirmRetry = false }) { Text(L.common.cancel) } }
                 )
@@ -784,30 +864,28 @@ fun AssistantMessageFooter(
 
             val payloadToShow = message.rawContent ?: message.rawPayload
             if (!payloadToShow.isNullOrBlank()) {
-                Spacer(modifier = Modifier.width(4.dp))
                 IconButton(
                     onClick = { onViewRawPayload?.invoke(payloadToShow) },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.DataObject,
                         contentDescription = L.components.messageBubble.viewRawRequestPayload,
-                        tint = ai.antigem.theme.AppColors.accentTeal,
+                        tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.accentTeal, footerBg, 3.0f),
                         modifier = Modifier.size(16.dp)
                     )
                 }
             }
 
             if (onShowArtifacts != null && artifactsCount > 0) {
-                Spacer(modifier = Modifier.width(4.dp))
                 IconButton(
                     onClick = onShowArtifacts,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Layers,
-                        contentDescription = "View Artifacts ($artifactsCount)",
-                        tint = ClaudeTerracotta,
+                        contentDescription = L.components.messageBubble.viewArtifactsCount(artifactsCount),
+                        tint = ensureAccessibleContrast(ClaudeTerracotta, footerBg, 3.0f),
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -844,24 +922,34 @@ fun ModelTypingIndicator(
     }
 
     val phrase = WAITING_PHRASES.getOrElse(phraseIndex) { WAITING_PHRASES[0] }
+    val indicatorBg = ClaudeTerracotta.copy(alpha = 0.08f)
+    val accessibleIndicatorTextColor = ensureAccessibleContrast(
+        ClaudeTerracotta,
+        indicatorBg,
+        4.5f,
+        MaterialTheme.colorScheme.surface
+    )
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = phrase
+            liveRegion = LiveRegionMode.Polite
+        },
         shape = RoundedCornerShape(16.dp),
-        color = ClaudeTerracotta.copy(alpha = 0.08f),
+        color = indicatorBg,
         border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.22f))
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
             contentAlignment = Alignment.CenterStart
         ) {
-            WaitingDotsText(phrase = phrase)
+            WaitingDotsText(phrase = phrase, textColor = accessibleIndicatorTextColor)
         }
     }
 }
 
 @Composable
-private fun WaitingDotsText(phrase: String) {
+private fun WaitingDotsText(phrase: String, textColor: Color = ClaudeTerracotta) {
     val dots by produceState(initialValue = ".") {
         var count = 1
         while (true) {
@@ -875,8 +963,9 @@ private fun WaitingDotsText(phrase: String) {
         text = "$phrase$dots",
         fontSize = 12.5.sp,
         fontWeight = FontWeight.SemiBold,
-        color = ClaudeTerracotta,
-        letterSpacing = 0.2.sp
+        color = textColor,
+        letterSpacing = 0.2.sp,
+        modifier = Modifier.semantics { hideFromAccessibility() }
     )
 }
 
@@ -912,19 +1001,50 @@ fun TokenUsageTelemetryPill(
     } else 0
 
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val inputColor = ai.antigem.theme.AppColors.info
-    val outputColor = ai.antigem.theme.AppColors.success
-    val cacheColor = ai.antigem.theme.AppColors.warning
+    val screenBg = MaterialTheme.colorScheme.surface
+    val pillBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.45f else 0.7f)
+    val inputColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.info, pillBg, 4.5f, screenBg)
+    val outputColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.success, pillBg, 4.5f, screenBg)
+    val cacheColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, pillBg, 4.5f, screenBg)
+    val mutedPillText = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant, pillBg, 4.5f, screenBg)
+    val estPillText = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), pillBg, 4.5f, screenBg)
     // tap: the reply's full usage and model (the raw payload, when there is one, opens from there)
     var showDetails by remember { mutableStateOf(false) }
 
+    val spokenParts = remember(usage, cachePct) {
+        buildList {
+            add(L.components.messageBubble.countInputTokens(formatCountForSpeech(usage.promptTokens)))
+            add(L.components.messageBubble.countOutputTokens(formatCountForSpeech(usage.outputTokens)))
+            if (usage.cachedTokens > 0) {
+                add(L.components.messageBubble.countCachedPct(formatCountForSpeech(usage.cachedTokens), cachePct))
+            }
+            if (usage.durationMs > 0) {
+                val durSpeech = formatDurationForSpeech(usage.durationMs)
+                if (durSpeech.isNotBlank()) {
+                    add(L.components.messageBubble.durationTime(durSpeech))
+                }
+            }
+            usage.model?.takeIf { it.isNotBlank() }?.let { model ->
+                add(L.components.messageBubble.modelName(shortModelName(model)))
+            }
+            if (usage.isEstimated) {
+                add(L.components.messageBubble.estimated)
+            }
+        }
+    }
+    val spokenSummary = L.components.messageBubble.tokenUsageDetails(spokenParts.joinToString(", "))
+
     Surface(
         shape = RoundedCornerShape(6.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = if (isDark) 0.45f else 0.7f),
+        color = pillBg,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDark) 0.12f else 0.18f)),
         modifier = Modifier
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(6.dp))
-            .clickable { showDetails = true }
+            .clickable(role = Role.Button) { showDetails = true }
+            .semantics(mergeDescendants = true) {
+                contentDescription = spokenSummary
+            }
     ) {
         // one line, always: the model name gives way (…) before anything wraps
         Row(
@@ -966,7 +1086,7 @@ fun TokenUsageTelemetryPill(
                     text = "⏱️ ${formatDuration(usage.durationMs)}",
                     fontSize = 10.5.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = mutedPillText,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -976,7 +1096,7 @@ fun TokenUsageTelemetryPill(
                     text = shortModelName(model),
                     fontSize = 10.5.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = mutedPillText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -984,10 +1104,10 @@ fun TokenUsageTelemetryPill(
             }
             if (usage.isEstimated) {
                 Text(
-                    text = "(est.)",
+                    text = "(${L.components.messageBubble.estimated})",
                     fontSize = 9.5.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = estPillText,
                     maxLines = 1,
                     softWrap = false
                 )
@@ -1005,48 +1125,59 @@ fun ContextSummaryCheckpointBanner(
     modifier: Modifier = Modifier
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val bannerState = if (expanded) L.components.messageBubble.expanded else L.components.messageBubble.collapsed
+    val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val screenBg = MaterialTheme.colorScheme.surface
+    val titleColor = ensureAccessibleContrast(ClaudeTerracotta, cardBg, 4.5f, screenBg)
+    val toggleColor = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), cardBg, 4.5f, screenBg)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { expanded = !expanded },
+            .padding(bottom = 8.dp),
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = cardBg,
         border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.35f))
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Button) { expanded = !expanded }
+                    .semantics(mergeDescendants = true) {
+                        stateDescription = bannerState
+                    }
+                    .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = L.components.messageBubble.contextCompactedHistorySummarized,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = ClaudeTerracotta,
+                    color = titleColor,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    text = if (expanded) "Hide ▲" else L.components.messageBubble.showDetails,
+                    text = if (expanded) L.components.messageBubble.hideDetails else L.components.messageBubble.showDetails,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = toggleColor
                 )
             }
 
             if (expanded) {
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                Spacer(modifier = Modifier.height(8.dp))
-                SelectionContainer {
-                    Text(
-                        text = summaryText,
-                        fontSize = 12.sp,
-                        lineHeight = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
-                    )
+                Column(modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SelectionContainer {
+                        Text(
+                            text = summaryText,
+                            fontSize = 12.sp,
+                            lineHeight = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                        )
+                    }
                 }
             }
         }
@@ -1324,7 +1455,12 @@ private fun UserMessageDocumentItem(
                     Text(
                         text = sizeStr,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = ensureAccessibleContrast(
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            4.5f,
+                            MaterialTheme.colorScheme.surface
+                        )
                     )
                 }
             }

@@ -19,6 +19,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,21 +67,29 @@ fun ThinkingAccordion(
             .padding(vertical = 2.dp)
     ) {
         // Clean borderless inline header row
+        val bgColor = MaterialTheme.colorScheme.background
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .minTouchTarget(48.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .clickable {
+                .clickable(
+                    onClickLabel = if (isExpanded) L.common.collapse else L.common.expand
+                ) {
                     hasUserManuallyToggled = true
                     isExpanded = !isExpanded
                 }
-                .padding(horizontal = 4.dp, vertical = 3.dp),
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    stateDescription = if (isExpanded) L.components.markdown.expanded else L.components.markdown.collapsed
+                }
+                .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = if (isExpanded) L.common.collapse else L.common.expand,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                contentDescription = null,
+                tint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), bgColor, minRatio = 3.0f),
                 modifier = Modifier
                     .size(15.dp)
                     .rotate(rotation)
@@ -87,8 +99,8 @@ fun ThinkingAccordion(
 
             Icon(
                 imageVector = Icons.Outlined.Psychology,
-                contentDescription = L.common.thinking,
-                tint = ClaudeTerracotta.copy(alpha = 0.85f),
+                contentDescription = null,
+                tint = ensureAccessibleContrast(ClaudeTerracotta, bgColor, minRatio = 3.0f),
                 modifier = Modifier.size(15.dp)
             )
 
@@ -106,7 +118,7 @@ fun ThinkingAccordion(
                     text = L.components.thinkingAccordion.thinking,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = ClaudeTerracotta
+                    color = ensureAccessibleContrast(ClaudeTerracotta, bgColor, minRatio = 4.5f)
                 )
             } else {
                 val title = if (durationMs != null && durationMs > 0) L.components.thinkingAccordion.thoughtForFormatduration(formatDuration(durationMs)) else L.components.thinkingAccordion.thinkingProcess
@@ -114,7 +126,7 @@ fun ThinkingAccordion(
                     text = title,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f), bgColor, minRatio = 4.5f)
                 )
 
                 if (!isExpanded && previewText.isNotBlank()) {
@@ -122,13 +134,13 @@ fun ThinkingAccordion(
                     Text(
                         text = "·",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = previewText,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f), bgColor, minRatio = 4.5f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)

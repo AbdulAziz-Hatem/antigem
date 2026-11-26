@@ -73,6 +73,14 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -300,7 +308,8 @@ fun TerminalSessionsDrawer(
                 modifier = Modifier
                     .width(DRAWER_WIDTH)
                     .fillMaxHeight()
-                    .offset { IntOffset(((state.fraction - 1f) * state.widthPx).roundToInt(), 0) },
+                    .offset { IntOffset(((state.fraction - 1f) * state.widthPx).roundToInt(), 0) }
+                    .semantics { paneTitle = L.components.terminalSessionsDrawer.terminalSessions },
                 color = AppColors.editorPanel,
                 shadowElevation = 12.dp
             ) {
@@ -311,7 +320,7 @@ fun TerminalSessionsDrawer(
                                 state.snapClosed()
                                 onOpenSettings()
                             },
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Settings,
@@ -340,9 +349,9 @@ fun TerminalSessionsDrawer(
                     }
 
                     HorizontalDivider(thickness = 0.5.dp, color = AppColors.editorText.copy(alpha = 0.15f))
-                    Row(modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
                         DrawerButton(
-                            label = "KEYBOARD",
+                            label = L.components.terminalSessionsDrawer.keyboard,
                             modifier = Modifier.weight(1f),
                             onClick = {
                                 state.close()
@@ -353,6 +362,13 @@ fun TerminalSessionsDrawer(
                             label = "NEW SESSION",
                             modifier = Modifier.weight(1f),
                             enabled = canCreateSession,
+                            customActions = listOf(
+                                CustomAccessibilityAction(L.components.terminalSessionsDrawer.newBashSession) {
+                                    onNewBashSession()
+                                    state.close()
+                                    true
+                                }
+                            ),
                             onClick = {
                                 onNewSession()
                                 state.close()
@@ -387,11 +403,24 @@ private fun DrawerSessionRow(
 ) {
     val title by session.title.collectAsState()
     val exited by session.isExited.collectAsState()
+    val activeAccent = ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorPanel, 4.5f)
+    val dangerAccent = ensureAccessibleContrast(AppColors.danger, AppColors.editorPanel, 4.5f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 52.dp)
             .background(if (isActive) ClaudeTerracotta.copy(alpha = 0.18f) else Color.Transparent)
+            .semantics {
+                selected = isActive
+                val st = when {
+                    exited -> L.components.terminalSessionsDrawer.exitedSession
+                    isActive -> L.components.terminalSessionsDrawer.activeSession
+                    else -> ""
+                }
+                if (st.isNotEmpty()) {
+                    stateDescription = st
+                }
+            }
             .clickable(onClickLabel = L.components.terminalSessionsDrawer.switchToThisSession, onClick = onClick)
             .padding(start = 14.dp, end = 2.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -401,26 +430,26 @@ private fun DrawerSessionRow(
             text = title,
             fontSize = 14.sp,
             fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-            color = if (exited) AppColors.danger else if (isActive) ClaudeTerracotta else Color.White,
+            color = if (exited) dangerAccent else if (isActive) activeAccent else Color.White,
             textDecoration = if (exited) TextDecoration.LineThrough else null,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = onRename, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onRename, modifier = Modifier.minTouchTarget(48.dp)) {
             Icon(
                 imageVector = Icons.Outlined.Edit,
                 contentDescription = L.components.terminalSessionsDrawer.renameSession,
-                tint = AppColors.editorText.copy(alpha = 0.75f),
+                tint = AppColors.editorText.copy(alpha = 0.85f),
                 modifier = Modifier.size(18.dp)
             )
         }
         // asks first (the terminal's "Close Tab?" dialog)
-        IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onClose, modifier = Modifier.minTouchTarget(48.dp)) {
             Icon(
                 imageVector = Icons.Outlined.Delete,
                 contentDescription = L.components.terminalSessionsDrawer.closeSession,
-                tint = AppColors.danger.copy(alpha = 0.85f),
+                tint = dangerAccent,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -433,18 +462,33 @@ private fun DrawerButton(
     label: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    customActions: List<CustomAccessibilityAction> = emptyList(),
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
+    val enabledColor = ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorPanel, 4.5f)
+    val disabledColor = ensureAccessibleContrast(Color.Gray, AppColors.editorPanel, 4.5f)
     Box(
         modifier = modifier
             .fillMaxHeight()
-            .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onLongClick),
+            .minTouchTarget(48.dp)
+            .semantics {
+                role = Role.Button
+                if (customActions.isNotEmpty()) {
+                    this.customActions = customActions
+                }
+            }
+            .combinedClickable(
+                enabled = enabled,
+                role = Role.Button,
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = label,
-            color = if (enabled) ClaudeTerracotta else Color.Gray,
+            color = if (enabled) enabledColor else disabledColor,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.6.sp
@@ -469,6 +513,7 @@ private fun RenameSessionDialog(
             onDismiss()
         }
     }
+    val mutedDialogText = ensureAccessibleContrast(Color.Gray, AppColors.editorBg, 4.5f)
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(18.dp),
@@ -479,7 +524,7 @@ private fun RenameSessionDialog(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
-                placeholder = { Text(L.components.terminalSessionsDrawer.sessionName, color = Color.Gray) },
+                placeholder = { Text(L.components.terminalSessionsDrawer.sessionName, color = mutedDialogText) },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -497,14 +542,19 @@ private fun RenameSessionDialog(
                 onClick = { submit() },
                 enabled = text.text.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                shape = RoundedCornerShape(10.dp)
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Text(L.common.rename, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, shape = RoundedCornerShape(10.dp)) {
-                Text(L.common.cancel, color = Color.Gray, fontSize = 13.sp)
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
+                Text(L.common.cancel, color = mutedDialogText, fontSize = 13.sp)
             }
         }
     )

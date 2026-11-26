@@ -20,9 +20,12 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -37,6 +40,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -133,6 +145,8 @@ fun LocalTerminalContent(
     onOpenSettings: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val screenAccessible = LocalScreenAccessible.current
+    val accessibilityEnabled = rememberIsAccessibilityEnabled()
 
     val sessions by LocalTerminalManager.sessions.collectAsState()
     val activeSessionId by LocalTerminalManager.activeSessionId.collectAsState()
@@ -188,7 +202,7 @@ fun LocalTerminalContent(
                 )
                 Text(
                     text = L.components.localTerminal.restoringActiveTerminalSessions,
-                    color = Color.LightGray,
+                    color = ensureAccessibleContrast(Color.LightGray, backgroundColor, 4.5f),
                     fontSize = 13.sp
                 )
             }
@@ -269,6 +283,7 @@ fun LocalTerminalContent(
     var altState by remember { mutableStateOf(ModifierState.OFF) }
     var isTabsMenuExpanded by remember { mutableStateOf(false) }
     var sessionToClose by remember { mutableStateOf<LocalPtySession?>(null) }
+    var showTranscriptReader by remember { mutableStateOf(false) }
 
     // Termux's left drawer (sessions, KEYBOARD, NEW SESSION): the full terminal only, not a single custom session
     val hasSessionsDrawer = customSession == null
@@ -414,12 +429,42 @@ fun LocalTerminalContent(
                 val isSessExited by activeSession.isExited.collectAsState()
                 val activeTitle by activeSession.title.collectAsState()
                 val currentOnDragDelta by rememberUpdatedState(onDragDelta)
+                val currentOnToggleMaximize by rememberUpdatedState(onToggleMaximize)
+                val headerIconTint = ensureAccessibleContrast(Color.LightGray, backgroundColor, 4.5f)
+                val headerHandleColor = ensureAccessibleContrast(Color.White.copy(alpha = 0.35f), backgroundColor, 3.0f)
+                val headerCustomActions = buildList {
+                    if (onDragDelta != null) {
+                        add(CustomAccessibilityAction(L.components.localTerminal.movePanelUp) {
+                            currentOnDragDelta?.invoke(-80f)
+                            true
+                        })
+                        add(CustomAccessibilityAction(L.components.localTerminal.movePanelDown) {
+                            currentOnDragDelta?.invoke(80f)
+                            true
+                        })
+                    }
+                    if (onToggleMaximize != null) {
+                        val maxLabel = if (isMaximized) L.components.localTerminal.minimizeRestore else L.components.localTerminal.maximize
+                        add(CustomAccessibilityAction(maxLabel) {
+                            currentOnToggleMaximize?.invoke()
+                            true
+                        })
+                    }
+                }
                 Surface(
                     color = backgroundColor,
                     shadowElevation = 0.dp,
                     tonalElevation = 0.dp,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .semantics {
+                            if (isSessExited) {
+                                stateDescription = L.components.localTerminal.exitedSession
+                            }
+                            if (headerCustomActions.isNotEmpty()) {
+                                customActions = headerCustomActions
+                            }
+                        }
                         .then(
                             if (onDragDelta != null) {
                                 Modifier.draggable(
@@ -447,7 +492,7 @@ fun LocalTerminalContent(
                                         .width(36.dp)
                                         .height(4.dp)
                                         .clip(RoundedCornerShape(2.dp))
-                                        .background(Color.White.copy(alpha = 0.35f))
+                                        .background(headerHandleColor)
                                 )
                             }
                         }
@@ -455,8 +500,8 @@ fun LocalTerminalContent(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(38.dp)
-                                .padding(start = 12.dp, end = 8.dp, bottom = 4.dp),
+                                .heightIn(min = 48.dp)
+                                .padding(start = 12.dp, end = 4.dp, bottom = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
@@ -472,42 +517,58 @@ fun LocalTerminalContent(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 maxLines = 1,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .semantics {
+                                        if (isSessExited) {
+                                            stateDescription = L.components.localTerminal.exitedSession
+                                        }
+                                    }
                             )
+
+                            IconButton(
+                                onClick = { showTranscriptReader = true },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Description,
+                                    contentDescription = L.components.localTerminal.readTerminalOutput,
+                                    tint = headerIconTint,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
 
                             if (onToggleMaximize != null) {
                                 IconButton(
                                     onClick = onToggleMaximize,
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = if (isMaximized) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
                                         contentDescription = if (isMaximized) L.components.localTerminal.minimizeRestore else L.components.localTerminal.maximize,
-                                        tint = Color.LightGray,
+                                        tint = headerIconTint,
                                         modifier = Modifier.size(20.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(2.dp))
                             }
 
                             if (onRetry != null) {
                                 IconButton(
                                     onClick = onRetry,
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
                                         contentDescription = L.common.retry,
-                                        tint = ai.antigem.theme.AppColors.success,
+                                        tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.success, backgroundColor, 4.5f),
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(2.dp))
                             }
 
                             IconButton(
                                 onClick = onClose,
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
@@ -533,6 +594,14 @@ fun LocalTerminalContent(
                             Modifier.terminalDrawerEdgeSwipe(drawerState, drawerSwipeArea, statusBarHeightPx.toFloat())
                         } else Modifier
                     )
+                    .semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction(L.components.localTerminal.readTerminalOutput) {
+                                showTranscriptReader = true
+                                true
+                            }
+                        )
+                    }
                     .clipToBounds()
                     .background(backgroundColor)
                     .padding(horizontal = 4.dp)
@@ -543,8 +612,7 @@ fun LocalTerminalContent(
                             TerminalView(ctx, null).apply {
                                 setTopPadding(if (customSession != null) 0 else statusBarHeightPx)
                                 setTextSize(terminalTextSize)
-                                isFocusable = true
-                                isFocusableInTouchMode = true
+                                applyTerminalViewAccessibility(this, isVisible, screenAccessible)
 
                                 val createClient: () -> TerminalViewClient = {
                                     object : TerminalViewClient {
@@ -750,6 +818,7 @@ fun LocalTerminalContent(
                         update = { tv ->
                             tv.setTopPadding(if (customSession != null) 0 else statusBarHeightPx)
                             tv.setTextSize(terminalTextSize)
+                            applyTerminalViewAccessibility(tv, isVisible, screenAccessible)
                             if (tv.currentSession != activeSession.terminalSession) {
                                 tv.attachSession(activeSession.terminalSession)
                                 activeSession.terminalSession.emulator?.setCursorStyle()
@@ -792,97 +861,158 @@ fun LocalTerminalContent(
 
             // EXTRA-KEYS TOOLBAR (Physical visual click feedback, auto-repeat for arrows, one-shot/lock modifiers).
             // Swipe it sideways for a text box (like Termux), for keyboards that only work in a normal text field.
-            androidx.compose.foundation.pager.HorizontalPager(
-                state = toolbarPager,
+            val announceModifierState: (String, ModifierState) -> Unit = { keyLabel, newState ->
+                announceForAccessibility(
+                    view,
+                    L.components.accessibilityHelpers.keyState(
+                        terminalKeyAccessibilityLabel(keyLabel),
+                        terminalModifierStateLabel(
+                            isLocked = newState == ModifierState.LOCKED,
+                            isActive = newState != ModifierState.OFF
+                        )
+                    )
+                )
+            }
+            val switchToolbarPageLabel = if (toolbarPager.currentPage == 0) {
+                L.components.localTerminal.switchToTextInput
+            } else {
+                L.components.localTerminal.switchToExtraKeys
+            }
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 3.dp)
-                    .height(70.dp), // two rows of keys: 34dp + 2dp + 34dp
-                verticalAlignment = Alignment.Top
-            ) { page ->
-                if (page == 1) {
-                    TerminalTextInputBox(
-                        value = toolbarInput,
-                        onValueChange = { toolbarInput = it },
-                        focusRequester = toolbarInputFocus,
-                        onSend = sendToolbarInput
-                    )
-                } else Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    // ROW 1: ESC | / | - | HOME | ↑ | END | PGUP
-                    Row(
+                    .padding(horizontal = 4.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                androidx.compose.foundation.pager.HorizontalPager(
+                    state = toolbarPager,
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = if (accessibilityEnabled) 98.dp else 70.dp)
+                        .semantics {
+                            customActions = listOf(
+                                CustomAccessibilityAction(switchToolbarPageLabel) {
+                                    coroutineScope.launch {
+                                        toolbarPager.animateScrollToPage(1 - toolbarPager.currentPage)
+                                    }
+                                    true
+                                }
+                            )
+                        },
+                    verticalAlignment = Alignment.Top
+                ) { page ->
+                    if (page == 1) {
+                        TerminalTextInputBox(
+                            value = toolbarInput,
+                            onValueChange = { toolbarInput = it },
+                            focusRequester = toolbarInputFocus,
+                            accessibilityEnabled = accessibilityEnabled,
+                            onSend = sendToolbarInput
+                        )
+                    } else Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        ExtraKey(label = "ESC", modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_ESCAPE, "\u001B")
+                        // ROW 1: ESC | / | - | HOME | ↑ | END | PGUP
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            ExtraKey(label = "ESC", accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_ESCAPE, "\u001B")
+                            }
+                            ExtraKey(label = "/", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_SLASH, "/")
+                            }
+                            ExtraKey(label = "-", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_MINUS, "-")
+                            }
+                            ExtraKey(label = "HOME", accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_MOVE_HOME, "\u0001")
+                            }
+                            ExtraKey(label = "↑", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_UP, "\u001B[A")
+                            }
+                            ExtraKey(label = "END", accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_MOVE_END, "\u0005")
+                            }
+                            ExtraKey(label = L.components.localTerminal.pgup, enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_PAGE_UP, "\u001B[5~")
+                            }
                         }
-                        ExtraKey(label = "/", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_SLASH, "/")
-                        }
-                        ExtraKey(label = "-", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_MINUS, "-")
-                        }
-                        ExtraKey(label = "HOME", modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_MOVE_HOME, "\u0001")
-                        }
-                        ExtraKey(label = "↑", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_UP, "\u001B[A")
-                        }
-                        ExtraKey(label = "END", modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_MOVE_END, "\u0005")
-                        }
-                        ExtraKey(label = L.components.localTerminal.pgup, enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_PAGE_UP, "\u001B[5~")
+
+                        // ROW 2: ↹ (TAB) | CTRL | ALT | ← | ↓ | → | PGDN
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            ExtraKey(label = "↹", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_TAB, "\t")
+                            }
+                            ExtraKey(
+                                label = L.components.localTerminal.ctrl,
+                                isActive = ctrlState != ModifierState.OFF,
+                                isLocked = ctrlState == ModifierState.LOCKED,
+                                accessibilityEnabled = accessibilityEnabled,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    val next = if (ctrlState == ModifierState.OFF) ModifierState.ONE_SHOT else ModifierState.OFF
+                                    ctrlState = next
+                                    announceModifierState(L.components.localTerminal.ctrl, next)
+                                },
+                                onLongClick = {
+                                    val next = if (ctrlState == ModifierState.LOCKED) ModifierState.OFF else ModifierState.LOCKED
+                                    ctrlState = next
+                                    announceModifierState(L.components.localTerminal.ctrl, next)
+                                }
+                            )
+                            ExtraKey(
+                                label = L.components.localTerminal.alt,
+                                isActive = altState != ModifierState.OFF,
+                                isLocked = altState == ModifierState.LOCKED,
+                                accessibilityEnabled = accessibilityEnabled,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    val next = if (altState == ModifierState.OFF) ModifierState.ONE_SHOT else ModifierState.OFF
+                                    altState = next
+                                    announceModifierState(L.components.localTerminal.alt, next)
+                                },
+                                onLongClick = {
+                                    val next = if (altState == ModifierState.LOCKED) ModifierState.OFF else ModifierState.LOCKED
+                                    altState = next
+                                    announceModifierState(L.components.localTerminal.alt, next)
+                                }
+                            )
+                            ExtraKey(label = "←", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_LEFT, "\u001B[D")
+                            }
+                            ExtraKey(label = "↓", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_DOWN, "\u001B[B")
+                            }
+                            ExtraKey(label = "→", enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_RIGHT, "\u001B[C")
+                            }
+                            ExtraKey(label = L.components.localTerminal.pgdn, enableRepeat = true, accessibilityEnabled = accessibilityEnabled, modifier = Modifier.weight(1f)) {
+                                sendKeyToTerminal(KeyEvent.KEYCODE_PAGE_DOWN, "\u001B[6~")
+                            }
                         }
                     }
-
-                    // ROW 2: ↹ (TAB) | CTRL | ALT | ← | ↓ | → | PGDN
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                }
+                if (accessibilityEnabled) {
+                    IconButton(
+                        onClick = {
+                            coroutineScope.launch {
+                                toolbarPager.animateScrollToPage(1 - toolbarPager.currentPage)
+                            }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
-                        ExtraKey(label = "↹", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_TAB, "\t")
-                        }
-                        ExtraKey(
-                            label = L.components.localTerminal.ctrl,
-                            isActive = ctrlState != ModifierState.OFF,
-                            isLocked = ctrlState == ModifierState.LOCKED,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                ctrlState = if (ctrlState == ModifierState.OFF) ModifierState.ONE_SHOT else ModifierState.OFF
-                            },
-                            onLongClick = {
-                                ctrlState = if (ctrlState == ModifierState.LOCKED) ModifierState.OFF else ModifierState.LOCKED
-                            }
+                        Icon(
+                            imageVector = if (toolbarPager.currentPage == 0) Icons.Outlined.Edit else Icons.Outlined.Tune,
+                            contentDescription = switchToolbarPageLabel,
+                            tint = ensureAccessibleContrast(Color.LightGray, backgroundColor, 4.5f),
+                            modifier = Modifier.size(18.dp)
                         )
-                        ExtraKey(
-                            label = L.components.localTerminal.alt,
-                            isActive = altState != ModifierState.OFF,
-                            isLocked = altState == ModifierState.LOCKED,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                altState = if (altState == ModifierState.OFF) ModifierState.ONE_SHOT else ModifierState.OFF
-                            },
-                            onLongClick = {
-                                altState = if (altState == ModifierState.LOCKED) ModifierState.OFF else ModifierState.LOCKED
-                            }
-                        )
-                        ExtraKey(label = "←", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_LEFT, "\u001B[D")
-                        }
-                        ExtraKey(label = "↓", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_DOWN, "\u001B[B")
-                        }
-                        ExtraKey(label = "→", enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_DPAD_RIGHT, "\u001B[C")
-                        }
-                        ExtraKey(label = L.components.localTerminal.pgdn, enableRepeat = true, modifier = Modifier.weight(1f)) {
-                            sendKeyToTerminal(KeyEvent.KEYCODE_PAGE_DOWN, "\u001B[6~")
-                        }
                     }
                 }
             }
@@ -907,12 +1037,48 @@ fun LocalTerminalContent(
 
         // DRAGGABLE FLOATING TAB PILL (Move anywhere on screen); can be turned off in Settings → Terminal
         if (showFloatingPill && sessionPillEnabled && customSession == null) {
+            val pillBg = ai.antigem.theme.AppColors.editorPanel
+            val pillMuted = ensureAccessibleContrast(Color.LightGray, pillBg, 4.5f)
+            val pillGray = ensureAccessibleContrast(Color.Gray, pillBg, 4.5f)
+            val pillSubtitle = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorText.copy(alpha = 0.53f), pillBg, 4.5f)
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
                     .padding(top = 8.dp, end = 10.dp)
                     .offset { IntOffset(dragOffsetX.roundToInt(), dragOffsetY.roundToInt()) }
+                    .semantics {
+                        customActions = listOf(
+                            CustomAccessibilityAction(L.components.localTerminal.readTerminalOutput) {
+                                showTranscriptReader = true
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.localTerminal.movePillLeft) {
+                                dragOffsetX -= 60f
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.localTerminal.movePillRight) {
+                                dragOffsetX += 60f
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.localTerminal.movePillUp) {
+                                dragOffsetY -= 60f
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.localTerminal.movePillDown) {
+                                dragOffsetY += 60f
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.localTerminal.switchTab) {
+                                isTabsMenuExpanded = true
+                                true
+                            },
+                            CustomAccessibilityAction(L.components.localTerminal.newTab) {
+                                LocalTerminalManager.createNewSession(context)
+                                true
+                            }
+                        )
+                    }
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
@@ -921,7 +1087,7 @@ fun LocalTerminalContent(
                         }
                     },
                 shape = RoundedCornerShape(20.dp),
-                color = ai.antigem.theme.AppColors.editorPanel.copy(alpha = 0.95f),
+                color = pillBg.copy(alpha = 0.95f),
                 border = BorderStroke(1.dp, ai.antigem.theme.AppColors.editorText.copy(alpha = 0.22f)),
                 shadowElevation = 8.dp
             ) {
@@ -934,8 +1100,10 @@ fun LocalTerminalContent(
                     val activeTitle by activeSession.title.collectAsState()
                     Row(
                         modifier = Modifier
+                            .minTouchTarget(48.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { isTabsMenuExpanded = true }
+                            .clickable(role = Role.Button) { isTabsMenuExpanded = true }
+                            .semantics(mergeDescendants = true) { role = Role.Button }
                             .padding(horizontal = 4.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -948,7 +1116,7 @@ fun LocalTerminalContent(
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
                             contentDescription = L.components.localTerminal.switchTab,
-                            tint = Color.LightGray,
+                            tint = pillMuted,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -962,7 +1130,7 @@ fun LocalTerminalContent(
                             dismissOnClickOutside = true,
                             dismissOnBackPress = true
                         ),
-                        modifier = Modifier.background(ai.antigem.theme.AppColors.editorPanel)
+                        modifier = Modifier.background(pillBg)
                     ) {
                         sessions.forEach { sess ->
                             val isSelected = sess.id == activeSession.id
@@ -993,13 +1161,13 @@ fun LocalTerminalContent(
                                                 sessionToClose = sess
                                                 isTabsMenuExpanded = false
                                             },
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.minTouchTarget(48.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.Close,
                                                 contentDescription = L.common.closeTab,
-                                                tint = Color.Gray,
-                                                modifier = Modifier.size(12.dp)
+                                                tint = pillGray,
+                                                modifier = Modifier.size(14.dp)
                                             )
                                         }
                                     }
@@ -1017,8 +1185,21 @@ fun LocalTerminalContent(
                             color = Color.Transparent,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .minTouchTarget(48.dp)
+                                .semantics(mergeDescendants = true) {
+                                    role = Role.Button
+                                    customActions = listOf(
+                                        CustomAccessibilityAction(L.components.localTerminal.longPressToForceBashShell) {
+                                            LocalTerminalManager.createNewSession(context, forceShell = "bash")
+                                            android.widget.Toast.makeText(context, L.components.localTerminal.createdBashSession, android.widget.Toast.LENGTH_SHORT).show()
+                                            isTabsMenuExpanded = false
+                                            true
+                                        }
+                                    )
+                                }
                                 .combinedClickable(
                                     enabled = !isSyncingTmux,
+                                    role = Role.Button,
                                     onClick = {
                                         LocalTerminalManager.createNewSession(context)
                                         isTabsMenuExpanded = false
@@ -1035,20 +1216,20 @@ fun LocalTerminalContent(
                                 Icon(
                                     imageVector = Icons.Default.Add,
                                     contentDescription = L.components.localTerminal.newTab,
-                                    tint = if (!isSyncingTmux) ClaudeTerracotta else Color.Gray,
+                                    tint = if (!isSyncingTmux) ClaudeTerracotta else pillGray,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
                                         text = L.components.localTerminal.newSession,
-                                        color = if (!isSyncingTmux) ClaudeTerracotta else Color.Gray,
+                                        color = if (!isSyncingTmux) ClaudeTerracotta else pillGray,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
                                         text = L.components.localTerminal.longPressToForceBashShell,
-                                        color = ai.antigem.theme.AppColors.editorText.copy(alpha = 0.53f),
+                                        color = pillSubtitle,
                                         fontSize = 10.sp
                                     )
                                 }
@@ -1072,7 +1253,7 @@ fun LocalTerminalContent(
                 // Close / Hide Button
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -1154,7 +1335,8 @@ fun LocalTerminalContent(
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = ai.antigem.theme.AppColors.danger),
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Text(L.common.closeTab, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -1162,13 +1344,118 @@ fun LocalTerminalContent(
                 dismissButton = {
                     TextButton(
                         onClick = { sessionToClose = null },
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
-                        Text(L.common.cancel, color = Color.Gray, fontSize = 13.sp)
+                        Text(
+                            L.common.cancel,
+                            color = ensureAccessibleContrast(Color.Gray, ai.antigem.theme.AppColors.editorBg, 4.5f),
+                            fontSize = 13.sp
+                        )
                     }
                 }
             )
         }
+
+        if (showTranscriptReader) {
+            val transcriptText = remember(showTranscriptReader, currentTerminalView) {
+                currentTerminalView?.getCleanTranscript(120).orEmpty()
+            }
+            val transcriptLines = remember(transcriptText) {
+                if (transcriptText.isBlank()) emptyList() else transcriptText.lines()
+            }
+            AlertDialog(
+                onDismissRequest = { showTranscriptReader = false },
+                shape = RoundedCornerShape(18.dp),
+                containerColor = ai.antigem.theme.AppColors.editorBg,
+                title = {
+                    Text(
+                        text = L.components.localTerminal.terminalOutput,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                },
+                text = {
+                    if (transcriptLines.isEmpty()) {
+                        Text(
+                            text = L.components.localTerminal.noTerminalOutputYet,
+                            fontSize = 13.sp,
+                            color = ensureAccessibleContrast(Color.LightGray, ai.antigem.theme.AppColors.editorBg, 4.5f)
+                        )
+                    } else {
+                        SelectionContainer {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 360.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                items(transcriptLines) { line ->
+                                    Text(
+                                        text = line,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Terminal output", transcriptText))
+                            android.widget.Toast.makeText(context, L.common.copied, android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = transcriptText.isNotBlank(),
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
+                        Text(
+                            text = L.components.localTerminal.copyAllOutput,
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { showTranscriptReader = false },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
+                        Text(
+                            text = L.common.close,
+                            color = ensureAccessibleContrast(Color.LightGray, ai.antigem.theme.AppColors.editorBg, 4.5f),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            )
+        }
+    }
+}
+
+private fun applyTerminalViewAccessibility(
+    tv: TerminalView,
+    isVisible: Boolean,
+    screenAccessible: Boolean
+) {
+    tv.isFocusable = isVisible
+    tv.isFocusableInTouchMode = isVisible
+    tv.importantForAccessibility = if (isVisible && screenAccessible) {
+        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
+    } else {
+        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+    }
+    if (tv.contentDescription.isNullOrBlank()) {
+        tv.contentDescription = L.components.localTerminal.terminalView
     }
 }
 
@@ -1177,6 +1464,7 @@ private fun ExtraKey(
     label: String,
     isActive: Boolean = false,
     isLocked: Boolean = false,
+    accessibilityEnabled: Boolean = false,
     modifier: Modifier = Modifier,
     enableRepeat: Boolean = false,
     onLongClick: (() -> Unit)? = null,
@@ -1186,6 +1474,9 @@ private fun ExtraKey(
     val currentOnLongClick by rememberUpdatedState(onLongClick)
     val scope = rememberCoroutineScope()
     var isPressed by remember { mutableStateOf(false) }
+
+    val spokenLabel = terminalKeyAccessibilityLabel(label)
+    val modifierStateText = terminalModifierStateLabel(isLocked, isActive)
 
     val keyModifier = if (enableRepeat) {
         modifier.pointerInput(Unit) {
@@ -1253,7 +1544,31 @@ private fun ExtraKey(
 
     Surface(
         modifier = keyModifier
-            .height(34.dp)
+            .then(if (accessibilityEnabled) Modifier.minTouchTarget(48.dp) else Modifier.height(34.dp))
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = spokenLabel
+                if (onLongClick != null || isActive || isLocked) {
+                    stateDescription = modifierStateText
+                }
+                onClick(label = spokenLabel) {
+                    currentOnClick()
+                    true
+                }
+                val longClickAction = currentOnLongClick
+                if (longClickAction != null) {
+                    onLongClick(label = spokenLabel) {
+                        longClickAction.invoke()
+                        true
+                    }
+                    customActions = listOf(
+                        CustomAccessibilityAction(spokenLabel) {
+                            longClickAction.invoke()
+                            true
+                        }
+                    )
+                }
+            }
             .clip(RoundedCornerShape(5.dp)),
         color = backgroundColor,
         border = border,
@@ -1299,14 +1614,22 @@ private fun TerminalTextInputBox(
     value: androidx.compose.ui.text.input.TextFieldValue,
     onValueChange: (androidx.compose.ui.text.input.TextFieldValue) -> Unit,
     focusRequester: androidx.compose.ui.focus.FocusRequester,
+    accessibilityEnabled: Boolean = false,
     onSend: () -> Unit
 ) {
     val shape = RoundedCornerShape(8.dp)
+    val panelColor = ai.antigem.theme.AppColors.editorPanel
+    val placeholderColor = ensureAccessibleContrast(
+        ai.antigem.theme.AppColors.editorText.copy(alpha = 0.45f),
+        panelColor,
+        4.5f
+    )
     Row(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .height(if (accessibilityEnabled) 98.dp else 70.dp)
             .clip(shape)
-            .background(ai.antigem.theme.AppColors.editorPanel)
+            .background(panelColor)
             .border(1.dp, ai.antigem.theme.AppColors.editorText.copy(alpha = 0.18f), shape)
             .padding(start = 12.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1315,7 +1638,7 @@ private fun TerminalTextInputBox(
             if (value.text.isEmpty()) {
                 Text(
                     text = L.components.localTerminal.typeHereEnterPutsItIn,
-                    color = ai.antigem.theme.AppColors.editorText.copy(alpha = 0.45f),
+                    color = placeholderColor,
                     fontSize = 13.sp,
                     maxLines = 1
                 )
@@ -1340,7 +1663,7 @@ private fun TerminalTextInputBox(
                     .focusRequester(focusRequester)
             )
         }
-        IconButton(onClick = onSend, modifier = Modifier.size(40.dp)) {
+        IconButton(onClick = onSend, modifier = Modifier.minTouchTarget(48.dp)) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardReturn,
                 contentDescription = L.components.localTerminal.putInTheTerminalEnter,

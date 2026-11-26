@@ -111,6 +111,17 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selectableGroup
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -315,13 +326,22 @@ fun PageOverview(
         // The header's switch shows the new layout at once; the saved setting follows
         var shownLayout by remember(layout) { mutableStateOf(knownOverviewLayout(layout)) }
 
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .semantics {
+                    isTraversalGroup = true
+                    paneTitle = L.components.pageOverview.pages
+                },
+            color = MaterialTheme.colorScheme.background
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .navigationBarsPadding()
             ) {
+                val bgColor = MaterialTheme.colorScheme.background
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -338,7 +358,11 @@ fun PageOverview(
                         Text(
                             text = L.components.pageOverview.tapToOpenHoldAndDrag,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            color = ensureAccessibleContrast(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                                bgColor,
+                                minRatio = 4.5f
+                            ),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -354,7 +378,11 @@ fun PageOverview(
                         Icon(
                             imageVector = Icons.Outlined.Close,
                             contentDescription = L.components.pageOverview.closePageOverview,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                            tint = ensureAccessibleContrast(
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                bgColor,
+                                minRatio = 3.0f
+                            )
                         )
                     }
                 }
@@ -365,23 +393,45 @@ fun PageOverview(
                         if (page.mode == currentViewMode) onDismiss() else onOpenPage(page.id)
                     }
                 }
+                val tileModFor: (OverviewPage, PageStatus, Modifier) -> Modifier = { page, status, baseMod ->
+                    val idx = pages.indexOf(page)
+                    baseMod.overviewTileSemantics(
+                        label = page.label,
+                        isCurrent = page.mode == currentViewMode,
+                        statusText = status.text,
+                        canMoveEarlier = idx > 0,
+                        canMoveLater = idx in 0 until pages.lastIndex,
+                        onMoveEarlier = {
+                            reorder.moveStep(page.id, -1).also { moved ->
+                                if (moved) announceForAccessibility(view, L.components.pageOverview.movedName(page.label))
+                            }
+                        },
+                        onMoveLater = {
+                            reorder.moveStep(page.id, 1).also { moved ->
+                                if (moved) announceForAccessibility(view, L.components.pageOverview.movedName(page.label))
+                            }
+                        }
+                    )
+                }
                 when (shownLayout) {
                     "FIT" -> FitPages(pages, reorder) { page, modifier ->
+                        val status = pageStatus(page.id, chatWorking, chatConversation)
                         FitPageCard(
                             page = page,
                             isCurrent = page.mode == currentViewMode,
-                            status = pageStatus(page.id, chatWorking, chatConversation),
+                            status = status,
                             onClick = { openOrClose(page) },
-                            modifier = modifier
+                            modifier = tileModFor(page, status, modifier)
                         )
                     }
                     "LIST" -> PageTiles(pages, reorder, columns = 1, gap = 8.dp) { page, modifier ->
+                        val status = pageStatus(page.id, chatWorking, chatConversation)
                         PageRow(
                             page = page,
                             isCurrent = page.mode == currentViewMode,
-                            status = pageStatus(page.id, chatWorking, chatConversation),
+                            status = status,
                             onClick = { openOrClose(page) },
-                            modifier = modifier
+                            modifier = tileModFor(page, status, modifier)
                         )
                     }
                     else -> BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -389,12 +439,13 @@ fun PageOverview(
                         val gap = 10.dp
                         val columns = ((maxWidth - 24.dp + gap) / (150.dp + gap)).toInt().coerceAtLeast(1)
                         PageTiles(pages, reorder, columns = columns, gap = gap) { page, modifier ->
+                            val status = pageStatus(page.id, chatWorking, chatConversation)
                             PageCard(
                                 page = page,
                                 isCurrent = page.mode == currentViewMode,
-                                status = pageStatus(page.id, chatWorking, chatConversation),
+                                status = status,
                                 onClick = { openOrClose(page) },
-                                modifier = modifier
+                                modifier = tileModFor(page, status, modifier)
                             )
                         }
                     }
@@ -407,29 +458,52 @@ fun PageOverview(
 /** The header's layout switch: Large cards, Fit screen, List. */
 @Composable
 private fun LayoutSwitch(selected: String, onSelect: (String) -> Unit) {
+    val bgColor = MaterialTheme.colorScheme.background
+    val unselectedTint = ensureAccessibleContrast(
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+        bgColor,
+        minRatio = 3.0f
+    )
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-            .padding(2.dp),
+            .padding(2.dp)
+            .semantics {
+                isTraversalGroup = true
+                selectableGroup()
+                contentDescription = L.components.pageOverview.viewLayouts
+            },
         horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         OverviewLayouts.forEach { (id, label, icon) ->
             val isSelected = id == selected
             Box(
                 modifier = Modifier
-                    .size(34.dp)
+                    .minTouchTarget(48.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(if (isSelected) ClaudeTerracotta.copy(alpha = 0.16f) else Color.Transparent)
-                    .clickable(onClickLabel = label) { if (!isSelected) onSelect(id) },
+                    .clickable(onClickLabel = label) { if (!isSelected) onSelect(id) }
+                    .semantics(mergeDescendants = true) {
+                        role = Role.Tab
+                        this.selected = isSelected
+                        contentDescription = label
+                    },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    modifier = Modifier.size(19.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) ClaudeTerracotta.copy(alpha = 0.16f) else Color.Transparent),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isSelected) ensureAccessibleContrast(ClaudeTerracotta, bgColor, 3.0f) else unselectedTint,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
             }
         }
     }
@@ -516,6 +590,17 @@ private class OverviewReorder(initial: List<String>) {
 
     /** A hold that ended without moving still releases like a tap: that one doesn't open the page. */
     fun clickAllowed(): Boolean = draggedId == null && SystemClock.uptimeMillis() - endedAt > 300
+
+    /** Moves [id] by [delta] positions for TalkBack custom actions, persisting the new order. */
+    fun moveStep(id: String, delta: Int): Boolean {
+        val from = order.indexOf(id)
+        val to = (from + delta).coerceIn(0, order.lastIndex)
+        if (from < 0 || from == to) return false
+        order.removeAt(from)
+        order.add(to, id)
+        onDropped(order.toList())
+        return true
+    }
 
     /** How far the dragged tile is moved from its place, to stay under the finger. */
     fun liftOffset(id: String): Offset = tilePos[id]?.let { finger - grab - it } ?: Offset.Zero
@@ -641,6 +726,25 @@ private fun PageTiles(
     }
 }
 
+private fun Modifier.overviewTileSemantics(
+    label: String,
+    isCurrent: Boolean,
+    statusText: String,
+    canMoveEarlier: Boolean,
+    canMoveLater: Boolean,
+    onMoveEarlier: () -> Boolean,
+    onMoveLater: () -> Boolean
+): Modifier = this.semantics(mergeDescendants = true) {
+    role = Role.Button
+    selected = isCurrent
+    contentDescription = "$label, $statusText"
+    if (isCurrent) stateDescription = L.components.pageOverview.currentPage
+    val actions = mutableListOf<CustomAccessibilityAction>()
+    if (canMoveEarlier) actions += CustomAccessibilityAction(L.components.pageOverview.moveEarlier, onMoveEarlier)
+    if (canMoveLater) actions += CustomAccessibilityAction(L.components.pageOverview.moveLater, onMoveLater)
+    if (actions.isNotEmpty()) customActions = actions
+}
+
 @Composable
 private fun PageCard(
     page: OverviewPage,
@@ -709,7 +813,12 @@ private fun PageCard(
             StatusLine(
                 status = status,
                 fontSize = 11.sp,
-                normalColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                normalColor = ensureAccessibleContrast(
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                    AppColors.card,
+                    minRatio = 4.5f
+                ),
+                bgColor = AppColors.card,
                 modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 10.dp)
             )
         }
@@ -823,7 +932,12 @@ private fun FitPageCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                StatusLine(status = status, fontSize = 10.sp, normalColor = Color.White.copy(alpha = 0.75f))
+                StatusLine(
+                    status = status,
+                    fontSize = 10.sp,
+                    normalColor = Color.White.copy(alpha = 0.9f),
+                    bgColor = Color(0xFF1A1A1A)
+                )
             }
         }
     }
@@ -871,7 +985,12 @@ private fun PageRow(
                 StatusLine(
                     status = status,
                     fontSize = 11.5.sp,
-                    normalColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    normalColor = ensureAccessibleContrast(
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
+                        AppColors.card,
+                        minRatio = 4.5f
+                    ),
+                    bgColor = AppColors.card
                 )
             }
         }
@@ -880,7 +999,13 @@ private fun PageRow(
 
 /** A page's status text, green with a dot while it is working / running. */
 @Composable
-private fun StatusLine(status: PageStatus, fontSize: TextUnit, normalColor: Color, modifier: Modifier = Modifier) {
+private fun StatusLine(
+    status: PageStatus,
+    fontSize: TextUnit,
+    normalColor: Color,
+    bgColor: Color = AppColors.card,
+    modifier: Modifier = Modifier
+) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (status.live) {
             Box(
@@ -894,7 +1019,7 @@ private fun StatusLine(status: PageStatus, fontSize: TextUnit, normalColor: Colo
         Text(
             text = status.text,
             fontSize = fontSize,
-            color = if (status.live) AppColors.success else normalColor,
+            color = if (status.live) ensureAccessibleContrast(AppColors.success, bgColor, minRatio = 4.5f) else normalColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -947,8 +1072,7 @@ private fun pageStatus(
         PageStatus(
             when (notes.size) {
                 0 -> L.components.pageOverview.noNotes
-                1 -> "1 note"
-                else -> "${notes.size} notes"
+                else -> L.components.pageOverview.countNotes(notes.size)
             }
         )
     }
@@ -967,13 +1091,13 @@ private fun pageStatus(
         val running = runs.count { it.status == RunStatus.RUNNING }
         val last = runs.maxByOrNull { it.startedAt }
         when {
-            running > 0 -> PageStatus("$running running", live = true)
+            running > 0 -> PageStatus(L.components.pageOverview.countRunning(running), live = true)
             last != null -> PageStatus(
-                "${last.name} · " + when (last.status) {
-                    RunStatus.SUCCEEDED -> "done"
-                    RunStatus.FAILED -> "failed"
-                    RunStatus.STOPPED -> "stopped"
-                    RunStatus.RUNNING -> "running"
+                when (last.status) {
+                    RunStatus.SUCCEEDED -> L.components.pageOverview.nameDone(last.name)
+                    RunStatus.FAILED -> L.components.pageOverview.nameFailed(last.name)
+                    RunStatus.STOPPED -> L.components.pageOverview.nameStopped(last.name)
+                    RunStatus.RUNNING -> L.components.pageOverview.nameRunning(last.name)
                 }
             )
             else -> PageStatus(L.components.pageOverview.nothingRunning)

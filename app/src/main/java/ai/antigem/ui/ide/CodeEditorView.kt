@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.util.Log
 import android.widget.FrameLayout
 import io.github.rosemoe.sora.event.ContentChangeEvent
+import io.github.rosemoe.sora.event.SelectionChangeEvent
 import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
@@ -55,8 +56,8 @@ class CodeEditorView @JvmOverloads constructor(
         val scheme = if (dark) SchemeDarcula() else EditorColorScheme()
         // syntax and text colors are kept readable on the background: one too close to it is moved lighter / darker
         val text = readable(t.text, bg, 4.5)
-        val muted = readable(t.muted, bg, 2.5)
-        fun syntax(c: Int, min: Double = 3.0) = readable(c, bg, min)
+        val muted = readable(t.muted, bg, 4.5)
+        fun syntax(c: Int, min: Double = 4.5) = readable(c, bg, min)
         val accent = readable(t.accent, bg, 3.0)
 
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, bg)
@@ -88,7 +89,7 @@ class CodeEditorView @JvmOverloads constructor(
         scheme.setColor(EditorColorScheme.IDENTIFIER_VAR, text)
         scheme.setColor(EditorColorScheme.KEYWORD, syntax(t.keyword))
         scheme.setColor(EditorColorScheme.LITERAL, syntax(t.string))
-        scheme.setColor(EditorColorScheme.COMMENT, syntax(t.comment, 2.5))
+        scheme.setColor(EditorColorScheme.COMMENT, syntax(t.comment, 4.5))
         scheme.setColor(EditorColorScheme.OPERATOR, syntax(t.punctuation))
         scheme.setColor(EditorColorScheme.FUNCTION_NAME, syntax(t.function))
         scheme.setColor(EditorColorScheme.ANNOTATION, syntax(t.annotation))
@@ -116,6 +117,7 @@ class CodeEditorView @JvmOverloads constructor(
     var onContentChangeListener: ((String) -> Unit)? = null
     var onUndoRedoStateListener: ((canUndo: Boolean, canRedo: Boolean) -> Unit)? = null
     var onSearchResultListener: ((matchCount: Int, currentIndex: Int) -> Unit)? = null
+    var onCursorChangeListener: ((line: Int, col: Int, totalLines: Int) -> Unit)? = null
 
     var isWordWrapEnabled: Boolean
         get() = editor.isWordwrap
@@ -142,6 +144,10 @@ class CodeEditorView @JvmOverloads constructor(
             Log.d(TAG, "ContentChangeEvent: editorTextLen=${editor.text.length}")
             onContentChangeListener?.invoke(editor.text.toString())
             onUndoRedoStateListener?.invoke(editor.canUndo(), editor.canRedo())
+        }
+
+        editor.subscribeEvent(SelectionChangeEvent::class.java) { _, _ ->
+            emitCursorState()
         }
 
         editor.subscribeEvent(io.github.rosemoe.sora.event.PublishSearchResultEvent::class.java) { _, _ ->
@@ -235,6 +241,21 @@ class CodeEditorView @JvmOverloads constructor(
         return super.dispatchTouchEvent(ev)
     }
 
+    private fun emitCursorState() {
+        onCursorChangeListener?.invoke(
+            editor.cursor.leftLine + 1,
+            editor.cursor.leftColumn + 1,
+            editor.lineCount
+        )
+    }
+
+    /** Moves the editor cursor and viewport to the 1-based [oneBasedLine] and notifies listeners. */
+    fun goToLine(oneBasedLine: Int) {
+        val target = (oneBasedLine - 1).coerceIn(0, (editor.lineCount - 1).coerceAtLeast(0))
+        editor.jumpToLine(target)
+        emitCursorState()
+    }
+
     fun updateContentIfDifferent(content: String) {
         if (editor.text.toString() != content) {
             val targetBottomLine = editor.lastVisibleLine
@@ -247,17 +268,22 @@ class CodeEditorView @JvmOverloads constructor(
                             val safeLine = targetBottomLine.coerceIn(0, (editor.lineCount - 1).coerceAtLeast(0))
                             editor.setSelection(safeLine, 0)
                             editor.ensureSelectionVisible()
+                            emitCursorState()
                         } catch (_: Exception) {}
                     }
                 }
             } finally {
                 isSettingContentProgrammatically = false
             }
+            emitCursorState()
         }
     }
 
     fun setFile(fileName: String, content: String) {
         Log.d(TAG, "setFile: requestFile=$fileName, currentFile=$currentFile, editorLength=${editor.text.length}")
+        val editorDescription = ai.antigem.i18n.L.ide.screen.codeEditorFilename(fileName)
+        contentDescription = editorDescription
+        editor.contentDescription = editorDescription
         if (currentFile != fileName) {
             currentFile = fileName
             val ext = fileName.substringAfterLast('.', "").lowercase()
@@ -273,6 +299,7 @@ class CodeEditorView @JvmOverloads constructor(
             } finally {
                 isSettingContentProgrammatically = false
             }
+            emitCursorState()
         } else {
             updateContentIfDifferent(content)
         }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,6 +29,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,6 +73,12 @@ fun FloatingTerminalInspector(
     val runningCommandsCount = tabs.flatMap { it.commands }.count { it.status == CommandStatus.RUNNING }
     val isAnyTabBusy = tabs.any { it.status == SessionTabStatus.BUSY }
 
+    val hudLabel = when {
+        runningCommandsCount > 0 -> L.components.floatingTerminalInspector.countRunning(runningCommandsCount)
+        tabs.size > 1 -> L.components.floatingTerminalInspector.countSessions(tabs.size)
+        else -> L.common.termux
+    }
+
     // Floating HUD Pill
     Box(modifier = modifier) {
         Surface(
@@ -75,7 +90,12 @@ fun FloatingTerminalInspector(
                 if (runningCommandsCount > 0) ClaudeTerracotta.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.15f)
             ),
             shadowElevation = 6.dp,
-            modifier = Modifier.padding(horizontal = 8.dp)
+            modifier = Modifier
+                .padding(horizontal = 8.dp)
+                .minTouchTarget(48.dp)
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                }
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -98,20 +118,14 @@ fun FloatingTerminalInspector(
                                 when (connectionStatus) {
                                     SshConnectionStatus.CONNECTED -> QuotaGreen
                                     SshConnectionStatus.CONNECTING -> ClaudeTerracotta
-                                    SshConnectionStatus.ERROR -> Color.Red
-                                    else -> Color.Gray
+                                    SshConnectionStatus.ERROR -> ensureAccessibleContrast(Color.Red, AppColors.editorBg, 3.0f)
+                                    else -> ensureAccessibleContrast(Color.Gray, AppColors.editorBg, 3.0f)
                                 }
                             )
                     )
                 }
 
                 Spacer(modifier = Modifier.width(7.dp))
-
-                val hudLabel = when {
-                    runningCommandsCount > 0 -> "$runningCommandsCount running"
-                    tabs.size > 1 -> "${tabs.size} sessions"
-                    else -> L.common.termux
-                }
 
                 Text(
                     text = hudLabel,
@@ -125,7 +139,7 @@ fun FloatingTerminalInspector(
                 Icon(
                     imageVector = Icons.Default.Terminal,
                     contentDescription = L.common.terminal,
-                    tint = ClaudeTerracotta,
+                    tint = ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorBg, 3.0f),
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -234,12 +248,12 @@ private fun TerminalInspectorDialogContent(
 
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(30.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = L.common.close,
-                        tint = Color.Gray,
+                        tint = ensureAccessibleContrast(Color.Gray, AppColors.editorPanel, 4.5f),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -251,6 +265,7 @@ private fun TerminalInspectorDialogContent(
                     .fillMaxWidth()
                     .background(ai.antigem.theme.AppColors.editorBg)
                     .horizontalScroll(rememberScrollState())
+                    .selectableGroup()
                     .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -258,13 +273,29 @@ private fun TerminalInspectorDialogContent(
                     val isSelected = tab.id == activeTabId
                     val isBusy = tab.status == SessionTabStatus.BUSY
                     val isKilled = tab.status == SessionTabStatus.KILLED
+                    val isClosable = tabs.size > 1 && !tab.isPrimary
+                    val tabBg = if (isSelected) ai.antigem.theme.AppColors.editorLine else ai.antigem.theme.AppColors.editorBg
+                    val mutedTabText = ensureAccessibleContrast(Color.Gray, tabBg, 4.5f)
 
                     Surface(
                         modifier = Modifier
                             .padding(end = 6.dp)
+                            .minTouchTarget(48.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { onSelectTab(tab.id) },
-                        color = if (isSelected) ai.antigem.theme.AppColors.editorLine else ai.antigem.theme.AppColors.editorBg,
+                            .semantics(mergeDescendants = true) {
+                                role = Role.Tab
+                                selected = isSelected
+                                if (isClosable) {
+                                    customActions = listOf(
+                                        CustomAccessibilityAction(L.common.closeTab) {
+                                            onCloseTab(tab.id)
+                                            true
+                                        }
+                                    )
+                                }
+                            }
+                            .clickable(role = Role.Tab) { onSelectTab(tab.id) },
+                        color = tabBg,
                         shape = RoundedCornerShape(8.dp),
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
@@ -295,17 +326,18 @@ private fun TerminalInspectorDialogContent(
                                 text = tab.name,
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) Color.White else Color.Gray
+                                color = if (isSelected) Color.White else mutedTabText
                             )
 
-                            if (isSelected && tabs.size > 1 && !tab.isPrimary) {
+                            if (isSelected && isClosable) {
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = L.common.closeTab,
-                                    tint = Color.Gray,
+                                    contentDescription = null,
+                                    tint = mutedTabText,
                                     modifier = Modifier
                                         .size(13.dp)
+                                        .clearAndSetSemantics { }
                                         .clickable { onCloseTab(tab.id) }
                                 )
                             }
@@ -316,8 +348,12 @@ private fun TerminalInspectorDialogContent(
                 // New Tab '+' Button
                 Surface(
                     modifier = Modifier
+                        .minTouchTarget(48.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { onCreateTab() },
+                        .semantics(mergeDescendants = true) {
+                            role = Role.Button
+                        }
+                        .clickable(role = Role.Button) { onCreateTab() },
                     color = ai.antigem.theme.AppColors.editorPanel,
                     shape = RoundedCornerShape(8.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
@@ -329,7 +365,7 @@ private fun TerminalInspectorDialogContent(
                         Icon(
                             imageVector = Icons.Default.Add,
                             contentDescription = L.components.floatingTerminalInspector.newSession,
-                            tint = ClaudeTerracotta,
+                            tint = ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorPanel, 4.5f),
                             modifier = Modifier.size(15.dp)
                         )
                     }
@@ -348,7 +384,7 @@ private fun TerminalInspectorDialogContent(
                     Icon(
                         imageVector = Icons.Default.Folder,
                         contentDescription = null,
-                        tint = Color.Gray,
+                        tint = ensureAccessibleContrast(Color.Gray, AppColors.editorPanel, 3.0f),
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(5.dp))
@@ -356,7 +392,7 @@ private fun TerminalInspectorDialogContent(
                         text = activeTab.workingDirectory,
                         fontSize = 11.5.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color.LightGray,
+                        color = ensureAccessibleContrast(Color.LightGray, AppColors.editorPanel, 4.5f),
                         maxLines = 1,
                         modifier = Modifier.weight(1f)
                     )
@@ -365,12 +401,12 @@ private fun TerminalInspectorDialogContent(
                     if (activeTab.commands.isNotEmpty()) {
                         IconButton(
                             onClick = { onClearTab(activeTab.id) },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.DeleteSweep,
                                 contentDescription = L.components.floatingTerminalInspector.clearTabHistory,
-                                tint = Color.Gray,
+                                tint = ensureAccessibleContrast(Color.Gray, AppColors.editorPanel, 4.5f),
                                 modifier = Modifier.size(15.dp)
                             )
                         }
@@ -387,6 +423,8 @@ private fun TerminalInspectorDialogContent(
                     .padding(8.dp)
             ) {
                 if (activeTab == null || activeTab.commands.isEmpty()) {
+                    val emptySubtle = ensureAccessibleContrast(Color.Gray, AppColors.terminalBg, 4.5f)
+                    val emptySecondary = ensureAccessibleContrast(Color.DarkGray, AppColors.terminalBg, 4.5f)
                     Column(
                         modifier = Modifier.fillMaxSize(),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -395,19 +433,19 @@ private fun TerminalInspectorDialogContent(
                         Icon(
                             imageVector = Icons.Default.Terminal,
                             contentDescription = null,
-                            tint = Color.DarkGray,
+                            tint = ensureAccessibleContrast(Color.DarkGray, AppColors.terminalBg, 3.0f),
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = L.components.floatingTerminalInspector.sessionReady,
                             fontSize = 13.sp,
-                            color = Color.Gray
+                            color = emptySubtle
                         )
                         Text(
                             text = L.components.floatingTerminalInspector.aiToolCommandsAndManualCommands,
                             fontSize = 11.5.sp,
-                            color = Color.DarkGray
+                            color = emptySecondary
                         )
                     }
                 } else {
@@ -450,7 +488,13 @@ private fun TerminalInspectorDialogContent(
                     OutlinedTextField(
                         value = commandInput,
                         onValueChange = { commandInput = it },
-                        placeholder = { Text(L.components.floatingTerminalInspector.runBashCommandInTermux, fontSize = 12.5.sp, color = Color.Gray) },
+                        placeholder = {
+                            Text(
+                                L.components.floatingTerminalInspector.runBashCommandInTermux,
+                                fontSize = 12.5.sp,
+                                color = ensureAccessibleContrast(Color.Gray, AppColors.terminalBg, 4.5f)
+                            )
+                        },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -491,7 +535,7 @@ private fun TerminalInspectorDialogContent(
                         },
                         enabled = commandInput.isNotBlank() && !isExecutingManual,
                         modifier = Modifier
-                            .size(40.dp)
+                            .minTouchTarget(48.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (commandInput.isNotBlank()) ClaudeTerracotta else Color.DarkGray)
                     ) {
@@ -528,6 +572,11 @@ private fun TerminalCommandCard(
     val isFailed = command.status == CommandStatus.FAILED || (command.exitCode != null && command.exitCode != 0)
     val isTerminated = command.status == CommandStatus.TERMINATED
 
+    val mutedCardText = ensureAccessibleContrast(Color.Gray, AppColors.editorBg, 4.5f)
+    val mutedOutputText = ensureAccessibleContrast(Color.Gray, AppColors.terminalBg, 4.5f)
+    val errorAccent = ensureAccessibleContrast(Color.Red, AppColors.editorBg, 4.5f)
+    val successAccent = ensureAccessibleContrast(QuotaGreen, AppColors.editorBg, 4.5f)
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -553,31 +602,46 @@ private fun TerminalCommandCard(
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    color = ClaudeTerracotta,
+                    color = ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorBg, 4.5f),
                     modifier = Modifier.weight(1f)
                 )
 
                 if (command.durationMs > 0) {
+                    val durSpeech = formatDurationForSpeech(command.durationMs).ifEmpty { "${command.durationMs}ms" }
+                    val durationDescription = L.components.floatingTerminalInspector.durationTime(durSpeech)
                     Text(
                         text = "${command.durationMs}ms",
                         fontSize = 10.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(horizontal = 4.dp)
+                        color = mutedCardText,
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp)
+                            .semantics { contentDescription = durationDescription }
                     )
                 }
 
-                if (command.exitCode != null && !isRunning) {
+                val exitCodeValue = command.exitCode
+                if (exitCodeValue != null && !isRunning) {
+                    val badgeBg = if (isSuccess) QuotaGreen.copy(alpha = 0.15f) else Color.Red.copy(alpha = 0.15f)
+                    val badgeText = L.components.floatingTerminalInspector.exitCodeCode(exitCodeValue)
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(if (isSuccess) QuotaGreen.copy(alpha = 0.15f) else Color.Red.copy(alpha = 0.15f))
+                            .background(badgeBg)
                             .padding(horizontal = 5.dp, vertical = 1.dp)
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = badgeText
+                            }
                     ) {
                         Text(
-                            text = "exit ${command.exitCode}",
+                            text = "exit $exitCodeValue",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSuccess) QuotaGreen else Color.Red
+                            color = ensureAccessibleContrast(
+                                if (isSuccess) successAccent else errorAccent,
+                                badgeBg,
+                                4.5f,
+                                AppColors.editorBg
+                            )
                         )
                     }
                 }
@@ -585,12 +649,12 @@ private fun TerminalCommandCard(
                 if (isRunning) {
                     IconButton(
                         onClick = onKill,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.StopCircle,
                             contentDescription = L.components.floatingTerminalInspector.killProcess,
-                            tint = Color.Red,
+                            tint = errorAccent,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -603,12 +667,12 @@ private fun TerminalCommandCard(
                         clipboard.setPrimaryClip(clip)
                         Toast.makeText(context, L.components.floatingTerminalInspector.outputCopied, Toast.LENGTH_SHORT).show()
                     },
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.ContentCopy,
                         contentDescription = L.common.copy,
-                        tint = Color.Gray,
+                        tint = mutedCardText,
                         modifier = Modifier.size(13.dp)
                     )
                 }
@@ -628,7 +692,7 @@ private fun TerminalCommandCard(
                         text = if (isRunning) L.components.floatingTerminalInspector.runningInTermux else L.components.floatingTerminalInspector.noOutput,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 11.sp,
-                        color = Color.Gray
+                        color = mutedOutputText
                     )
                 } else {
                     Text(
