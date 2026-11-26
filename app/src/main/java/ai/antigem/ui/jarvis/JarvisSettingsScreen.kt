@@ -773,7 +773,7 @@ private fun PhraseEditor(phrases: List<String>, other: List<String>, otherName: 
                     .clip(chipShape)
                     .border(1.dp, chipBorder, chipShape)
                     .clickable(role = Role.Button, onClickLabel = L.common.remove) { onChange(phrases - p) }
-                    .padding(start = 12.dp, end = 10.dp, vertical = 6.dp),
+                    .padding(start = 12.dp, top = 6.dp, end = 10.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(p, fontSize = 12.sp)

@@ -138,6 +138,7 @@ fun AgentApprovalPanel(
 @Composable
 private fun ApprovalBody(item: ApprovalItem, count: Int, onAllowAll: (() -> Unit)?, onDenyAll: (() -> Unit)?) {
     val surfaceBg = MaterialTheme.colorScheme.surface
+    val accent = item.agent.accent()
     val muted = accessibleMutedColor(alpha = 0.72f)
     val accentText = ensureAccessibleContrast(accent, surfaceBg, 4.5f)
     val denyText = ensureAccessibleContrast(DenyRed, surfaceBg, 4.5f)
