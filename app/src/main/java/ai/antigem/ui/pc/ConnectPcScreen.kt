@@ -17,6 +17,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -28,7 +35,11 @@ import androidx.compose.ui.window.DialogProperties
 import ai.antigem.data.pc.PcConnect
 import ai.antigem.data.pc.PcConnect.PairedPc
 import ai.antigem.theme.QuotaGreen
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
@@ -123,8 +134,13 @@ fun ConnectPcScreen(cardBg: Color, cardBorder: BorderStroke) {
     ) {
         // the feature switch: on only makes it available, it does not connect
         Card(cardBg, cardBorder) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(38.dp).background(PcAccent.copy(alpha = 0.14f), RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier.fillMaxWidth().accessibleToggleRow(checked = enabled, role = Role.Switch) {
+                    if (enabled && active != null) confirmOff = true else PcConnect.setEnabled(!enabled)
+                },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(38.dp).background(PcAccent.copy(alpha = 0.14f), RoundedCornerShape(10.dp)).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Computer, null, tint = PcAccent, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
@@ -132,13 +148,11 @@ fun ConnectPcScreen(cardBg: Color, cardBorder: BorderStroke) {
                     Text(L.pc.connectPc.connectToPc, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                     Text(
                         L.pc.connectPc.useTheAgentsRunningOnYour,
-                        fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        fontSize = 12.sp, lineHeight = 16.sp, color = accessibleMutedColor(alpha = 0.72f)
                     )
                 }
                 Spacer(Modifier.width(8.dp))
-                Switch(checked = enabled, onCheckedChange = { on ->
-                    if (!on && active != null) confirmOff = true else PcConnect.setEnabled(on)
-                })
+                Switch(checked = enabled, onCheckedChange = null)
             }
             if (!enabled) Hint(L.pc.connectPc.turningThisOnAddsAPc)
         }
@@ -147,22 +161,22 @@ fun ConnectPcScreen(cardBg: Color, cardBorder: BorderStroke) {
             // what the app uses now
             Card(cardBg, cardBorder) {
                 Text("NOW USING", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    color = accessibleMutedColor(alpha = 0.72f), modifier = Modifier.semantics { heading() })
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(9.dp).background(if (active != null) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), CircleShape))
+                    Box(Modifier.size(9.dp).background(if (active != null) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), CircleShape).clearAndSetSemantics {})
                     Spacer(Modifier.width(10.dp))
                     Text(
                         active?.name ?: if (ai.antigem.data.preferences.AuthPreferences.storedRemoteMode) L.pc.connectPc.yourServerSettingsServers else L.common.thisPhone,
-                        fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f)
+                        fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }
                     )
-                    if (active != null) OutlinedButton(onClick = { switchBack = true }) { Text(PcConnect.ownModeLabel()) }
+                    if (active != null) OutlinedButton(onClick = { switchBack = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(PcConnect.ownModeLabel()) }
                 }
             }
 
             // paired PCs
             Card(cardBg, cardBorder) {
                 Text("PAIRED PCS", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    color = accessibleMutedColor(alpha = 0.72f), modifier = Modifier.semantics { heading() })
                 if (pcs.isEmpty()) Hint(L.pc.connectPc.noPcYetTapAddA)
                 pcs.forEach { pc ->
                     PcRow(
@@ -174,7 +188,7 @@ fun ConnectPcScreen(cardBg: Color, cardBorder: BorderStroke) {
                         onRemove = { removing = pc }
                     )
                 }
-                Button(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { showAdd = true }, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.pc.connectPc.addAPc)
                 }
             }
@@ -182,7 +196,7 @@ fun ConnectPcScreen(cardBg: Color, cardBorder: BorderStroke) {
             // how to get the PC ready
             Card(cardBg, cardBorder) {
                 Text("ON THE PC (ONCE)", fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    color = accessibleMutedColor(alpha = 0.72f), modifier = Modifier.semantics { heading() })
                 Step(1, L.pc.connectPc.installAntigemInVsCodeAnd)
                 Step(2, L.pc.connectPc.turnOnThePcsSshServer)
                 Step(3, L.pc.connectPc.inAntigemOnThePcOpen)
@@ -258,23 +272,27 @@ private fun PcRow(pc: PairedPc, inUse: Boolean, reachable: Boolean?, onConnect: 
             Column(Modifier.weight(1f)) {
                 Text(pc.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${pc.user}@${pc.lastAddress}", fontSize = 11.5.sp, fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                    color = accessibleMutedColor(alpha = 0.72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+                ) {
+                    val muted = accessibleMutedColor(alpha = 0.72f)
                     val (label, color) = when {
-                        inUse -> L.common.inUse to QuotaGreen
-                        reachable == true -> L.pc.connectPc.reachable to QuotaGreen
-                        reachable == false -> L.pc.connectPc.notReachable to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                        else -> L.common.checking to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                        inUse -> L.common.inUse to ensureAccessibleContrast(QuotaGreen, MaterialTheme.colorScheme.surface, 4.5f)
+                        reachable == true -> L.pc.connectPc.reachable to ensureAccessibleContrast(QuotaGreen, MaterialTheme.colorScheme.surface, 4.5f)
+                        reachable == false -> L.pc.connectPc.notReachable to muted
+                        else -> L.common.checking to muted
                     }
-                    Box(Modifier.size(6.dp).background(color, CircleShape))
+                    Box(Modifier.size(6.dp).background(color, CircleShape).clearAndSetSemantics {})
                     Spacer(Modifier.width(5.dp))
                     Text("$label · ${lastUsedText(pc)}" + if (pc.shellAllowed) L.pc.connectPc.terminalOnPc else "",
-                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        fontSize = 11.sp, color = muted)
                 }
             }
-            if (!inUse) TextButton(onClick = onConnect) { Text(L.common.connect) }
+            if (!inUse) TextButton(onClick = onConnect, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.connect) }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, L.common.more, Modifier.size(20.dp)) }
+                IconButton(onClick = { menu = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.MoreVert, L.common.more, Modifier.size(20.dp)) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(L.common.rename) }, leadingIcon = { Icon(Icons.Outlined.Edit, null) }, onClick = { menu = false; onRename() })
                     DropdownMenuItem(text = { Text(L.common.remove) }, leadingIcon = { Icon(Icons.Outlined.DeleteOutline, null) }, onClick = { menu = false; onRemove() })
@@ -308,8 +326,8 @@ fun AddPcDialog(onDismiss: () -> Unit, onConnect: (PairedPc) -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Computer, null, tint = PcAccent)
                     Spacer(Modifier.width(10.dp))
-                    Text(L.pc.connectPc.addAPc, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                    if (step !is AddStep.Working) IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, L.common.close) }
+                    Text(L.pc.connectPc.addAPc, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f).semantics { heading() })
+                    if (step !is AddStep.Working) IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.close) }
                 }
                 when (val s = step) {
                     AddStep.Pick -> PickPc { name, host, port -> step = AddStep.Code(name, host, port) }
@@ -328,30 +346,34 @@ fun AddPcDialog(onDismiss: () -> Unit, onConnect: (PairedPc) -> Unit) {
                         }
                     }
                     is AddStep.Working -> {
-                        Text(L.pc.connectPc.pairingWithName(s.name), fontWeight = FontWeight.SemiBold)
+                        Text(L.pc.connectPc.pairingWithName(s.name), fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         LinearProgressIndicator(Modifier.fillMaxWidth())
                         Hint(s.text)
                     }
                     is AddStep.Done -> {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
                             Icon(Icons.Outlined.CheckCircle, null, tint = QuotaGreen)
                             Spacer(Modifier.width(8.dp))
                             Text(L.pc.connectPc.pairedWithName(s.pc.name), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                         }
                         Hint(L.pc.connectPc.connectNowToUseItsAgents)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(L.common.later) }
-                            Button(onClick = { onConnect(s.pc) }, modifier = Modifier.weight(1f)) { Text(L.pc.connectPc.connectNow) }
+                            OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.common.later) }
+                            Button(onClick = { onConnect(s.pc) }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.pc.connectPc.connectNow) }
                         }
                     }
                     is AddStep.Failed -> {
-                        Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.1f),
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        ) {
                             Text(s.message, fontSize = 13.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp))
                         }
                         if (s.pairedPc != null) Hint(L.pc.connectPc.nameIsSavedFixTheSsh(s.pairedPc.name))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedButton(onClick = { step = AddStep.Pick }, modifier = Modifier.weight(1f)) { Text(L.common.back) }
-                            Button(onClick = { step = AddStep.Code(s.name, s.host, s.port) }, modifier = Modifier.weight(1f)) { Text(L.common.tryAgain) }
+                            OutlinedButton(onClick = { step = AddStep.Pick }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.common.back) }
+                            Button(onClick = { step = AddStep.Code(s.name, s.host, s.port) }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.common.tryAgain) }
                         }
                     }
                 }
@@ -378,24 +400,24 @@ private fun PickPc(onPick: (name: String, host: String, port: Int) -> Unit) {
 
     Text(L.pc.connectPc.onThePcOpenAntigemIn, fontSize = 13.sp, lineHeight = 18.sp)
     if (nearby.isEmpty()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(10.dp))
-            Text(searchError ?: L.pc.connectPc.lookingForPcsOnThisWi, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+            Text(searchError ?: L.pc.connectPc.lookingForPcsOnThisWi, fontSize = 12.5.sp, color = accessibleMutedColor(alpha = 0.72f))
         }
     }
     nearby.forEach { pc ->
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
-            modifier = Modifier.fillMaxWidth().clickable { onPick(pc.name, pc.host, pc.port) }
+            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).clickable(role = Role.Button) { onPick(pc.name, pc.host, pc.port) }
         ) {
             Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(osIcon(pc.os), null, tint = PcAccent)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(pc.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Text(pc.host, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                    Text(pc.host, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = accessibleMutedColor(alpha = 0.72f))
                 }
                 Icon(Icons.Outlined.ChevronRight, null)
             }
@@ -403,7 +425,7 @@ private fun PickPc(onPick: (name: String, host: String, port: Int) -> Unit) {
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
     if (!manual) {
-        TextButton(onClick = { manual = true }) { Text(L.pc.connectPc.notListedEnterTheAddressShown) }
+        TextButton(onClick = { manual = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.pc.connectPc.notListedEnterTheAddressShown) }
         Hint("Some routers hide devices from each other (guest Wi-Fi, \"client isolation\"); then typing the address works too.")
     } else {
         val parsed = parseAddress(address)
@@ -412,7 +434,7 @@ private fun PickPc(onPick: (name: String, host: String, port: Int) -> Unit) {
             label = { Text(L.pc.connectPc.addressShownOnThePc) }, placeholder = { Text("192.168.1.10:$DEFAULT_PAIR_PORT") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth()
         )
-        Button(enabled = parsed != null, onClick = { parsed?.let { (h, p) -> onPick(h, h, p) } }, modifier = Modifier.fillMaxWidth()) { Text(L.pc.connectPc.next) }
+        Button(enabled = parsed != null, onClick = { parsed?.let { (h, p) -> onPick(h, h, p) } }, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)) { Text(L.pc.connectPc.next) }
     }
 }
 
@@ -436,8 +458,8 @@ private fun parseAddress(text: String): Pair<String, Int>? {
 @Composable
 private fun CodeEntry(name: String, host: String, port: Int, onBack: () -> Unit, onPair: (String) -> Unit) {
     var code by remember { mutableStateOf("") }
-    Text(L.pc.connectPc.pairWithName(name), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-    Text("$host:$port", fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+    Text(L.pc.connectPc.pairWithName(name), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.semantics { heading() })
+    Text("$host:$port", fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = accessibleMutedColor(alpha = 0.72f))
     OutlinedTextField(
         value = code,
         onValueChange = { v -> code = v.filter { it.isDigit() }.take(6) },
@@ -449,8 +471,8 @@ private fun CodeEntry(name: String, host: String, port: Int, onBack: () -> Unit,
     )
     Hint(L.pc.connectPc.theCodeIsOnlyValidWhile)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text(L.common.back) }
-        Button(enabled = code.length == 6, onClick = { onPair(code) }, modifier = Modifier.weight(1f)) { Text(L.pc.connectPc.pair) }
+        OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.common.back) }
+        Button(enabled = code.length == 6, onClick = { onPair(code) }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.pc.connectPc.pair) }
     }
 }
 
@@ -467,19 +489,19 @@ fun PcDrawerButton(onClick: () -> Unit) {
     val ssh by ai.antigem.data.remote.RemoteServerManager.sshState.collectAsState()
     val inUse = pcs.any { it.id == activeId } && PcConnect.active() != null
     val color = when {
-        !inUse -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        ssh.connected -> QuotaGreen
-        else -> ai.antigem.theme.AppColors.warning
+        !inUse -> accessibleMutedColor(alpha = 0.72f)
+        ssh.connected -> ensureAccessibleContrast(QuotaGreen, MaterialTheme.colorScheme.surface, 4.5f)
+        else -> ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, MaterialTheme.colorScheme.surface, 4.5f)
     }
-    Surface(onClick = onClick, shape = RoundedCornerShape(8.dp), color = Color.Transparent, modifier = Modifier.padding(end = 4.dp)) {
-        Box {
+    Surface(onClick = onClick, shape = RoundedCornerShape(8.dp), color = Color.Transparent, modifier = Modifier.padding(end = 4.dp).minTouchTarget(48.dp)) {
+        Box(contentAlignment = Alignment.Center) {
             Icon(
                 Icons.Outlined.Computer,
                 contentDescription = if (!inUse) L.pc.connectPc.connectToPc else if (ssh.connected) L.pc.connectPc.pcConnected else L.pc.connectPc.pcNotReachable,
                 tint = color,
                 modifier = Modifier.padding(8.dp).size(20.dp)
             )
-            if (inUse) Box(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(7.dp).background(color, CircleShape))
+            if (inUse) Box(Modifier.align(Alignment.TopEnd).padding(top = 6.dp, end = 6.dp).size(7.dp).background(color, CircleShape).clearAndSetSemantics {})
         }
     }
 }
@@ -568,17 +590,20 @@ fun PcQuickSheet(onDismiss: () -> Unit, onManage: () -> Unit) {
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(L.pc.connectPc.connectToPc, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.pc.connectPc.nowUsing, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                Box(Modifier.size(8.dp).background(if (active != null) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), CircleShape))
+            val muted = accessibleMutedColor(alpha = 0.72f)
+            val greenText = ensureAccessibleContrast(QuotaGreen, MaterialTheme.colorScheme.surface, 4.5f)
+            val warnText = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, MaterialTheme.colorScheme.surface, 4.5f)
+            Text(L.pc.connectPc.connectToPc, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.semantics { heading() })
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
+                Text(L.pc.connectPc.nowUsing, fontSize = 13.sp, color = muted)
+                Box(Modifier.size(8.dp).background(if (active != null) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), CircleShape).clearAndSetSemantics {})
                 Spacer(Modifier.width(6.dp))
                 Text(active?.name ?: if (ai.antigem.data.preferences.AuthPreferences.storedRemoteMode) L.pc.connectPc.yourServer else L.common.thisPhone,
                     fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
             // the PC in use cannot be reached: why, and the way back is the button below
             if (active != null && !sshState.connected) {
-                Text(L.pc.connectPc.notReachableMessage(sshState.message), fontSize = 12.sp, color = ai.antigem.theme.AppColors.warning)
+                Text(L.pc.connectPc.notReachableMessage(sshState.message), fontSize = 12.sp, color = warnText, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
             if (pcs.isEmpty()) Hint(L.pc.connectPc.noPcPairedYet)
             pcs.forEach { pc ->
@@ -586,39 +611,42 @@ fun PcQuickSheet(onDismiss: () -> Unit, onManage: () -> Unit) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = if (inUse) QuotaGreen.copy(alpha = 0.08f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = !inUse) { switchTarget = pc }
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minTouchTarget(48.dp)
+                        .clickable(enabled = !inUse, role = Role.Button) { switchTarget = pc }
+                        .semantics { if (inUse) stateDescription = L.common.inUse }
                 ) {
                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(osIcon(pc.os), null, tint = PcAccent)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(pc.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(pc.lastAddress, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                            Text(pc.lastAddress, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = muted)
                         }
                         val (label, color) = when {
-                            inUse && sshState.connected -> L.pc.connectPc.inUseConnected to QuotaGreen
-                            inUse -> L.pc.connectPc.inUseNotReachable to ai.antigem.theme.AppColors.warning
-                            reach[pc.id] == true -> L.pc.connectPc.reachable to QuotaGreen
-                            reach[pc.id] == false -> L.pc.connectPc.notReachable to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                            else -> "…" to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                            inUse && sshState.connected -> L.pc.connectPc.inUseConnected to greenText
+                            inUse -> L.pc.connectPc.inUseNotReachable to warnText
+                            reach[pc.id] == true -> L.pc.connectPc.reachable to greenText
+                            reach[pc.id] == false -> L.pc.connectPc.notReachable to muted
+                            else -> "…" to muted
                         }
-                        Box(Modifier.size(7.dp).background(color, CircleShape))
+                        Box(Modifier.size(7.dp).background(color, CircleShape).clearAndSetSemantics {})
                         Spacer(Modifier.width(6.dp))
                         Text(label, fontSize = 11.5.sp, color = color)
                     }
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                OutlinedButton(onClick = { showAdd = true }, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { showAdd = true }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Add, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(L.pc.connectPc.addPc)
                 }
-                if (active != null) OutlinedButton(onClick = { switchBack = true }, modifier = Modifier.weight(1f)) {
+                if (active != null) OutlinedButton(onClick = { switchBack = true }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.PhoneAndroid, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp))
                     Text(PcConnect.ownModeLabel(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            TextButton(onClick = onManage, modifier = Modifier.align(Alignment.End)) { Text(L.pc.connectPc.managePcs) }
+            TextButton(onClick = onManage, modifier = Modifier.align(Alignment.End).minTouchTarget(48.dp)) { Text(L.pc.connectPc.managePcs) }
         }
     }
 
@@ -639,12 +667,12 @@ fun PcServersNotice(cardBg: Color, cardBorder: BorderStroke, onOpenConnectPc: ()
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Computer, null, tint = QuotaGreen)
                 Spacer(Modifier.width(10.dp))
-                Text(L.pc.connectPc.connectedToValue(active?.name ?: L.pc.connectPc.aPc), fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(L.pc.connectPc.connectedToValue(active?.name ?: L.pc.connectPc.aPc), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.semantics { heading() })
             }
             Hint(L.pc.connectPc.connectToPcIsInUse)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onOpenConnectPc, modifier = Modifier.weight(1f)) { Text(L.pc.connectPc.connectToPc) }
-                Button(onClick = { switchBack = true }, modifier = Modifier.weight(1f)) { Text(PcConnect.ownModeLabel()) }
+                OutlinedButton(onClick = onOpenConnectPc, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(L.pc.connectPc.connectToPc) }
+                Button(onClick = { switchBack = true }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) { Text(PcConnect.ownModeLabel()) }
             }
         }
     }
@@ -662,14 +690,14 @@ private fun Card(cardBg: Color, cardBorder: BorderStroke, content: @Composable C
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, fontSize = 12.sp, lineHeight = 16.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    Text(text, fontSize = 12.sp, lineHeight = 16.5.sp, color = accessibleMutedColor(alpha = 0.72f))
 }
 
 @Composable
 private fun Step(n: Int, text: String) {
     Row(verticalAlignment = Alignment.Top) {
         Box(Modifier.size(20.dp).background(PcAccent.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            Text("$n", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PcAccent)
+            Text("$n", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ensureAccessibleContrast(PcAccent, MaterialTheme.colorScheme.surface, 4.5f))
         }
         Spacer(Modifier.width(10.dp))
         Text(text, fontSize = 12.5.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))

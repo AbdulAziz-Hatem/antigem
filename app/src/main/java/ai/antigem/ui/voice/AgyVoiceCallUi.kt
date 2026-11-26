@@ -18,6 +18,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -96,6 +99,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,6 +124,8 @@ import ai.antigem.data.voice.AgyVoice
 import ai.antigem.data.voice.AgyVoiceCall
 import ai.antigem.data.voice.AgyVoiceCall.Phase
 import ai.antigem.data.voice.AgyVoicePreferences
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.cos
@@ -198,7 +215,7 @@ private fun CallContent(st: AgyVoiceCall.State, agentWorking: Boolean, onOpenAgy
             .background(Brush.verticalGradient(listOf(rgb(voice.deep).copy(alpha = 1f), Ink, Ink)))
     ) {
         // soft colour wash behind the orb
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
             drawCircle(
                 Brush.radialGradient(listOf(rgb(voice.core).copy(alpha = 0.22f), Color.Transparent), center = Offset(size.width / 2, size.height * 0.38f), radius = size.width * 0.9f),
                 radius = size.width * 0.9f, center = Offset(size.width / 2, size.height * 0.38f)
@@ -207,14 +224,17 @@ private fun CallContent(st: AgyVoiceCall.State, agentWorking: Boolean, onOpenAgy
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(horizontal = 18.dp, vertical = 10.dp)) {
             // ---- top bar
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { if (st.phase == Phase.FAILED) AgyVoiceCall.end() else AgyVoiceCall.setMinimized(true) }) {
+                IconButton(
+                    onClick = { if (st.phase == Phase.FAILED) AgyVoiceCall.end() else AgyVoiceCall.setMinimized(true) },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
                     Icon(Icons.Rounded.KeyboardArrowDown, L.voice.agyVoiceCallUi.minimize, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(28.dp))
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-                    Text(st.title.ifBlank { L.common.antigravity }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(st.title.ifBlank { L.common.antigravity }, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
                     Text(
                         L.voice.agyVoiceCallUi.antigravityVoiceNameValue(voice.name, (if (st.language != AgyVoicePreferences.LANGUAGE_AUTO) " · ${AgyVoicePreferences.languageLabel(st.language)}" else "")),
-                        color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1
+                        color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), Ink, 4.5f), fontSize = 12.sp, maxLines = 1
                     )
                 }
                 if (clock != null) {
@@ -226,8 +246,8 @@ private fun CallContent(st: AgyVoiceCall.State, agentWorking: Boolean, onOpenAgy
                         }
                     }
                 }
-                IconButton(onClick = { showLog = true }) {
-                    Icon(Icons.Rounded.Info, L.voice.agyVoiceCallUi.callLog, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                IconButton(onClick = { showLog = true }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(Icons.Rounded.Info, L.voice.agyVoiceCallUi.callLog, tint = ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), Ink, 4.5f), modifier = Modifier.size(20.dp))
                 }
             }
 
@@ -235,18 +255,29 @@ private fun CallContent(st: AgyVoiceCall.State, agentWorking: Boolean, onOpenAgy
             Spacer(Modifier.height(10.dp))
             Text(
                 statusLine(st, agentWorking),
-                color = Color.White.copy(alpha = if (st.phase == Phase.LIVE) 0.8f else 0.6f),
-                fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+                color = ensureAccessibleContrast(Color.White.copy(alpha = if (st.phase == Phase.LIVE) 0.88f else 0.75f), Ink, 4.5f),
+                fontSize = 14.sp, textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
             )
 
             // ---- orb
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val side = minOf(maxWidth, maxHeight) * 0.92f
+                val orbActionLabel = if (st.muted) L.common.unmute else L.common.mute
                 VoiceOrb(
                     voice = voice, phase = st.phase, muted = st.muted, agentWorking = agentWorking && st.phase == Phase.LIVE,
-                    modifier = Modifier.size(side).clickable(
-                        interactionSource = remember { MutableInteractionSource() }, indication = null
-                    ) { if (st.phase == Phase.LIVE) AgyVoiceCall.toggleMute() }
+                    modifier = Modifier.size(side)
+                        .clickable(
+                            enabled = st.phase == Phase.LIVE,
+                            role = Role.Button,
+                            onClickLabel = orbActionLabel,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { AgyVoiceCall.toggleMute() }
+                        .semantics {
+                            if (st.phase == Phase.LIVE) contentDescription = orbActionLabel
+                            else hideFromAccessibility()
+                        }
                 )
             }
 
@@ -276,11 +307,11 @@ private fun CallContent(st: AgyVoiceCall.State, agentWorking: Boolean, onOpenAgy
                     }
                     RoundControl(Icons.Rounded.Tune, L.common.voice, active = false) { showVoices = true }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Surface(onClick = { AgyVoiceCall.end() }, shape = CircleShape, color = CallRed, modifier = Modifier.size(64.dp)) {
+                        Surface(onClick = { AgyVoiceCall.end() }, shape = CircleShape, color = CallRed, modifier = Modifier.size(64.dp).semantics { role = Role.Button }) {
                             Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.CallEnd, L.voice.agyVoiceCallUi.endCall, tint = Color.White, modifier = Modifier.size(30.dp)) }
                         }
                         Spacer(Modifier.height(6.dp))
-                        Text(L.voice.agyVoiceCallUi.end, color = Color.White.copy(alpha = 0.7f), fontSize = 11.5.sp)
+                        Text(L.voice.agyVoiceCallUi.end, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.78f), Ink, 4.5f), fontSize = 11.5.sp, modifier = Modifier.clearAndSetSemantics {})
                     }
                 }
             }
@@ -342,7 +373,7 @@ private fun LiveDot(color: Color) {
     val pulse by rememberInfiniteTransition(label = "dot").animateFloat(
         0.35f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "dotA"
     )
-    Box(Modifier.size(7.dp).clip(CircleShape).background(color.copy(alpha = pulse)))
+    Box(Modifier.size(7.dp).clip(CircleShape).background(color.copy(alpha = pulse)).clearAndSetSemantics {})
 }
 
 @Composable
@@ -353,14 +384,17 @@ private fun RoundControl(icon: ImageVector, label: String, active: Boolean, onCl
             shape = CircleShape,
             color = if (active) Color.White else Color.White.copy(alpha = 0.10f),
             border = BorderStroke(1.dp, Color.White.copy(alpha = if (active) 0f else 0.10f)),
-            modifier = Modifier.size(52.dp)
+            modifier = Modifier.size(52.dp).semantics {
+                role = Role.Button
+                if (active) stateDescription = L.common.on
+            }
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(icon, label, tint = if (active) Ink else Color.White, modifier = Modifier.size(23.dp))
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text(label, color = Color.White.copy(alpha = 0.7f), fontSize = 11.5.sp, maxLines = 1)
+        Text(label, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.78f), Ink, 4.5f), fontSize = 11.5.sp, maxLines = 1, modifier = Modifier.clearAndSetSemantics {})
     }
 }
 
@@ -402,45 +436,47 @@ internal fun OrbCanvas(
     val glint = rgb(voice.glint)
     val connecting = phase == Phase.CONNECTING || phase == Phase.RECONNECTING
 
-    Canvas(modifier.graphicsLayer { alpha = dim; compositingStrategy = CompositingStrategy.Offscreen }) {
-        val c = center
-        val base = size.minDimension / 2f * 0.58f
-        val energy = max(outA, micA * 0.75f)
-        val r = base * (1f + 0.025f * sin(time * 1.6f)) * (1f + 0.20f * outA + 0.08f * micA)
+    Box(modifier) {
+        Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}.graphicsLayer { alpha = dim; compositingStrategy = CompositingStrategy.Offscreen }) {
+            val c = center
+            val base = size.minDimension / 2f * 0.58f
+            val energy = max(outA, micA * 0.75f)
+            val r = base * (1f + 0.025f * sin(time * 1.6f)) * (1f + 0.20f * outA + 0.08f * micA)
 
-        // glow
-        drawCircle(
-            Brush.radialGradient(listOf(core.copy(alpha = 0.30f + 0.35f * energy), Color.Transparent), center = c, radius = r * 2.0f),
-            radius = r * 2.0f, center = c
-        )
-        // ripples while you talk (and a slow pulse while connecting)
-        val rippleStrength = max(micA, if (connecting) 0.35f else 0f)
-        if (rippleStrength > 0.02f) for (i in 0 until 3) {
-            val p = ((time * (if (connecting) 0.45f else 0.8f)) + i / 3f) % 1f
+            // glow
             drawCircle(
-                glint.copy(alpha = (1f - p) * 0.45f * rippleStrength),
-                radius = r * (1.05f + p * 0.85f), center = c, style = Stroke(width = 2.dp.toPx())
+                Brush.radialGradient(listOf(core.copy(alpha = 0.30f + 0.35f * energy), Color.Transparent), center = c, radius = r * 2.0f),
+                radius = r * 2.0f, center = c
             )
-        }
-        // body: three wobbling layers
-        val speed = 1f + energy * 2.2f + work * 1.4f
-        for (layer in 0 until 3) {
-            val lr = r * (1f - layer * 0.13f)
-            val amp = 0.035f + 0.11f * energy + 0.03f * work + layer * 0.012f
-            val path = blobPath(c, lr, time * speed * (0.55f + layer * 0.3f), amp, layer * 1.7f)
-            val shift = Offset(cos(time * 0.7f + layer * 2f) * lr * 0.18f, sin(time * 0.9f + layer) * lr * 0.18f)
-            drawPath(
-                path,
-                Brush.radialGradient(listOf(glint, core, deep), center = c + shift - Offset(lr * 0.25f, lr * 0.3f), radius = lr * 1.5f),
-                alpha = 0.55f + 0.15f * layer
+            // ripples while you talk (and a slow pulse while connecting)
+            val rippleStrength = max(micA, if (connecting) 0.35f else 0f)
+            if (rippleStrength > 0.02f) for (i in 0 until 3) {
+                val p = ((time * (if (connecting) 0.45f else 0.8f)) + i / 3f) % 1f
+                drawCircle(
+                    glint.copy(alpha = (1f - p) * 0.45f * rippleStrength),
+                    radius = r * (1.05f + p * 0.85f), center = c, style = Stroke(width = 2.dp.toPx())
+                )
+            }
+            // body: three wobbling layers
+            val speed = 1f + energy * 2.2f + work * 1.4f
+            for (layer in 0 until 3) {
+                val lr = r * (1f - layer * 0.13f)
+                val amp = 0.035f + 0.11f * energy + 0.03f * work + layer * 0.012f
+                val path = blobPath(c, lr, time * speed * (0.55f + layer * 0.3f), amp, layer * 1.7f)
+                val shift = Offset(cos(time * 0.7f + layer * 2f) * lr * 0.18f, sin(time * 0.9f + layer) * lr * 0.18f)
+                drawPath(
+                    path,
+                    Brush.radialGradient(listOf(glint, core, deep), center = c + shift - Offset(lr * 0.25f, lr * 0.3f), radius = lr * 1.5f),
+                    alpha = 0.55f + 0.15f * layer
+                )
+            }
+            // highlight
+            drawCircle(
+                Brush.radialGradient(listOf(Color.White.copy(alpha = 0.32f), Color.Transparent), center = c - Offset(r * 0.32f, r * 0.38f), radius = r * 0.55f),
+                radius = r * 0.55f, center = c - Offset(r * 0.32f, r * 0.38f)
             )
+            if (connecting) spinner(c, r * 1.22f, time, glint)
         }
-        // highlight
-        drawCircle(
-            Brush.radialGradient(listOf(Color.White.copy(alpha = 0.32f), Color.Transparent), center = c - Offset(r * 0.32f, r * 0.38f), radius = r * 0.55f),
-            radius = r * 0.55f, center = c - Offset(r * 0.32f, r * 0.38f)
-        )
-        if (connecting) spinner(c, r * 1.22f, time, glint)
     }
 }
 
@@ -486,7 +522,7 @@ private fun Captions(st: AgyVoiceCall.State, voice: AgyVoice, modifier: Modifier
         Box(modifier, contentAlignment = Alignment.Center) {
             Text(
                 if (st.phase == Phase.LIVE) L.voice.agyVoiceCallUi.sayWhatYouWantDoneThe else "",
-                color = Color.White.copy(alpha = 0.45f), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp)
+                color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), Ink, 4.5f), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 24.dp)
             )
         }
         return
@@ -507,12 +543,12 @@ private fun Captions(st: AgyVoiceCall.State, voice: AgyVoice, modifier: Modifier
             Column(Modifier.fillMaxWidth(), horizontalAlignment = if (user) Alignment.End else Alignment.Start) {
                 Text(
                     if (user) L.voice.agyVoiceCallUi.you else voice.name,
-                    color = if (user) Color.White.copy(alpha = 0.45f) else rgb(voice.glint).copy(alpha = 0.8f),
+                    color = if (user) ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), Ink, 4.5f) else ensureAccessibleContrast(rgb(voice.glint), Ink, 4.5f),
                     fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     line.text,
-                    color = Color.White.copy(alpha = if (user) 0.72f else 0.95f),
+                    color = ensureAccessibleContrast(Color.White.copy(alpha = if (user) 0.78f else 0.95f), Ink, 4.5f),
                     fontSize = if (user) 14.sp else 15.5.sp,
                     lineHeight = if (user) 19.sp else 21.sp,
                     fontStyle = if (line.interim) FontStyle.Italic else FontStyle.Normal,
@@ -526,28 +562,40 @@ private fun Captions(st: AgyVoiceCall.State, voice: AgyVoice, modifier: Modifier
 
 @Composable
 private fun FailureCard(st: AgyVoiceCall.State, onRetry: () -> Unit, onUpdate: () -> Unit, onDetails: () -> Unit, onClose: () -> Unit) {
-    Surface(shape = RoundedCornerShape(18.dp), color = Color.White.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = Color.White.copy(alpha = 0.08f),
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Assertive }
+    ) {
         Column(Modifier.padding(16.dp)) {
-            Text(L.voice.agyVoiceCallUi.theCallCouldntContinue, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Text(L.voice.agyVoiceCallUi.theCallCouldntContinue, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(6.dp))
-            Text(st.error ?: L.voice.agyVoiceCallUi.somethingWentWrong, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, lineHeight = 18.sp)
+            Text(st.error ?: L.voice.agyVoiceCallUi.somethingWentWrong, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.8f), Ink, 4.5f), fontSize = 13.sp, lineHeight = 18.sp)
             Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (st.problem == AgyVoiceCall.Problem.UPDATE_AGY) {
-                    Surface(onClick = onUpdate, shape = RoundedCornerShape(50), color = Color.White) {
-                        Text(L.voice.agyVoiceCallUi.updateAgy, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                    Surface(onClick = onUpdate, shape = RoundedCornerShape(50), color = Color.White, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(L.voice.agyVoiceCallUi.updateAgy, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                        }
                     }
                 } else {
-                    Surface(onClick = onRetry, shape = RoundedCornerShape(50), color = Color.White) {
-                        Text(L.common.tryAgain, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                    Surface(onClick = onRetry, shape = RoundedCornerShape(50), color = Color.White, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(L.common.tryAgain, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                        }
                     }
                 }
                 // the full error, how far the call got and what the hub logged: to copy or screenshot
-                Surface(onClick = onDetails, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f)) {
-                    Text(L.common.details, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                Surface(onClick = onDetails, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), modifier = Modifier.minTouchTarget(48.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(L.common.details, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                    }
                 }
-                Surface(onClick = onClose, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f)) {
-                    Text(L.common.close, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                Surface(onClick = onClose, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.12f), modifier = Modifier.minTouchTarget(48.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(L.common.close, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp))
+                    }
                 }
             }
         }
@@ -566,68 +614,80 @@ private fun VoicePanel(callVoice: String, callLanguage: String, inCall: Boolean,
     val samplePlaying by ai.antigem.data.voice.AgyVoicePreview.playing.collectAsState()
     val sampleLoading by ai.antigem.data.voice.AgyVoicePreview.loading.collectAsState()
     DisposableEffect(Unit) { onDispose { ai.antigem.data.voice.AgyVoicePreview.stop() } }
+    val panelBg = Color(0xFF14161C)
+    val panelMuted = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), panelBg, 4.5f)
     Surface(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = Color(0xFF14161C),
+        color = panelBg,
         modifier = Modifier.fillMaxWidth().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
     ) {
         Column(Modifier.systemBarsPadding().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(horizontal = 18.dp, vertical = 14.dp)) {
-            Box(Modifier.align(Alignment.CenterHorizontally).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f)))
+            Box(Modifier.align(Alignment.CenterHorizontally).size(width = 36.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.2f)).clearAndSetSemantics {})
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.common.voice, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                Text(
-                    L.voice.agyVoiceCallUi.browseVoices, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = onBrowse).padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                Text(L.common.voice, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f).semantics { heading() })
+                Box(
+                    Modifier.minTouchTarget(48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onBrowse),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        L.voice.agyVoiceCallUi.browseVoices, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.8f), panelBg, 4.5f),
+                        fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
             Text(
                 if (inCall) L.voice.agyVoiceCallUi.tapAVoiceToHearIt else L.voice.agyVoiceCallUi.tapAVoiceToHearIt2,
-                color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp
+                color = panelMuted, fontSize = 12.sp
             )
             Spacer(Modifier.height(10.dp))
-            AgyVoicePreferences.voices.chunked(3).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { v ->
-                        val on = v.name == marked
-                        val inUse = v.name == callVoice
-                        Surface(
-                            onClick = {
-                                marked = v.name
-                                ai.antigem.data.voice.AgyVoicePreview.play(context, v.name)
-                            },
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (on) rgb(v.core).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.05f),
-                            border = BorderStroke(1.dp, if (on) rgb(v.core) else Color.White.copy(alpha = 0.06f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Column(Modifier.padding(10.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(Modifier.size(18.dp).clip(CircleShape).background(Brush.radialGradient(listOf(rgb(v.glint), rgb(v.core), rgb(v.deep)))))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(v.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
-                                    when {
-                                        sampleLoading == v.name || samplePlaying == v.name ->
-                                            Icon(Icons.Rounded.VolumeUp, L.voice.agyVoiceCallUi.playing, tint = rgb(v.glint), modifier = Modifier.size(15.dp))
-                                        inUse -> Icon(Icons.Rounded.Check, L.common.inUse, tint = Color.White, modifier = Modifier.size(15.dp))
-                                    }
+            Column(Modifier.selectableGroup()) {
+                AgyVoicePreferences.voices.chunked(3).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        row.forEach { v ->
+                            val on = v.name == marked
+                            val inUse = v.name == callVoice
+                            Surface(
+                                onClick = {
+                                    marked = v.name
+                                    ai.antigem.data.voice.AgyVoicePreview.play(context, v.name)
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (on) rgb(v.core).copy(alpha = 0.22f) else Color.White.copy(alpha = 0.05f),
+                                border = BorderStroke(1.dp, if (on) rgb(v.core) else Color.White.copy(alpha = 0.06f)),
+                                modifier = Modifier.weight(1f).minTouchTarget(48.dp).semantics {
+                                    role = Role.RadioButton
+                                    selected = on
                                 }
-                                Text(
-                                    if (inUse) L.voice.agyVoiceCallUi.inUseNow else v.tone,
-                                    color = Color.White.copy(alpha = if (inUse) 0.8f else 0.55f), fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
-                                )
+                            ) {
+                                Column(Modifier.padding(10.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(18.dp).clip(CircleShape).background(Brush.radialGradient(listOf(rgb(v.glint), rgb(v.core), rgb(v.deep)))).clearAndSetSemantics {})
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(v.name, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
+                                        when {
+                                            sampleLoading == v.name || samplePlaying == v.name ->
+                                                Icon(Icons.Rounded.VolumeUp, L.voice.agyVoiceCallUi.playing, tint = ensureAccessibleContrast(rgb(v.glint), panelBg, 4.5f), modifier = Modifier.size(15.dp))
+                                            inUse -> Icon(Icons.Rounded.Check, L.common.inUse, tint = Color.White, modifier = Modifier.size(15.dp))
+                                        }
+                                    }
+                                    Text(
+                                        if (inUse) L.voice.agyVoiceCallUi.inUseNow else v.tone,
+                                        color = ensureAccessibleContrast(Color.White.copy(alpha = if (inUse) 0.85f else 0.72f), panelBg, 4.5f), fontSize = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
                 }
-                Spacer(Modifier.height(8.dp))
             }
             Spacer(Modifier.height(6.dp))
-            Text(L.common.language, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text(L.voice.agyVoiceCallUi.theLanguageTheVoiceTalksIn, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+            Text(L.common.language, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.semantics { heading() })
+            Text(L.voice.agyVoiceCallUi.theLanguageTheVoiceTalksIn, color = panelMuted, fontSize = 12.sp)
             Spacer(Modifier.height(8.dp))
             val languageTags = remember { listOf(AgyVoicePreferences.LANGUAGE_AUTO) + AgyVoicePreferences.languages.map { it.first } }
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().selectableGroup()) {
                 items(languageTags) { tag ->
                     val on = tag == markedLanguage
                     val inUse = tag == callLanguage
@@ -635,38 +695,49 @@ private fun VoicePanel(callVoice: String, callLanguage: String, inCall: Boolean,
                     Surface(
                         onClick = { markedLanguage = tag },
                         shape = RoundedCornerShape(50),
-                        color = if (on) Color.White else Color.White.copy(alpha = 0.07f)
+                        color = if (on) Color.White else Color.White.copy(alpha = 0.07f),
+                        modifier = Modifier.minTouchTarget(48.dp).semantics {
+                            role = Role.RadioButton
+                            selected = on
+                        }
                     ) {
-                        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (inUse) {
-                                Icon(Icons.Rounded.Check, L.common.inUse, tint = if (on) Ink else Color.White, modifier = Modifier.size(13.dp))
-                                Spacer(Modifier.width(4.dp))
+                        Box(contentAlignment = Alignment.Center) {
+                            Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                if (inUse) {
+                                    Icon(Icons.Rounded.Check, L.common.inUse, tint = if (on) Ink else Color.White, modifier = Modifier.size(13.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                                Text(
+                                    AgyVoicePreferences.languageLabel(tag) + if (english != null && english != AgyVoicePreferences.languageLabel(tag)) " · $english" else "",
+                                    color = if (on) Ink else Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, maxLines = 1
+                                )
                             }
-                            Text(
-                                AgyVoicePreferences.languageLabel(tag) + if (english != null && english != AgyVoicePreferences.languageLabel(tag)) " · $english" else "",
-                                color = if (on) Ink else Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, maxLines = 1
-                            )
                         }
                     }
                 }
             }
             Spacer(Modifier.height(14.dp))
-            Text(L.common.speed, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(L.common.speed, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 AgyVoicePreferences.speeds.forEach { sp ->
                     val on = sp == speed
                     Surface(
                         onClick = { AgyVoiceCall.setSpeed(sp) },
                         shape = RoundedCornerShape(50),
                         color = if (on) Color.White else Color.White.copy(alpha = 0.07f),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp).semantics {
+                            role = Role.RadioButton
+                            selected = on
+                        }
                     ) {
-                        Text(
-                            (if (sp % 1.0 == 0.0) sp.toInt().toString() else sp.toString()) + "×",
-                            color = if (on) Ink else Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium,
-                            textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                (if (sp % 1.0 == 0.0) sp.toInt().toString() else sp.toString()) + "×",
+                                color = if (on) Ink else Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -675,8 +746,10 @@ private fun VoicePanel(callVoice: String, callLanguage: String, inCall: Boolean,
             val languageChanged = markedLanguage != callLanguage
             val changed = voiceChanged || languageChanged
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(onClick = onClose, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.1f), modifier = Modifier.weight(1f)) {
-                    Text(if (changed) L.common.cancel else L.common.done, color = Color.White, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 11.dp))
+                Surface(onClick = onClose, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.1f), modifier = Modifier.weight(1f).minTouchTarget(48.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(if (changed) L.common.cancel else L.common.done, color = Color.White, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 11.dp))
+                    }
                 }
                 if (changed) {
                     // only now the choice is saved and the call reconnects with it (once, for voice and language)
@@ -687,22 +760,24 @@ private fun VoicePanel(callVoice: String, callLanguage: String, inCall: Boolean,
                             if (inCall) AgyVoiceCall.switchTo(marked, markedLanguage)
                             onClose()
                         },
-                        shape = RoundedCornerShape(50), color = Color.White, modifier = Modifier.weight(1.4f)
+                        shape = RoundedCornerShape(50), color = Color.White, modifier = Modifier.weight(1.4f).minTouchTarget(48.dp)
                     ) {
                         val target = when {
                             voiceChanged && languageChanged -> null
                             voiceChanged -> marked
                             else -> AgyVoicePreferences.languageLabel(markedLanguage)
                         }
-                        Text(
-                            when {
-                                target == null -> L.voice.agyVoiceCallUi.applyChanges
-                                inCall -> L.voice.agyVoiceCallUi.switchToTarget(target)
-                                else -> L.voice.agyVoiceCallUi.useTarget(target)
-                            },
-                            color = Ink, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1,
-                            modifier = Modifier.padding(vertical = 11.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                when {
+                                    target == null -> L.voice.agyVoiceCallUi.applyChanges
+                                    inCall -> L.voice.agyVoiceCallUi.switchToTarget(target)
+                                    else -> L.voice.agyVoiceCallUi.useTarget(target)
+                                },
+                                color = Ink, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, maxLines = 1,
+                                modifier = Modifier.padding(vertical = 11.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -718,26 +793,37 @@ private fun CallLogPanel(log: List<String>, onClose: () -> Unit) {
     val context = LocalContext.current
     val list = rememberLazyListState()
     LaunchedEffect(log.size) { if (log.isNotEmpty()) list.scrollToItem(log.lastIndex) }
+    val panelBg = Color(0xFF14161C)
+    val panelMuted = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), panelBg, 4.5f)
     Surface(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = Color(0xFF14161C),
+        color = panelBg,
         modifier = Modifier.fillMaxWidth().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
     ) {
         Column(Modifier.systemBarsPadding().padding(horizontal = 18.dp, vertical = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.voice.agyVoiceCallUi.callLog, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                Text(
-                    L.common.copy, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).clickable {
-                        val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Voice call log", "AntiGem voice call log\n" + log.joinToString("\n")))
-                        ai.antigem.ui.components.AppToastHelper.showToast(L.voice.agyVoiceCallUi.callLogCopied, ai.antigem.ui.components.ChatToastType.SUCCESS)
-                    }.padding(horizontal = 8.dp, vertical = 4.dp)
-                )
+                Text(L.voice.agyVoiceCallUi.callLog, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f).semantics { heading() })
+                Box(
+                    Modifier
+                        .minTouchTarget(48.dp)
+                        .clip(RoundedCornerShape(50))
+                        .clickable(role = Role.Button) {
+                            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("Voice call log", "AntiGem voice call log\n" + log.joinToString("\n")))
+                            ai.antigem.ui.components.AppToastHelper.showToast(L.voice.agyVoiceCallUi.callLogCopied, ai.antigem.ui.components.ChatToastType.SUCCESS)
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        L.common.copy, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.8f), panelBg, 4.5f),
+                        fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
             Text(
                 L.voice.agyVoiceCallUi.heardYouFollowedByNothingMeans,
-                color = Color.White.copy(alpha = 0.5f), fontSize = 11.5.sp, lineHeight = 15.sp
+                color = panelMuted, fontSize = 11.5.sp, lineHeight = 15.sp
             )
             Spacer(Modifier.height(10.dp))
             LazyColumn(state = list, modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
@@ -749,8 +835,10 @@ private fun CallLogPanel(log: List<String>, onClose: () -> Unit) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            Surface(onClick = onClose, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.1f), modifier = Modifier.fillMaxWidth()) {
-                Text(L.common.done, color = Color.White, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 11.dp))
+            Surface(onClick = onClose, shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.1f), modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(L.common.done, color = Color.White, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center, modifier = Modifier.padding(vertical = 11.dp))
+                }
             }
         }
     }
@@ -772,7 +860,7 @@ fun AgyVoiceCallPill(agentWorking: Boolean, modifier: Modifier = Modifier) {
         onClick = { AgyVoiceCall.setMinimized(false) },
         shape = RoundedCornerShape(18.dp),
         color = Color.Transparent,
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).minTouchTarget(48.dp)
     ) {
         Row(
             Modifier
@@ -784,6 +872,7 @@ fun AgyVoiceCallPill(agentWorking: Boolean, modifier: Modifier = Modifier) {
             Box(
                 Modifier.size(22.dp).graphicsLayer { scaleX = pulse; scaleY = pulse }.clip(CircleShape)
                     .background(Brush.radialGradient(listOf(rgb(voice.glint), rgb(voice.core), rgb(voice.deep))))
+                    .clearAndSetSemantics {}
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -791,15 +880,22 @@ fun AgyVoiceCallPill(agentWorking: Boolean, modifier: Modifier = Modifier) {
                     L.voice.agyVoiceCallUi.voiceCallValue((clock?.let { " · $it" } ?: "")),
                     color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1
                 )
-                Text(statusLine(st, agentWorking), color = Color.White.copy(alpha = 0.65f), fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    statusLine(st, agentWorking),
+                    color = ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), Color(0xFF15171E), 4.5f),
+                    fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
             }
             if (st.phase != Phase.FAILED) {
-                IconButton(onClick = { AgyVoiceCall.toggleMute() }) {
+                IconButton(onClick = { AgyVoiceCall.toggleMute() }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(if (st.muted) Icons.Rounded.MicOff else Icons.Rounded.Mic, if (st.muted) L.common.unmute else L.common.mute, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(20.dp))
                 }
             }
-            Surface(onClick = { AgyVoiceCall.end() }, shape = CircleShape, color = CallRed, modifier = Modifier.padding(end = 6.dp).size(34.dp)) {
-                Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.CallEnd, L.voice.agyVoiceCallUi.endCall, tint = Color.White, modifier = Modifier.size(18.dp)) }
+            IconButton(onClick = { AgyVoiceCall.end() }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Box(Modifier.size(34.dp).clip(CircleShape).background(CallRed), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.CallEnd, L.voice.agyVoiceCallUi.endCall, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
@@ -827,10 +923,18 @@ fun AgyVoiceFloatingCircle(
     val pulse by animateFloatAsState(1f + 0.22f * max(level, if (st.muted) 0f else mic * 0.7f), tween(120), label = "circle")
     val drag = rememberBubbleDrag(onTap = onTap, onDrag = onDrag, onDragEnd = onDragEnd)
     Box(Modifier.onSizeChanged(onSize).padding(6.dp)) {
-        Box(Modifier.size(58.dp).then(drag), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.size(58.dp).then(drag).semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = L.voice.agyVoiceCallUi.voiceCallValue("")
+                onClick(label = L.common.open) { onTap(); true }
+            },
+            contentAlignment = Alignment.Center
+        ) {
             Box(
                 Modifier.size(48.dp).graphicsLayer { scaleX = pulse; scaleY = pulse }.clip(CircleShape)
                     .background(Brush.radialGradient(listOf(rgb(voice.glint), rgb(voice.core), rgb(voice.deep))))
+                    .clearAndSetSemantics {}
             )
             when {
                 st.phase == Phase.FAILED -> Box(
@@ -876,7 +980,7 @@ fun AgyVoiceFloatingPanel(
                 .background(Brush.verticalGradient(listOf(rgb(voice.deep), Ink, Ink)))
         ) {
             // soft colour wash behind the orb
-            Canvas(Modifier.fillMaxSize()) {
+            Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
                 val c = Offset(size.width / 2, size.height * 0.4f)
                 drawCircle(
                     Brush.radialGradient(listOf(rgb(voice.core).copy(alpha = 0.2f), Color.Transparent), center = c, radius = size.width * 0.7f),
@@ -886,7 +990,7 @@ fun AgyVoiceFloatingPanel(
             Column(Modifier.fillMaxSize().padding(horizontal = 14.dp).padding(bottom = 10.dp)) {
                 // ---- handle: drag it down to minimize
                 Box(
-                    Modifier.fillMaxWidth().height(22.dp).pointerInput(Unit) {
+                    Modifier.fillMaxWidth().height(22.dp).clearAndSetSemantics {}.pointerInput(Unit) {
                         var pulled = 0f
                         detectVerticalDragGestures(
                             onDragStart = { pulled = 0f },
@@ -902,15 +1006,16 @@ fun AgyVoiceFloatingPanel(
                 }
                 // ---- top bar
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { if (failed) AgyVoiceCall.end() else onMinimize() }) {
+                    IconButton(onClick = { if (failed) AgyVoiceCall.end() else onMinimize() }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Rounded.KeyboardArrowDown, L.voice.agyVoiceCallUi.minimize, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(26.dp))
                     }
                     Column(Modifier.weight(1f).padding(horizontal = 2.dp)) {
                         Text(
                             st.title.ifBlank { L.common.antigravity }, color = Color.White, fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis
+                            fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() }
                         )
-                        Text(L.voice.agyVoiceCallUi.antigravityVoiceName(voice.name), color = Color.White.copy(alpha = 0.55f), fontSize = 11.5.sp, maxLines = 1)
+                        Text(L.voice.agyVoiceCallUi.antigravityVoiceName(voice.name), color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), Ink, 4.5f), fontSize = 11.5.sp, maxLines = 1)
                     }
                     if (clock != null) {
                         Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.08f)) {
@@ -921,27 +1026,37 @@ fun AgyVoiceFloatingPanel(
                             }
                         }
                     }
-                    IconButton(onClick = onHide) {
-                        Icon(Icons.Rounded.VisibilityOff, L.voice.agyVoiceCallUi.hideForThisCall, tint = Color.White.copy(alpha = 0.6f), modifier = Modifier.size(20.dp))
+                    IconButton(onClick = onHide, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Rounded.VisibilityOff, L.voice.agyVoiceCallUi.hideForThisCall, tint = ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), Ink, 4.5f), modifier = Modifier.size(20.dp))
                     }
                 }
                 // ---- status
                 Text(
                     statusLine(st, agentWorking),
-                    color = Color.White.copy(alpha = if (st.phase == Phase.LIVE) 0.8f else 0.6f),
+                    color = ensureAccessibleContrast(Color.White.copy(alpha = if (st.phase == Phase.LIVE) 0.88f else 0.75f), Ink, 4.5f),
                     fontSize = 13.5.sp, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
                 )
                 // ---- orb (smaller when the captions or the failure share the space)
                 BoxWithConstraints(
                     Modifier.fillMaxWidth().weight(if (captionsOn && !failed) 0.42f else 1f),
                     contentAlignment = Alignment.Center
                 ) {
+                    val orbActionLabel = if (st.muted) L.common.unmute else L.common.mute
                     VoiceOrb(
                         voice = voice, phase = st.phase, muted = st.muted, agentWorking = agentWorking && st.phase == Phase.LIVE,
-                        modifier = Modifier.size(minOf(maxWidth, maxHeight) * 0.95f).clickable(
-                            interactionSource = remember { MutableInteractionSource() }, indication = null
-                        ) { if (st.phase == Phase.LIVE) AgyVoiceCall.toggleMute() }
+                        modifier = Modifier.size(minOf(maxWidth, maxHeight) * 0.95f)
+                            .clickable(
+                                enabled = st.phase == Phase.LIVE,
+                                role = Role.Button,
+                                onClickLabel = orbActionLabel,
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { AgyVoiceCall.toggleMute() }
+                            .semantics {
+                                if (st.phase == Phase.LIVE) contentDescription = orbActionLabel
+                                else hideFromAccessibility()
+                            }
                     )
                 }
                 // ---- failure, or the captions
@@ -967,11 +1082,11 @@ fun AgyVoiceFloatingPanel(
                         }
                         RoundControl(Icons.AutoMirrored.Rounded.OpenInNew, L.common.open, active = false) { onOpenApp() }
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Surface(onClick = { AgyVoiceCall.end() }, shape = CircleShape, color = CallRed, modifier = Modifier.size(56.dp)) {
+                            Surface(onClick = { AgyVoiceCall.end() }, shape = CircleShape, color = CallRed, modifier = Modifier.size(56.dp).semantics { role = Role.Button }) {
                                 Box(contentAlignment = Alignment.Center) { Icon(Icons.Rounded.CallEnd, L.voice.agyVoiceCallUi.endCall, tint = Color.White, modifier = Modifier.size(26.dp)) }
                             }
                             Spacer(Modifier.height(6.dp))
-                            Text(L.voice.agyVoiceCallUi.end, color = Color.White.copy(alpha = 0.7f), fontSize = 11.5.sp)
+                            Text(L.voice.agyVoiceCallUi.end, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.78f), Ink, 4.5f), fontSize = 11.5.sp, modifier = Modifier.clearAndSetSemantics {})
                         }
                     }
                 }

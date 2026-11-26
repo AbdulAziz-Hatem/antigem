@@ -35,6 +35,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -185,8 +188,12 @@ fun AgentToolCallCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .minTouchTarget(48.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .clickable { ToolCallExpansionCache.setExpanded(toolCall, !isExpanded) }
+                .clickable(role = Role.Button) { ToolCallExpansionCache.setExpanded(toolCall, !isExpanded) }
+                .semantics {
+                    stateDescription = if (isExpanded) L.common.collapse else L.common.expand
+                }
                 .padding(horizontal = 4.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -194,7 +201,7 @@ fun AgentToolCallCard(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = if (isExpanded) L.common.collapse else L.common.expand,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                tint = accessibleMutedColor(alpha = 0.75f),
                 modifier = Modifier
                     .size(16.dp)
                     .rotate(rotation)
@@ -290,21 +297,27 @@ fun AgentToolCallCard(
             if (isRunning && onTerminate != null && isBash) {
                 Box(
                     modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(ai.antigem.theme.AppColors.danger.copy(alpha = 0.18f))
+                        .minTouchTarget(48.dp)
                         .clickable(
-                            role = androidx.compose.ui.semantics.Role.Button,
+                            role = Role.Button,
                             onClick = { onTerminate(toolCall) }
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Stop,
-                        contentDescription = L.components.agentToolCallCard.stopCommand,
-                        tint = ai.antigem.theme.AppColors.danger,
-                        modifier = Modifier.size(12.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(ai.antigem.theme.AppColors.danger.copy(alpha = 0.18f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = L.components.agentToolCallCard.stopCommand,
+                            tint = ai.antigem.theme.AppColors.danger,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(6.dp))
             }
@@ -315,7 +328,7 @@ fun AgentToolCallCard(
                     text = formatDuration(toolCall.durationMs),
                     fontSize = 10.5.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    color = accessibleMutedColor(alpha = 0.72f),
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )
             }
@@ -437,21 +450,22 @@ fun AgentToolCallCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
+                            val termHint = ensureAccessibleContrast(Color.Gray, ai.antigem.theme.AppColors.terminalBg, 4.5f, MaterialTheme.colorScheme.surface)
                             Text(
                                 text = L.components.agentToolCallCard.tapImageToEnlargeDoubleTap,
                                 fontSize = 11.sp,
-                                color = Color.Gray,
+                                color = termHint,
                                 modifier = Modifier.weight(1f)
                             )
 
                             IconButton(
                                 onClick = { showFullScreenViewer = true },
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Fullscreen,
                                     contentDescription = L.components.agentToolCallCard.fullView,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = termHint,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -468,12 +482,12 @@ fun AgentToolCallCard(
                                         snackbarHostState = snackbarHostState
                                     )
                                 },
-                                modifier = Modifier.size(26.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Download,
                                     contentDescription = L.components.agentToolCallCard.downloadImage,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = termHint,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -534,11 +548,12 @@ fun AgentToolCallCard(
                                 text = "⏱️ ${formatDuration(toolCall.durationMs)}",
                                 fontSize = 11.sp,
                                 fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), ai.antigem.theme.AppColors.terminalBg, 4.5f, MaterialTheme.colorScheme.surface),
                                 modifier = Modifier.padding(horizontal = 6.dp)
                             )
                         }
 
+                        val copyTint = ensureAccessibleContrast(Color.Gray, ai.antigem.theme.AppColors.terminalBg, 4.5f, MaterialTheme.colorScheme.surface)
                         IconButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -546,13 +561,13 @@ fun AgentToolCallCard(
                                 clipboard.setPrimaryClip(clip)
                                 Toast.makeText(context, L.components.agentToolCallCard.outputCopied, Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
                                 contentDescription = L.components.agentToolCallCard.copyOutput,
-                                tint = Color.Gray,
-                                modifier = Modifier.size(13.dp)
+                                tint = copyTint,
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -582,7 +597,7 @@ fun AgentToolCallCard(
                             text = emptyMessage,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
-                            color = Color.Gray
+                            color = ensureAccessibleContrast(Color.Gray, ai.antigem.theme.AppColors.terminalBg, 4.5f, MaterialTheme.colorScheme.surface)
                         )
                     } else {
                         Text(

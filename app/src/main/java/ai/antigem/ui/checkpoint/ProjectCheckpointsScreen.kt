@@ -3,10 +3,12 @@ package ai.antigem.ui.checkpoint
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -25,6 +27,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -38,8 +50,13 @@ import ai.antigem.theme.AppColors
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
 import ai.antigem.ui.components.accent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -69,7 +86,10 @@ fun ProjectCheckpointsScreen() {
         CheckpointHistory(project = openHistory, onBack = { historyFor = null }, onClean = { cleanFor = openHistory }, onDeleteAll = { deleteAllFor = openHistory })
     } else {
         val s = settings
-        val muted = MaterialTheme.colorScheme.onSurfaceVariant
+        val surfaceBg = MaterialTheme.colorScheme.surface
+        val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
+        val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+        val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
         Column(Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)) {
             Text(
                 L.checkpoint.projectCheckpoints.beforeEveryMessageYouSendClaude,
@@ -78,33 +98,40 @@ fun ProjectCheckpointsScreen() {
             loadError?.let {
                 Spacer(Modifier.height(12.dp))
                 Notice(Icons.Outlined.WarningAmber, AppColors.danger, it)
-                TextButton(onClick = { refresh++ }) { Text(L.common.tryAgain) }
+                TextButton(onClick = { refresh++ }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.tryAgain) }
             }
 
             SectionLabel(L.checkpoint.projectCheckpoints.checkpoints)
             val mode = s?.mode ?: CheckpointSettings.MODE_OFF
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                 listOf(
                     Triple(CheckpointSettings.MODE_OFF, L.common.off, L.checkpoint.projectCheckpoints.noCheckpointsAreMadeTheDefault),
                     Triple(CheckpointSettings.MODE_SELECTED, L.checkpoint.projectCheckpoints.projectsIChoose, L.checkpoint.projectCheckpoints.aNewChatInAProject),
                     Triple(CheckpointSettings.MODE_ALL, L.checkpoint.projectCheckpoints.allGitProjects, L.checkpoint.projectCheckpoints.everyGitProjectGetsCheckpointsTurn)
                 ).forEach { (value, title, desc) ->
-                    ai.antigem.ui.claude.PickerOption(
-                        title = title,
-                        description = desc,
-                        color = if (value == CheckpointSettings.MODE_OFF) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
-                        selected = mode == value,
-                        icon = when (value) {
-                            CheckpointSettings.MODE_OFF -> Icons.Outlined.PowerSettingsNew
-                            CheckpointSettings.MODE_SELECTED -> Icons.AutoMirrored.Outlined.PlaylistAddCheck
-                            else -> Icons.Outlined.AllInclusive
-                        },
-                        onClick = {
-                            if (s != null && mode != value) scope.launch {
-                                ProjectCheckpoints.updateSettings(mode = value).onFailure { toastError(it) }
-                            }
+                    Box(
+                        modifier = Modifier.semantics {
+                            selected = (mode == value)
+                            role = Role.RadioButton
                         }
-                    )
+                    ) {
+                        ai.antigem.ui.claude.PickerOption(
+                            title = title,
+                            description = desc,
+                            color = if (value == CheckpointSettings.MODE_OFF) muted else MaterialTheme.colorScheme.primary,
+                            selected = mode == value,
+                            icon = when (value) {
+                                CheckpointSettings.MODE_OFF -> Icons.Outlined.PowerSettingsNew
+                                CheckpointSettings.MODE_SELECTED -> Icons.AutoMirrored.Outlined.PlaylistAddCheck
+                                else -> Icons.Outlined.AllInclusive
+                            },
+                            onClick = {
+                                if (s != null && mode != value) scope.launch {
+                                    ProjectCheckpoints.updateSettings(mode = value).onFailure { toastError(it) }
+                                }
+                            }
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -113,7 +140,7 @@ fun ProjectCheckpointsScreen() {
 
             if (s != null) {
                 SectionLabel(L.checkpoint.projectCheckpoints.keep)
-                Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+                Surface(shape = RoundedCornerShape(16.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         ChoiceRow(L.checkpoint.projectCheckpoints.deleteCheckpointsOlderThan, s.retentionDays, listOf(7 to "7 days", 30 to "30 days", 90 to "90 days", 0 to L.common.never)) {
                             scope.launch { ProjectCheckpoints.updateSettings(retentionDays = it).onFailure(::toastError) }
@@ -129,7 +156,7 @@ fun ProjectCheckpointsScreen() {
                         }
                         Text(
                             L.checkpoint.projectCheckpoints.oldCheckpointsAreRemovedAutomaticallyThe,
-                            fontSize = 11.5.sp, lineHeight = 15.sp, color = muted
+                            fontSize = 11.5.sp, lineHeight = 15.sp, color = cardMuted
                         )
                     }
                 }
@@ -138,7 +165,10 @@ fun ProjectCheckpointsScreen() {
             SectionLabel(L.common.projects)
             val list = projects
             when {
-                list == null && loadError == null -> Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                list == null && loadError == null -> Row(
+                    Modifier.padding(vertical = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(L.common.loading, fontSize = 13.sp, color = muted)
@@ -163,7 +193,7 @@ fun ProjectCheckpointsScreen() {
             }
 
             SectionLabel(L.checkpoint.projectCheckpoints.goodToKnow)
-            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+            Surface(shape = RoundedCornerShape(16.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(
                         L.checkpoint.projectCheckpoints.onlyFilesInsideTheProjectGo,
@@ -173,7 +203,7 @@ fun ProjectCheckpointsScreen() {
                         L.checkpoint.projectCheckpoints.theCopiesLiveWithTheBridge
                     ).forEach { t ->
                         Row(verticalAlignment = Alignment.Top) {
-                            Icon(Icons.Outlined.Info, null, tint = muted, modifier = Modifier.size(14.dp).padding(top = 2.dp))
+                            Icon(Icons.Outlined.Info, null, tint = cardMuted, modifier = Modifier.size(14.dp).padding(top = 2.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(t, fontSize = 12.sp, lineHeight = 16.sp)
                         }
@@ -197,32 +227,51 @@ fun ProjectCheckpointsScreen() {
     }
     deleteAllFor?.let { p ->
         var forget by remember(p.path) { mutableStateOf(false) }
+        val dialogBg = MaterialTheme.colorScheme.surface
+        val dangerText = ensureAccessibleContrast(AppColors.danger, dialogBg, 4.5f, dialogBg)
         AlertDialog(
             onDismissRequest = { deleteAllFor = null },
             shape = RoundedCornerShape(16.dp),
-            containerColor = MaterialTheme.colorScheme.surface,
-            title = { Text(L.checkpoint.projectCheckpoints.deleteAllCheckpoints, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+            containerColor = dialogBg,
+            title = {
+                Text(
+                    L.checkpoint.projectCheckpoints.deleteAllCheckpoints,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    modifier = Modifier.semantics { heading() }
+                )
+            },
             text = {
                 Column {
                     Text(L.checkpoint.projectCheckpoints.everyCheckpointOfNameIsDeleted(p.name, formatBytes(p.sizeBytes)), fontSize = 14.sp, lineHeight = 20.sp)
-                    Row(Modifier.padding(top = 10.dp).clickable { forget = !forget }, verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = forget, onCheckedChange = { forget = it })
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .accessibleToggleRow(checked = forget, role = Role.Checkbox) { forget = !forget },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = forget, onCheckedChange = null)
                         Text(L.checkpoint.projectCheckpoints.alsoForgetMyAnswerForThis, fontSize = 13.5.sp)
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    deleteAllFor = null
-                    if (historyFor?.path == p.path) historyFor = null
-                    scope.launch {
-                        ProjectCheckpoints.delete(p.path, all = true, forget = forget).fold(
-                            { AppToastHelper.showToast(L.checkpoint.projectCheckpoints.allCheckpointsOfNameDeleted(p.name), ChatToastType.SUCCESS) }, ::toastError
-                        )
-                    }
-                }) { Text(L.checkpoint.projectCheckpoints.deleteAll, color = AppColors.danger, fontWeight = FontWeight.Bold) }
+                TextButton(
+                    onClick = {
+                        deleteAllFor = null
+                        if (historyFor?.path == p.path) historyFor = null
+                        scope.launch {
+                            ProjectCheckpoints.delete(p.path, all = true, forget = forget).fold(
+                                { AppToastHelper.showToast(L.checkpoint.projectCheckpoints.allCheckpointsOfNameDeleted(p.name), ChatToastType.SUCCESS) }, ::toastError
+                            )
+                        }
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.checkpoint.projectCheckpoints.deleteAll, color = dangerText, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { deleteAllFor = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { deleteAllFor = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -234,7 +283,7 @@ private fun toastError(e: Throwable) {
 @Composable
 private fun SectionLabel(text: String) {
     Spacer(Modifier.height(22.dp))
-    Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+    Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
     Spacer(Modifier.height(10.dp))
 }
 
@@ -244,9 +293,18 @@ private fun ChoiceRow(title: String, current: Int, options: List<Pair<Int, Strin
     Column {
         Text(title, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         Spacer(Modifier.height(6.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.selectableGroup()
+        ) {
             options.forEach { (value, label) ->
-                FilterChip(selected = value == current, onClick = { if (value != current) onPick(value) }, label = { Text(label, fontSize = 12.5.sp) })
+                FilterChip(
+                    selected = value == current,
+                    onClick = { if (value != current) onPick(value) },
+                    label = { Text(label, fontSize = 12.5.sp) },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                )
             }
         }
     }
@@ -257,22 +315,40 @@ private fun ProjectCard(
     p: CheckpointProjectInfo, mode: String,
     onToggle: (Boolean) -> Unit, onHistory: () -> Unit, onClean: () -> Unit, onDeleteAll: () -> Unit
 ) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val (status, color) = when {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val (status, rawColor) = when {
         p.tracked -> L.checkpoint.projectCheckpoints.savingCheckpoints to AppColors.success
         !p.exists -> L.checkpoint.projectCheckpoints.folderNotFound to AppColors.danger
         mode == CheckpointSettings.MODE_OFF -> L.checkpoint.projectCheckpoints.checkpointsAreOff to muted
         !p.isGit -> L.checkpoint.projectCheckpoints.notAGitRepository to AppColors.warning
         else -> L.checkpoint.projectCheckpoints.offForThisProject to muted
     }
+    val color = ensureAccessibleContrast(rawColor, cardBg, 4.5f, surfaceBg)
+    val dangerText = ensureAccessibleContrast(AppColors.danger, cardBg, 4.5f, surfaceBg)
     val switchOn = when (mode) {
         CheckpointSettings.MODE_ALL -> p.decision != "off"
         else -> p.decision == "on"
     }
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    val switchEnabled = mode != CheckpointSettings.MODE_OFF && p.exists
+    Surface(shape = RoundedCornerShape(16.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .minTouchTarget(48.dp)
+                    .then(
+                        if (switchEnabled) Modifier.clickable(role = Role.Switch) { onToggle(!switchOn) }
+                        else Modifier
+                    )
+                    .semantics(mergeDescendants = true) {
+                        toggleableState = if (switchOn) ToggleableState.On else ToggleableState.Off
+                        if (!switchEnabled) disabled()
+                    }
+            ) {
+                Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(rawColor.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Folder, null, tint = color, modifier = Modifier.size(19.dp))
                 }
                 Spacer(Modifier.width(12.dp))
@@ -280,7 +356,7 @@ private fun ProjectCard(
                     Text(p.name, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(p.path, fontSize = 11.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Switch(checked = switchOn, enabled = mode != CheckpointSettings.MODE_OFF && p.exists, onCheckedChange = onToggle)
+                Switch(checked = switchOn, enabled = switchEnabled, onCheckedChange = null)
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -300,16 +376,19 @@ private fun ProjectCard(
                 Text(L.checkpoint.projectCheckpoints.runGitInitInThisFolder, fontSize = 11.5.sp, color = muted)
             }
             if (p.hasData) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onHistory) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
+                ) {
+                    TextButton(onClick = onHistory, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.History, null, Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text(L.checkpoint.projectCheckpoints.history)
                     }
-                    TextButton(onClick = onClean) {
+                    TextButton(onClick = onClean, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.CleaningServices, null, Modifier.size(16.dp)); Spacer(Modifier.width(5.dp)); Text(L.checkpoint.projectCheckpoints.cleanOld)
                     }
-                    TextButton(onClick = onDeleteAll) {
-                        Icon(Icons.Outlined.DeleteOutline, null, Modifier.size(16.dp), tint = AppColors.danger); Spacer(Modifier.width(5.dp))
-                        Text(L.checkpoint.projectCheckpoints.deleteAll, color = AppColors.danger)
+                    TextButton(onClick = onDeleteAll, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Outlined.DeleteOutline, null, Modifier.size(16.dp), tint = dangerText); Spacer(Modifier.width(5.dp))
+                        Text(L.checkpoint.projectCheckpoints.deleteAll, color = dangerText)
                     }
                 }
             } else Spacer(Modifier.height(6.dp))
@@ -320,26 +399,49 @@ private fun ProjectCard(
 @Composable
 private fun CleanOldDialog(p: CheckpointProjectInfo, onDismiss: () -> Unit, onPick: (Int) -> Unit) {
     var days by remember { mutableIntStateOf(7) }
+    val dialogBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
+    val dangerText = ensureAccessibleContrast(AppColors.danger, dialogBg, 4.5f, dialogBg)
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text(L.checkpoint.projectCheckpoints.cleanOldCheckpoints, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        containerColor = dialogBg,
+        title = {
+            Text(
+                L.checkpoint.projectCheckpoints.cleanOldCheckpoints,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                modifier = Modifier.semantics { heading() }
+            )
+        },
         text = {
             Column {
                 Text(L.checkpoint.projectCheckpoints.deleteTheCheckpointsOfNameOlder(p.name), fontSize = 14.sp)
                 Spacer(Modifier.height(6.dp))
-                listOf(1 to "1 day", 3 to "3 days", 7 to "7 days", 30 to "30 days").forEach { (d, label) ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { days = d }.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = days == d, onClick = { days = d })
-                        Text(label, fontSize = 14.sp)
+                Column(modifier = Modifier.selectableGroup()) {
+                    listOf(1 to "1 day", 3 to "3 days", 7 to "7 days", 30 to "30 days").forEach { (d, label) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleSelectionRow(selected = days == d, role = Role.RadioButton) { days = d }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = days == d, onClick = null)
+                            Text(label, fontSize = 14.sp)
+                        }
                     }
                 }
-                Text(L.checkpoint.projectCheckpoints.newerCheckpointsStayAndKeepWorking, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(L.checkpoint.projectCheckpoints.newerCheckpointsStayAndKeepWorking, fontSize = 12.sp, color = muted)
             }
         },
-        confirmButton = { TextButton(onClick = { onPick(days) }) { Text(L.common.delete, color = AppColors.danger, fontWeight = FontWeight.Bold) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        confirmButton = {
+            TextButton(onClick = { onPick(days) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Text(L.common.delete, color = dangerText, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
@@ -354,21 +456,25 @@ private fun CheckpointHistory(project: CheckpointProjectInfo, onBack: () -> Unit
     LaunchedEffect(project.path, changes) {
         ProjectCheckpoints.history(project.path).fold({ items = it; error = null }, { error = it.message })
     }
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
+    val dangerIcon = ensureAccessibleContrast(AppColors.danger, surfaceBg, 3.0f, surfaceBg)
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, L.common.back) }
+            IconButton(onClick = onBack, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, L.common.back) }
             Column(Modifier.weight(1f)) {
-                Text(project.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(project.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
                 Text("${items?.size ?: project.count} checkpoints · ${formatBytes(project.sizeBytes)}", fontSize = 12.sp, color = muted)
             }
-            IconButton(onClick = onClean) { Icon(Icons.Outlined.CleaningServices, L.checkpoint.projectCheckpoints.cleanOld) }
-            IconButton(onClick = onDeleteAll) { Icon(Icons.Outlined.DeleteOutline, L.checkpoint.projectCheckpoints.deleteAll, tint = AppColors.danger) }
+            IconButton(onClick = onClean, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.CleaningServices, L.checkpoint.projectCheckpoints.cleanOld) }
+            IconButton(onClick = onDeleteAll, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.DeleteOutline, L.checkpoint.projectCheckpoints.deleteAll, tint = dangerIcon) }
         }
         error?.let { Box(Modifier.padding(16.dp)) { Notice(Icons.Outlined.WarningAmber, AppColors.danger, it) } }
         val list = items
         if (list == null && error == null) {
-            Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp) }
+            Box(Modifier.fillMaxWidth().padding(30.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(22.dp).semantics { liveRegion = LiveRegionMode.Polite }, strokeWidth = 2.dp)
+            }
         } else if (list != null && list.isEmpty()) {
             Text(L.checkpoint.projectCheckpoints.noCheckpointsLeft, fontSize = 13.sp, color = muted, modifier = Modifier.padding(20.dp))
         } else if (list != null) {
@@ -393,10 +499,22 @@ private fun CheckpointHistory(project: CheckpointProjectInfo, onBack: () -> Unit
 @Composable
 private fun HistoryRow(cp: CheckpointSummary, onClick: () -> Unit) {
     val agent = agentOf(cp.agent)
-    val color = if (cp.isPreRestore) AppColors.info else agent?.accent() ?: MaterialTheme.colorScheme.primary
-    Surface(onClick = onClick, shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val rawColor = if (cp.isPreRestore) AppColors.info else agent?.accent() ?: MaterialTheme.colorScheme.primary
+    val color = ensureAccessibleContrast(rawColor, cardBg, 3.0f, surfaceBg)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = cardBg,
+        modifier = Modifier
+            .fillMaxWidth()
+            .minTouchTarget(48.dp)
+            .semantics(mergeDescendants = true) { role = Role.Button }
+    ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(rawColor.copy(alpha = 0.13f)), contentAlignment = Alignment.Center) {
                 Icon(if (cp.isPreRestore) Icons.AutoMirrored.Outlined.Undo else Icons.Outlined.History, null, tint = color, modifier = Modifier.size(18.dp))
             }
             Spacer(Modifier.width(12.dp))
@@ -412,7 +530,7 @@ private fun HistoryRow(cp: CheckpointSummary, onClick: () -> Unit) {
                     if (cp.late) "late" else null,
                     if (cp.repos > 1) "${cp.repos} repos" else null
                 )
-                Text(flags.joinToString(" · "), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(flags.joinToString(" · "), fontSize = 11.5.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -425,12 +543,21 @@ private fun HistoryRow(cp: CheckpointSummary, onClick: () -> Unit) {
 @Composable
 fun TrackProjectDialog(state: CheckpointProjectState, onAnswer: (String?) -> Unit) {
     val name = state.path.trimEnd('/').substringAfterLast('/').ifBlank { state.path }
+    val dialogBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
     AlertDialog(
         onDismissRequest = { onAnswer(null) },
         shape = RoundedCornerShape(16.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = dialogBg,
         icon = { Icon(Icons.Outlined.History, null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(L.checkpoint.projectCheckpoints.keepCheckpointsForName(name), fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+        title = {
+            Text(
+                L.checkpoint.projectCheckpoints.keepCheckpointsForName(name),
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                modifier = Modifier.semantics { heading() }
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
@@ -441,12 +568,18 @@ fun TrackProjectDialog(state: CheckpointProjectState, onAnswer: (String?) -> Uni
                     Notice(Icons.Outlined.WarningAmber, AppColors.warning,
                         L.checkpoint.projectCheckpoints.thisFolderIsNotAGit)
                 }
-                Text(L.checkpoint.projectCheckpoints.youCanChangeThisAnyTime, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(L.checkpoint.projectCheckpoints.youCanChangeThisAnyTime, fontSize = 12.sp, color = muted)
             }
         },
         confirmButton = {
-            TextButton(onClick = { onAnswer("on") }) { Text(L.checkpoint.projectCheckpoints.keepCheckpoints, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+            TextButton(onClick = { onAnswer("on") }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Text(L.checkpoint.projectCheckpoints.keepCheckpoints, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
         },
-        dismissButton = { TextButton(onClick = { onAnswer("off") }) { Text(L.checkpoint.projectCheckpoints.notForThisProject) } }
+        dismissButton = {
+            TextButton(onClick = { onAnswer("off") }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Text(L.checkpoint.projectCheckpoints.notForThisProject)
+            }
+        }
     )
 }

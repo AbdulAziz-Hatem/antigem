@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,6 +26,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -35,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.data.daemon.ProjectItem
 import ai.antigem.data.files.*
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -66,8 +74,8 @@ internal fun PlacesSheet(
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 12.dp), contentPadding = PaddingValues(bottom = 28.dp)) {
-            item { Text(L.files.explorerDialogs.places, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp)) }
+        LazyColumn(Modifier.fillMaxWidth().selectableGroup().padding(horizontal = 12.dp), contentPadding = PaddingValues(bottom = 28.dp)) {
+            item { Text(L.files.explorerDialogs.places, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp).semantics { heading() }) }
             if (roots.isEmpty()) {
                 item { Text(L.files.explorerDialogs.loadingPlaces, modifier = Modifier.padding(14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
@@ -98,7 +106,7 @@ private fun PlaceRow(icon: ImageVector, name: String, path: String, active: Bool
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClick = onClick)
+            .accessibleSelectionRow(selected = active, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -108,7 +116,7 @@ private fun PlaceRow(icon: ImageVector, name: String, path: String, active: Bool
         ) { Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp)) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(name, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (total > 0) {
                 val used = (total - free).coerceAtLeast(0)
                 Spacer(Modifier.height(5.dp))
@@ -122,7 +130,7 @@ private fun PlaceRow(icon: ImageVector, name: String, path: String, active: Bool
                 Spacer(Modifier.height(4.dp))
                 Text("${FileKinds.formatSize(free)} free of ${FileKinds.formatSize(total)}", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                Text(path, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                Text(path, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
             }
         }
     }
@@ -286,17 +294,19 @@ internal fun OpenWithSheet(
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(L.files.explorerDialogs.openWith2, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                    Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
                 }
             }
             Spacer(Modifier.height(14.dp))
             options.forEach { o ->
+                val badgeBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
+                val badgeColor = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, badgeBg, 4.5f, MaterialTheme.colorScheme.surfaceContainerLow)
                 Surface(
                     onClick = { onChoose(o.choice, remember && ext.isNotBlank() && o.choice != OpenChoice.SHARE) },
                     shape = RoundedCornerShape(16.dp),
                     color = if (o.recommended) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerLow,
                     border = if (o.recommended) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)) else null,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).padding(vertical = 4.dp)
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         val tint = if (o.warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -313,10 +323,10 @@ internal fun OpenWithSheet(
                                         L.common.recommended,
                                         fontSize = 10.5.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = badgeColor,
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                                            .background(badgeBg)
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
@@ -328,10 +338,14 @@ internal fun OpenWithSheet(
             }
             if (ext.isNotBlank()) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { remember = !remember }.padding(vertical = 4.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = remember, role = Role.Checkbox) { remember = !remember }
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(checked = remember, onCheckedChange = { remember = it })
+                    Checkbox(checked = remember, onCheckedChange = null)
                     Text(L.files.explorerDialogs.alwaysOpenExtFilesThisWay(ext), fontSize = 13.5.sp)
                 }
             }
@@ -361,7 +375,7 @@ internal fun DeleteConfirmDialog(entries: List<ExplorerEntry>, onConfirm: () -> 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     EntryIcon(e, 24.dp, thumbnails = false, corner = 7.dp)
                                     Spacer(Modifier.width(8.dp))
-                                    Text(e.name, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                                    Text(e.name, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
                                 }
                             }
                             if (entries.size > 4) Text(L.files.explorerDialogs.andValueMore(entries.size - 4), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -378,10 +392,13 @@ internal fun DeleteConfirmDialog(entries: List<ExplorerEntry>, onConfirm: () -> 
                 Text(L.files.explorerDialogs.thisIsPermanentDeletedFilesCannot, fontSize = 13.5.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
                 if (needsAck) {
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { ack = !ack },
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .accessibleToggleRow(checked = ack, role = Role.Checkbox) { ack = !ack },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Checkbox(checked = ack, onCheckedChange = { ack = it }, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.error))
+                        Checkbox(checked = ack, onCheckedChange = null, colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.error))
                         Text(L.files.explorerDialogs.iUnderstandDeletePermanently, fontSize = 13.5.sp)
                     }
                 }
@@ -472,7 +489,7 @@ internal fun NameDialog(
 internal fun CreateSheet(allowProject: Boolean, onFolder: () -> Unit, onFile: () -> Unit, onProject: () -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 28.dp)) {
-            Text(L.common.create, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp))
+            Text(L.common.create, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp, bottom = 8.dp).semantics { heading() })
             SheetRow(Icons.Outlined.CreateNewFolder, L.files.explorerDialogs.folder, tint = MaterialTheme.colorScheme.primary, onClick = onFolder)
             SheetRow(Icons.Outlined.NoteAdd, L.common.file, L.files.explorerDialogs.emptyFileAnyExtension, tint = MaterialTheme.colorScheme.primary, onClick = onFile)
             if (allowProject) SheetRow(Icons.Outlined.RocketLaunch, L.files.explorerDialogs.projectFromTemplate, L.files.explorerDialogs.pythonNodeJsWebKotlinC, tint = MaterialTheme.colorScheme.primary, onClick = onProject)
@@ -499,9 +516,18 @@ internal fun NewProjectDialog(onCreate: suspend (name: String, template: String)
                     isError = error != null, supportingText = error?.let { { Text(it) } }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()
                 )
                 @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.selectableGroup()
+                ) {
                     templates.forEach { (k, label) ->
-                        FilterChip(selected = template == k, onClick = { template = k }, label = { Text(label) })
+                        FilterChip(
+                            selected = template == k,
+                            onClick = { template = k },
+                            label = { Text(label) },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        )
                     }
                 }
             }
@@ -558,17 +584,25 @@ internal fun DetailsSheet(entry: ExplorerEntry, onCopyPath: (String) -> Unit, on
                 if (s.symlinkTarget.isNotBlank()) DetailRow(L.files.explorerDialogs.linksTo, s.symlinkTarget, mono = true)
                 // the bridge's machine only (Android storage has no Unix permissions to change)
                 if (!s.isDir && side == ExplorerSide.BRIDGE) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .accessibleToggleRow(checked = s.executable, role = Role.Switch) {
+                                val on = !s.executable
+                                scope.launch {
+                                    FileExplorerApi.chmod(entry.path, if (on) "755" else "644")
+                                    reload++
+                                }
+                            }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Column(Modifier.weight(1f)) {
                             Text(L.files.explorerDialogs.executable, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             Text(L.files.explorerDialogs.letsScriptsAndProgramsRunChmod, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(checked = s.executable, onCheckedChange = { on ->
-                            scope.launch {
-                                FileExplorerApi.chmod(entry.path, if (on) "755" else "644")
-                                reload++
-                            }
-                        })
+                        Switch(checked = s.executable, onCheckedChange = null)
                     }
                 }
             }
@@ -578,11 +612,13 @@ internal fun DetailsSheet(entry: ExplorerEntry, onCopyPath: (String) -> Unit, on
 
 @Composable
 private fun DetailRow(label: String, value: String, mono: Boolean = false, onCopy: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.Top) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(104.dp))
         Text(value, fontSize = 13.5.sp, fontFamily = if (mono) FontFamily.Monospace else null, modifier = Modifier.weight(1f))
         if (onCopy != null) {
-            Icon(Icons.Outlined.ContentCopy, L.files.explorerDialogs.copyPath, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp).clickable(onClick = onCopy))
+            IconButton(onClick = onCopy, modifier = Modifier.minTouchTarget(48.dp)) {
+                Icon(Icons.Outlined.ContentCopy, L.files.explorerDialogs.copyPath, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            }
         }
     }
 }
@@ -643,7 +679,7 @@ internal fun ArchiveSheet(entry: ExplorerEntry, onExtractHere: () -> Unit, onExt
                 EntryIcon(entry, 44.dp, thumbnails = false)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                    Text(entry.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
                     val list = entries
                     Text(
                         when {
@@ -659,10 +695,10 @@ internal fun ArchiveSheet(entry: ExplorerEntry, onExtractHere: () -> Unit, onExt
             Spacer(Modifier.height(12.dp))
             if (FileKinds.isExtractable(entry.name)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onExtractHere, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                    Button(onClick = onExtractHere, modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(12.dp)) {
                         Icon(Icons.Outlined.Unarchive, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.common.extractHere)
                     }
-                    OutlinedButton(onClick = onExtractTo, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) { Text(L.files.explorerDialogs.extractTo) }
+                    OutlinedButton(onClick = onExtractTo, modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(12.dp)) { Text(L.files.explorerDialogs.extractTo) }
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -678,7 +714,7 @@ internal fun ArchiveSheet(entry: ExplorerEntry, onExtractHere: () -> Unit, onExt
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(10.dp))
-                        Text(a.name.trimEnd('/').substringAfterLast('/'), fontSize = 13.5.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(a.name.trimEnd('/').substringAfterLast('/'), fontSize = 13.5.sp, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                         if (!a.isDir) Text(FileKinds.formatSize(a.size), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -694,27 +730,32 @@ internal fun ArchiveSheet(entry: ExplorerEntry, onExtractHere: () -> Unit, onExt
 internal fun ViewOptionsSheet(settings: ExplorerSettings, onChange: ((ExplorerSettings) -> ExplorerSettings) -> Unit, onForgetChoices: () -> Unit, rememberedCount: Int, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(L.files.explorerDialogs.sortView, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            Text(L.files.explorerDialogs.sortBy, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(L.files.explorerDialogs.sortView, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+            Text(L.files.explorerDialogs.sortBy, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp).semantics { heading() })
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                 SortBy.entries.forEach { s ->
-                    FilterChip(selected = settings.sortBy == s, onClick = { onChange { it.copy(sortBy = s) } }, label = { Text(s.label) })
+                    FilterChip(
+                        selected = settings.sortBy == s,
+                        onClick = { onChange { it.copy(sortBy = s) } },
+                        label = { Text(s.label) },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    )
                 }
             }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                SegmentedButton(selected = !settings.descending, onClick = { onChange { it.copy(descending = false) } }, shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text(L.files.explorerDialogs.ascending) }
-                SegmentedButton(selected = settings.descending, onClick = { onChange { it.copy(descending = true) } }, shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text(L.files.explorerDialogs.descending) }
+                SegmentedButton(selected = !settings.descending, onClick = { onChange { it.copy(descending = false) } }, shape = SegmentedButtonDefaults.itemShape(0, 2), modifier = Modifier.minTouchTarget(48.dp)) { Text(L.files.explorerDialogs.ascending) }
+                SegmentedButton(selected = settings.descending, onClick = { onChange { it.copy(descending = true) } }, shape = SegmentedButtonDefaults.itemShape(1, 2), modifier = Modifier.minTouchTarget(48.dp)) { Text(L.files.explorerDialogs.descending) }
             }
-            Text(L.files.explorerDialogs.layout, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            Text(L.files.explorerDialogs.layout, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp).semantics { heading() })
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(selected = !settings.grid, onClick = { onChange { it.copy(grid = false) } }, shape = SegmentedButtonDefaults.itemShape(0, 2), icon = { Icon(Icons.Outlined.ViewList, null, Modifier.size(18.dp)) }) { Text(L.common.list) }
-                SegmentedButton(selected = settings.grid, onClick = { onChange { it.copy(grid = true) } }, shape = SegmentedButtonDefaults.itemShape(1, 2), icon = { Icon(Icons.Outlined.GridView, null, Modifier.size(18.dp)) }) { Text(L.files.explorerDialogs.grid) }
+                SegmentedButton(selected = !settings.grid, onClick = { onChange { it.copy(grid = false) } }, shape = SegmentedButtonDefaults.itemShape(0, 2), icon = { Icon(Icons.Outlined.ViewList, null, Modifier.size(18.dp)) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.list) }
+                SegmentedButton(selected = settings.grid, onClick = { onChange { it.copy(grid = true) } }, shape = SegmentedButtonDefaults.itemShape(1, 2), icon = { Icon(Icons.Outlined.GridView, null, Modifier.size(18.dp)) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.files.explorerDialogs.grid) }
             }
             SwitchRow(L.files.explorerDialogs.foldersFirst, settings.foldersFirst) { v -> onChange { it.copy(foldersFirst = v) } }
             SwitchRow(L.files.explorerDialogs.showHiddenFiles, settings.showHidden, L.files.explorerDialogs.namesStartingWithADotLike) { v -> onChange { it.copy(showHidden = v) } }
             SwitchRow(L.files.explorerDialogs.imageThumbnails, settings.thumbnails) { v -> onChange { it.copy(thumbnails = v) } }
             if (rememberedCount > 0) {
-                TextButton(onClick = onForgetChoices) { Text("Forget \"always open with\" choices ($rememberedCount)") }
+                TextButton(onClick = onForgetChoices, modifier = Modifier.minTouchTarget(48.dp)) { Text("Forget \"always open with\" choices ($rememberedCount)") }
             }
         }
     }
@@ -722,12 +763,19 @@ internal fun ViewOptionsSheet(settings: ExplorerSettings, onChange: ((ExplorerSe
 
 @Composable
 private fun SwitchRow(title: String, checked: Boolean, subtitle: String? = null, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onChange(!checked) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .accessibleToggleRow(checked = checked, role = Role.Switch) { onChange(!checked) }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 15.sp)
             if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

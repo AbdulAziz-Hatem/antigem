@@ -10,6 +10,7 @@ import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
@@ -48,6 +49,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -213,7 +222,7 @@ fun ChatVideoPlayer(source: String, caption: String, modifier: Modifier = Modifi
                 .background(Color.Black)
         ) {
             // stays in place while full screen is open: the player switches views without a gap (no pause)
-            if (c.phase != VideoPlayerController.Phase.IDLE) VideoSurface(c, VideoSlot.INLINE, Modifier.fillMaxSize())
+            if (c.phase != VideoPlayerController.Phase.IDLE) VideoSurface(c, VideoSlot.INLINE, Modifier.fillMaxSize(), accessible = !inFullscreen)
             if (!c.hasFrame || inFullscreen || c.phase == VideoPlayerController.Phase.IDLE) PreviewImage(preview?.bitmap, Modifier.fillMaxSize())
             if (inFullscreen) {
                 Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
@@ -241,7 +250,7 @@ fun ChatVideoPlayer(source: String, caption: String, modifier: Modifier = Modifi
                 text = caption,
                 fontSize = 11.5.sp,
                 fontStyle = FontStyle.Italic,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = accessibleMutedColor(alpha = 0.72f),
                 textAlign = TextAlign.Center
             )
         }
@@ -255,10 +264,19 @@ private fun PreviewImage(bitmap: android.graphics.Bitmap?, modifier: Modifier) {
 }
 
 @Composable
-private fun VideoSurface(c: VideoPlayerController, slot: VideoSlot, modifier: Modifier) {
+private fun VideoSurface(c: VideoPlayerController, slot: VideoSlot, modifier: Modifier, accessible: Boolean = true) {
+    val screenAccessible = LocalScreenAccessible.current && accessible
     AndroidView(
         factory = { ctx ->
             TextureView(ctx).apply {
+                contentDescription = L.components.videoPlayerUi.videoPlayer
+                isFocusable = screenAccessible
+                isFocusableInTouchMode = screenAccessible
+                importantForAccessibility = if (screenAccessible) {
+                    View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                } else {
+                    View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                }
                 surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                     private var surface: Surface? = null
 
@@ -279,7 +297,17 @@ private fun VideoSurface(c: VideoPlayerController, slot: VideoSlot, modifier: Mo
                 }
             }
         },
-        update = { it.keepScreenOn = c.isPlaying },
+        update = { tv ->
+            tv.keepScreenOn = c.isPlaying
+            tv.contentDescription = L.components.videoPlayerUi.videoPlayer
+            tv.isFocusable = screenAccessible
+            tv.isFocusableInTouchMode = screenAccessible
+            tv.importantForAccessibility = if (screenAccessible) {
+                View.IMPORTANT_FOR_ACCESSIBILITY_YES
+            } else {
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+        },
         modifier = modifier
     )
 }
@@ -298,6 +326,7 @@ private fun VideoOverlay(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val accessibilityEnabled = rememberIsAccessibilityEnabled()
     val idle = c.phase == VideoPlayerController.Phase.IDLE && c.task == null
     val ready = c.phase == VideoPlayerController.Phase.READY
     var controlsVisible by remember { mutableStateOf(true) }
@@ -315,8 +344,8 @@ private fun VideoOverlay(
         interaction++
     }
 
-    LaunchedEffect(controlsVisible, c.isPlaying, interaction, scrubFraction, menuOpen, speedMenuOpen) {
-        if (controlsVisible && c.isPlaying && scrubFraction == null && !menuOpen && !speedMenuOpen) {
+    LaunchedEffect(controlsVisible, c.isPlaying, accessibilityEnabled, interaction, scrubFraction, menuOpen, speedMenuOpen) {
+        if (controlsVisible && c.isPlaying && !accessibilityEnabled && scrubFraction == null && !menuOpen && !speedMenuOpen) {
             delay(3000)
             controlsVisible = false
         }
@@ -361,7 +390,7 @@ private fun VideoOverlay(
     ) {
         // ----- before playing: big play button and the length -----
         if (idle) {
-            PlayDisc(Icons.Filled.PlayArrow, big, Modifier.align(Alignment.Center)) { c.play() }
+            PlayDisc(Icons.Filled.PlayArrow, big, Modifier.align(Alignment.Center), description = L.common.play) { c.play() }
             val d = previewDurationMs ?: 0
             if (d > 0) {
                 Text(
@@ -375,6 +404,10 @@ private fun VideoOverlay(
                         .clip(RoundedCornerShape(6.dp))
                         .background(Color.Black.copy(alpha = 0.65f))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
+                        .semantics {
+                            val spoken = formatDurationForSpeech(d.toLong())
+                            if (spoken.isNotBlank()) contentDescription = spoken
+                        }
                 )
             }
             if (fullscreen) TopBar(title, onBack = onToggleFullscreen, pad = pad, menu = {})
@@ -383,7 +416,12 @@ private fun VideoOverlay(
         // ----- error -----
         if (c.phase == VideoPlayerController.Phase.ERROR) {
             Column(
-                Modifier.align(Alignment.Center).fillMaxWidth().background(Color.Black.copy(alpha = 0.55f)).padding(16.dp),
+                Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(16.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Icon(Icons.Outlined.ErrorOutline, null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(30.dp))
@@ -391,8 +429,8 @@ private fun VideoOverlay(
                 Text(c.error ?: L.components.videoPlayerUi.videoCouldNotBeLoaded, color = Color.White, fontSize = 12.5.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { c.retry() }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(L.common.retry, color = Color.White, fontSize = 12.5.sp) }
-                    Button(onClick = { c.openElsewhere() }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(L.components.videoPlayerUi.openInAnotherApp, fontSize = 12.5.sp) }
+                    OutlinedButton(onClick = { c.retry() }, modifier = Modifier.minTouchTarget(48.dp), contentPadding = PaddingValues(horizontal = 12.dp)) { Text(L.common.retry, color = Color.White, fontSize = 12.5.sp) }
+                    Button(onClick = { c.openElsewhere() }, modifier = Modifier.minTouchTarget(48.dp), contentPadding = PaddingValues(horizontal = 12.dp)) { Text(L.components.videoPlayerUi.openInAnotherApp, fontSize = 12.5.sp) }
                 }
             }
             if (fullscreen) TopBar(title, onBack = onToggleFullscreen, pad = pad, menu = {})
@@ -401,7 +439,12 @@ private fun VideoOverlay(
         // ----- loading / buffering / downloading / preparing a share -----
         val loading = c.task != null || c.phase == VideoPlayerController.Phase.PREPARING || (ready && c.isBuffering)
         if (loading) {
-            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                Modifier
+                    .align(Alignment.Center)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Box(Modifier.size(big).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
                     val p = c.taskProgress
                     if (p != null) CircularProgressIndicator(progress = { p }, color = Color.White, strokeWidth = 2.5.dp, modifier = Modifier.size(big * 0.5f))
@@ -414,7 +457,7 @@ private fun VideoOverlay(
                         color = Color.White, fontSize = 12.sp,
                         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 8.dp, vertical = 3.dp)
                     )
-                    TextButton(onClick = { c.cancelTask() }) { Text(L.common.cancel, color = Color.White, fontSize = 12.5.sp) }
+                    TextButton(onClick = { c.cancelTask() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel, color = Color.White, fontSize = 12.5.sp) }
                 }
             }
         }
@@ -507,7 +550,12 @@ private fun VideoOverlay(
                                 c.isPlaying -> Icons.Filled.Pause
                                 else -> Icons.Filled.PlayArrow
                             },
-                            big
+                            big,
+                            description = when {
+                                c.completed -> L.common.restart
+                                c.isPlaying -> L.common.pause
+                                else -> L.common.play
+                            }
                         ) { c.toggle(); poke() }
                         ControlIcon(Icons.Filled.Forward10, L.components.videoPlayerUi.forward10Seconds, size = big * 0.62f) { c.seekBy(SKIP_MS); poke() }
                     }
@@ -567,17 +615,23 @@ private fun BoxScope.TopBar(title: String, onBack: () -> Unit, pad: Dp, menu: @C
 }
 
 @Composable
-private fun PlayDisc(icon: ImageVector, size: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = CircleShape, color = Color.Black.copy(alpha = 0.5f), modifier = modifier.size(size)) {
+private fun PlayDisc(
+    icon: ImageVector,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    description: String = L.components.videoPlayerUi.playOrPause,
+    onClick: () -> Unit
+) {
+    Surface(onClick = onClick, shape = CircleShape, color = Color.Black.copy(alpha = 0.5f), modifier = modifier.size(size.coerceAtLeast(48.dp))) {
         Box(contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = L.components.videoPlayerUi.playOrPause, tint = Color.White, modifier = Modifier.size(size * 0.6f))
+            Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size * 0.6f))
         }
     }
 }
 
 @Composable
 private fun ControlIcon(icon: ImageVector, description: String, size: Dp = 24.dp, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(size + 16.dp)) {
+    IconButton(onClick = onClick, modifier = Modifier.size((size + 16.dp).coerceAtLeast(48.dp))) {
         Icon(icon, contentDescription = description, tint = Color.White, modifier = Modifier.size(size))
     }
 }
@@ -592,9 +646,21 @@ private fun SeekBar(c: VideoPlayerController, onScrub: (Float?) -> Unit, modifie
     val duration = c.durationMs
     val played = drag ?: if (duration > 0) (c.positionMs.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val accent = MaterialTheme.colorScheme.primary
+    val currentMs = ((played * duration).toInt()).coerceAtLeast(0)
     Box(
         modifier
-            .height(28.dp)
+            .heightIn(min = 48.dp)
+            .semantics {
+                if (duration > 0) {
+                    stateDescription = "${formatTime(currentMs)} / ${formatTime(duration)}"
+                    progressBarRangeInfo = ProgressBarRangeInfo(played, 0f..1f)
+                    setProgress { target ->
+                        val clamped = target.coerceIn(0f, 1f)
+                        c.seekTo((clamped * duration).toInt())
+                        true
+                    }
+                }
+            }
             .pointerInput(duration) {
                 if (duration <= 0) return@pointerInput
                 awaitEachGesture {
@@ -621,7 +687,7 @@ private fun SeekBar(c: VideoPlayerController, onScrub: (Float?) -> Unit, modifie
             }
     ) {
         val active = drag != null
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxWidth().height(48.dp)) {
             val trackH = (if (active) 5.dp else 3.dp).toPx()
             val y = size.height / 2f
             val r = CornerRadius(trackH / 2f)

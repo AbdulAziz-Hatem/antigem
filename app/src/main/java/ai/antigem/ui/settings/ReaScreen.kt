@@ -4,9 +4,11 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,6 +29,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -37,7 +47,12 @@ import ai.antigem.data.adb.AdbConnectManager
 import ai.antigem.data.rea.ReaManager
 import ai.antigem.data.rea.ReaManager.Component
 import ai.antigem.theme.QuotaGreen
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
@@ -89,10 +104,18 @@ fun ReaScreen(
         ReaIntroCard(state, cardBg, cardBorder)
 
         state.message?.let { msg ->
-            Surface(shape = RoundedCornerShape(12.dp), color = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)) {
+            val msgBg = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)
+            val msgFg = ensureAccessibleContrast(if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, msgBg, 4.5f, MaterialTheme.colorScheme.surface)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = msgBg,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            ) {
                 Row(Modifier.fillMaxWidth().padding(start = 14.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(msg, fontSize = 12.5.sp, color = if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, modifier = Modifier.weight(1f))
-                    IconButton(onClick = ReaManager::clearMessage) { Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp)) }
+                    Text(msg, fontSize = 12.5.sp, color = msgFg, modifier = Modifier.weight(1f))
+                    IconButton(onClick = ReaManager::clearMessage, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp))
+                    }
                 }
             }
         }
@@ -121,18 +144,25 @@ fun ReaScreen(
         ) {
             Hint(L.settings.rea.reasSetupScriptsReaSetupSh)
             SourceRow(state.source, enabled = !busy)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 when {
-                    state.filesVersion == null -> Button(enabled = !busy, onClick = ReaManager::downloadSetupFiles) {
+                    state.filesVersion == null -> Button(enabled = !busy, onClick = ReaManager::downloadSetupFiles, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.rea.getSetupFiles)
                     }
-                    state.filesUpdate != null -> Button(enabled = !busy, onClick = ReaManager::downloadSetupFiles) {
+                    state.filesUpdate != null -> Button(enabled = !busy, onClick = ReaManager::downloadSetupFiles, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.rea.updateToVFilesupdate(state.filesUpdate))
                     }
-                    else -> OutlinedButton(enabled = !busy, onClick = ReaManager::downloadSetupFiles) { Text(L.settings.rea.downloadAgain) }
+                    else -> OutlinedButton(enabled = !busy, onClick = ReaManager::downloadSetupFiles, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Text(L.settings.rea.downloadAgain)
+                    }
                 }
                 if (state.filesVersion != null && state.filesUpdate == null) {
-                    TextButton(enabled = !busy, onClick = ReaManager::checkForUpdate) { Text(L.common.checkForUpdate) }
+                    TextButton(enabled = !busy, onClick = ReaManager::checkForUpdate, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Text(L.common.checkForUpdate)
+                    }
                 }
             }
             ReaTaskOutput(state, "files")
@@ -156,11 +186,16 @@ fun ReaScreen(
             } else {
                 Hint(L.settings.rea.theDefaultGroupsComeWithThe)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = state.groups.isNotEmpty() || state.filesReady, onClick = onOpenGroups) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(enabled = state.groups.isNotEmpty() || state.filesReady, onClick = onOpenGroups, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Category, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.rea.editToolGroups)
                 }
-                OutlinedButton(enabled = !busy && state.usable, onClick = ReaManager::refreshTools) { Text(L.settings.rea.refreshToolList) }
+                OutlinedButton(enabled = !busy && state.usable, onClick = ReaManager::refreshTools, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(L.settings.rea.refreshToolList)
+                }
             }
             ReaTaskOutput(state, "tools")
         }
@@ -173,11 +208,11 @@ fun ReaScreen(
         // Step 5: health check
         StepCard(5, L.settings.rea.checkItWorks, null, cardBg, cardBorder) {
             Hint(L.settings.rea.runsReaDoctorInUbuntuIt)
-            OutlinedButton(enabled = !busy && state.usable, onClick = ReaManager::runDoctor) {
+            OutlinedButton(enabled = !busy && state.usable, onClick = ReaManager::runDoctor, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.HealthAndSafety, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.rea.runHealthCheck)
             }
             ReaTaskOutput(state, "doctor")
-            Text(L.settings.rea.tryInChat, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(L.settings.rea.tryInChat, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
             listOf(
                 L.settings.rea.useReaToFindTheApk,
                 L.settings.rea.withReaIsComExampleApp,
@@ -191,7 +226,8 @@ fun ReaScreen(
         InfoCard(L.settings.rea.phoneAccessOptional, cardBg, cardBorder, pill = if (adb.connectedDevice != null) L.settings.rea.connected to QuotaGreen else L.common.optional to MaterialTheme.colorScheme.primary) {
             Hint(L.settings.rea.reasPhoneToolsInstalledAppsPulling)
             val device = adb.connectedDevice
-            if (device != null) Mono("adb connected: ${device.serial}") else OutlinedButton(onClick = onOpenAdbConnect) { Text(L.common.setUpAdbConnect) }
+            if (device != null) Mono("adb connected: ${device.serial}")
+            else OutlinedButton(onClick = onOpenAdbConnect, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.setUpAdbConnect) }
         }
 
         WebsitesCard(state, cardBg, cardBorder)
@@ -219,9 +255,11 @@ fun ReaScreen(
             title = { Text(title) },
             text = { Text(text) },
             confirmButton = {
-                TextButton(onClick = { action(); confirm = null }) { Text(if (what == "uninstall") L.common.remove else L.common.delete, color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { action(); confirm = null }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(if (what == "uninstall") L.common.remove else L.common.delete, color = MaterialTheme.colorScheme.error)
+                }
             },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { confirm = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -234,7 +272,11 @@ private fun ReaIntroCard(state: ReaManager.State, cardBg: Color, cardBorder: Bor
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.BugReport, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(L.settings.rea.reverseEngineeringWithRea, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(
+                    L.settings.rea.reverseEngineeringWithRea,
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).semantics { heading() }
+                )
                 when {
                     state.usable && state.requiredDone -> Pill(L.common.ready, QuotaGreen)
                     state.installed.isNotEmpty() -> Pill(L.common.partlySetUp, Amber)
@@ -243,7 +285,11 @@ private fun ReaIntroCard(state: ReaManager.State, cardBg: Color, cardBorder: Bor
             }
             Hint(if (state.chroot) L.settings.rea.letAgentsTakeApartAndroidApps else L.settings.rea.letAgentsTakeApartAndroidApps2)
             Hint(L.settings.rea.installOnlyThePartsYouNeed)
-            TextButton(onClick = { openReaUrl(context, ReaManager.REA_HOMEPAGE) }, contentPadding = PaddingValues(0.dp)) {
+            TextButton(
+                onClick = { openReaUrl(context, ReaManager.REA_HOMEPAGE) },
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Text(L.settings.rea.aboutReaGithubComMorlutoRea, fontSize = 12.5.sp)
             }
         }
@@ -257,8 +303,8 @@ private fun SourceRow(source: String, enabled: Boolean) {
     var error by remember { mutableStateOf<String?>(null) }
     if (!editing) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(L.settings.rea.fromSource(source), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.weight(1f))
-            TextButton(enabled = enabled, onClick = { editing = true }) { Text(L.common.change, fontSize = 12.sp) }
+            Text(L.settings.rea.fromSource(source), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = accessibleMutedColor(alpha = 0.72f), modifier = Modifier.weight(1f))
+            TextButton(enabled = enabled, onClick = { editing = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.change, fontSize = 12.sp) }
         }
         return
     }
@@ -268,14 +314,20 @@ private fun SourceRow(source: String, enabled: Boolean) {
         supportingText = { Text(error ?: L.settings.rea.aForkOfTheAntigemPlugins) },
         modifier = Modifier.fillMaxWidth()
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = {
-            runCatching { ReaManager.setSource(text) }
-                .onSuccess { editing = false; ReaManager.checkForUpdate() }
-                .onFailure { error = it.message }
-        }) { Text(L.common.save) }
-        TextButton(onClick = { text = ReaManager.DEFAULT_SOURCE }) { Text(L.common.default) }
-        TextButton(onClick = { editing = false; text = source }) { Text(L.common.cancel) }
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = {
+                runCatching { ReaManager.setSource(text) }
+                    .onSuccess { editing = false; ReaManager.checkForUpdate() }
+                    .onFailure { error = it.message }
+            },
+            modifier = Modifier.minTouchTarget(48.dp)
+        ) { Text(L.common.save) }
+        TextButton(onClick = { text = ReaManager.DEFAULT_SOURCE }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.default) }
+        TextButton(onClick = { editing = false; text = source }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
     }
 }
 
@@ -317,9 +369,9 @@ private fun InstallStep(state: ReaManager.State, cardBg: Color, cardBorder: Bord
         )
         if (facts.isNotEmpty()) Mono(facts.joinToString("\n"))
 
-        Text(L.settings.rea.neededForApkAnalysis, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(L.settings.rea.neededForApkAnalysis, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
         Component.entries.filter { it.required }.forEach { c -> ComponentRow(c, state, c in selected, busy) { on -> if (on) selected.add(c) else selected.remove(c) } }
-        Text(L.common.optional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Text(L.common.optional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp).semantics { heading() })
         Component.entries.filter { !it.required }.forEach { c -> ComponentRow(c, state, c in selected, busy) { on -> if (on) selected.add(c) else selected.remove(c) } }
 
         if (isInstallTask(state.task) || isInstallTask(state.logTask)) BatchProgress(state)
@@ -332,19 +384,26 @@ private fun InstallStep(state: ReaManager.State, cardBg: Color, cardBorder: Bord
                 )
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(enabled = plan.isNotEmpty(), onClick = { ReaManager.installAll(plan) }) {
+                Button(enabled = plan.isNotEmpty(), onClick = { ReaManager.installAll(plan) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                     Text(if (plan.isEmpty()) L.settings.rea.nothingToInstall else "Install selected (${plan.size})")
                 }
-                TextButton(onClick = {
-                    selected.clear(); selected.addAll(Component.entries.filter { it !in state.installed })
-                }) { Text(L.common.selectAll) }
-                TextButton(onClick = { selected.clear() }) { Text(L.common.clear) }
+                TextButton(
+                    onClick = {
+                        selected.clear(); selected.addAll(Component.entries.filter { it !in state.installed })
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.common.selectAll) }
+                TextButton(onClick = { selected.clear() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.clear) }
             }
             if (!state.filesReady) Hint(L.settings.rea.theSetupFilesAreDownloadedFirst)
         } else {
             Hint(L.settings.rea.keepAntigemOpenTheScreenStays)
-            OutlinedButton(onClick = ReaManager::stop, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+            OutlinedButton(
+                onClick = ReaManager::stop,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.Outlined.StopCircle, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.common.stop)
             }
         }
@@ -356,40 +415,59 @@ private fun ComponentRow(c: Component, state: ReaManager.State, checked: Boolean
     val installed = c in state.installed
     val running = state.installing == c
     var expanded by remember { mutableStateOf(false) }
-    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (running) 0.08f else 0.03f)) {
-        Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val rowBg = MaterialTheme.colorScheme.onSurface.copy(alpha = if (running) 0.08f else 0.03f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = rowBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, rowBg, 4.5f, surfaceBg)
+    val accessibleAmber = ensureAccessibleContrast(Amber, rowBg, 4.5f, surfaceBg)
+    Surface(shape = RoundedCornerShape(10.dp), color = rowBg) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (installed) {
-                    Icon(Icons.Outlined.CheckCircle, L.common.installed, tint = QuotaGreen, modifier = Modifier.padding(12.dp).size(22.dp))
+                val mainModifier = if (!installed) {
+                    if (!busy) {
+                        Modifier.weight(1f).accessibleToggleRow(checked = checked, role = Role.Checkbox) { onCheck(!checked) }
+                    } else {
+                        Modifier.weight(1f).minTouchTarget(48.dp).semantics(mergeDescendants = true) {
+                            toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                            disabled()
+                        }
+                    }
                 } else {
-                    Checkbox(checked = checked, enabled = !busy, onCheckedChange = onCheck)
+                    Modifier.weight(1f).minTouchTarget(48.dp).clickable(role = Role.Button) { expanded = !expanded }
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(c.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                    Text(
-                        if (state.chroot && c == Component.CONTAINER) L.settings.rea.thisPhonesRuntime else c.size + when {
-                            running -> " · installing…"
-                            installed -> " · installed"
-                            else -> ""
-                        },
-                        fontSize = 11.5.sp,
-                        color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                    )
+                Row(modifier = mainModifier, verticalAlignment = Alignment.CenterVertically) {
+                    if (installed) {
+                        Icon(Icons.Outlined.CheckCircle, L.common.installed, tint = accessibleGreen, modifier = Modifier.padding(12.dp).size(22.dp))
+                    } else {
+                        Checkbox(checked = checked, enabled = !busy, onCheckedChange = null)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(c.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (state.chroot && c == Component.CONTAINER) L.settings.rea.thisPhonesRuntime else c.size + when {
+                                running -> " · installing…"
+                                installed -> " · installed"
+                                else -> ""
+                            },
+                            fontSize = 11.5.sp,
+                            color = if (running) MaterialTheme.colorScheme.primary else muted
+                        )
+                    }
                 }
                 if (running) {
                     CircularProgressIndicator(Modifier.padding(end = 12.dp).size(18.dp), strokeWidth = 2.dp)
                 } else if (!(state.chroot && c == Component.CONTAINER)) {
                     // the Ubuntu chroot is the phone's runtime: nothing to install or reinstall here
-                    TextButton(enabled = !busy, onClick = { ReaManager.install(c) }) {
+                    TextButton(enabled = !busy, onClick = { ReaManager.install(c) }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Text(if (installed) (if (c == Component.REA) L.common.update else L.common.reinstall) else L.common.install, fontSize = 12.5.sp)
                     }
                 }
             }
             if (expanded || running) {
-                Text(c.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
+                Text(c.description, fontSize = 12.sp, color = muted, modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
                 val missing = c.needs.filter { it !in state.installed }
                 if (missing.isNotEmpty() && !installed) {
-                    Text(L.settings.rea.alsoInstallsValue(missing.joinToString(", ") { it.label }), fontSize = 11.5.sp, color = Amber, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+                    Text(L.settings.rea.alsoInstallsValue(missing.joinToString(", ") { it.label }), fontSize = 11.5.sp, color = accessibleAmber, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
                 }
             }
         }
@@ -409,7 +487,12 @@ private fun BatchProgress(state: ReaManager.State) {
             )
         }
         LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
-        Hint(state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting)
+        Text(
+            state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting,
+            fontSize = 12.sp,
+            color = accessibleMutedColor(alpha = 0.72f),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
     }
     if (isInstallTask(state.logTask) && state.log.isNotEmpty()) LogBox(state.log)
 }
@@ -419,8 +502,13 @@ private fun BatchProgress(state: ReaManager.State) {
 private fun ReaTaskOutput(state: ReaManager.State, task: String) {
     if (state.task == task) {
         LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
-        Hint(state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting)
-        OutlinedButton(onClick = ReaManager::stop) { Text(L.common.stop) }
+        Text(
+            state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting,
+            fontSize = 12.sp,
+            color = accessibleMutedColor(alpha = 0.72f),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        OutlinedButton(onClick = ReaManager::stop, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.stop) }
     }
     if (state.logTask == task && state.log.isNotEmpty()) LogBox(state.log)
 }
@@ -434,7 +522,7 @@ private fun ConnectGuide(state: ReaManager.State) {
     Hint(L.settings.rea.reaIsNotTiedToAn)
     Mono(L.settings.rea.antigravityMcpServersReaClaudeCode)
     if (!state.usable) Hint(L.settings.rea.installReaAndTheMcpLauncher)
-    Text(L.settings.rea.thePresetAsksHowTheAgent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    Text(L.settings.rea.thePresetAsksHowTheAgent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
     Text(
         L.settings.rea.onDemandRecommendedTheAgentGets(formatTokens(onDemand ?: 700)),
         fontSize = 12.sp
@@ -444,7 +532,7 @@ private fun ConnectGuide(state: ReaManager.State) {
         fontSize = 12.sp
     )
     Hint(L.settings.rea.itAlsoAsksWhichToolGroups)
-    Text(L.settings.rea.anotherAgentOrByHand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    Text(L.settings.rea.anotherAgentOrByHand, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
     Hint(L.settings.rea.addAStdioLocalCommandMcp)
     CopyLine(ReaManager.LAUNCHER, mono = true)
     CopyLine("REA_MODE=lazy\nREA_GROUPS=all", mono = true)
@@ -463,12 +551,15 @@ private fun SkillPluginCard(
         pill = if (state.pluginInstalled) "v${state.pluginVersion ?: "?"}" to QuotaGreen else L.common.optional to MaterialTheme.colorScheme.primary
     ) {
         Hint(L.settings.rea.aSkillsOnlyPluginFromThe)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !busy, onClick = ReaManager::installSkillPlugin) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(enabled = !busy, onClick = ReaManager::installSkillPlugin, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Extension, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 Text(if (state.pluginInstalled) L.settings.rea.updateSkill else L.settings.rea.installSkill)
             }
-            TextButton(onClick = onOpenPlugins) { Text(L.common.plugins) }
+            TextButton(onClick = onOpenPlugins, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.plugins) }
         }
         ReaTaskOutput(state, "plugin")
         if (state.pluginInstalled) {
@@ -505,20 +596,24 @@ private fun WebsitesCard(state: ReaManager.State, cardBg: Color, cardBorder: Bor
             L.settings.rea.opensEndpointSoReaCanReach(bridge.endpoint),
             bridge.running
         ) { ReaManager.setBrowserConnection(context, it) }
-        Surface(shape = RoundedCornerShape(10.dp), color = Amber.copy(alpha = 0.12f)) {
+        val warnBg = Amber.copy(alpha = 0.12f)
+        val warnFg = ensureAccessibleContrast(Amber, warnBg, 4.5f, MaterialTheme.colorScheme.surface)
+        Surface(shape = RoundedCornerShape(10.dp), color = warnBg) {
             Text(
                 L.settings.rea.whileThisIsOnAnyApp(bridge.port),
-                fontSize = 12.sp, color = Amber, modifier = Modifier.padding(10.dp)
+                fontSize = 12.sp, color = warnFg, modifier = Modifier.padding(10.dp)
             )
         }
-        bridge.error?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+        bridge.error?.let {
+            Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
         if (bridge.running) {
             CopyLine(bridge.endpoint, mono = true)
             Mono(
                 L.settings.rea.connectionsReaConnectionValueOpen(bridge.connections, if (bridge.connections == 1) "" else "s", bridge.requests, (bridge.lastActivity?.let { L.settings.rea.lastValue(it) } ?: ""))
             )
         }
-        Text(L.settings.rea.tryInChat, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(L.settings.rea.tryInChat, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
         listOf(
             "Open https://example.com in the browser, then analyze it with REA: structure, technologies, scripts and the APIs it calls, and give recommendations.",
             L.settings.rea.withReaCheckTheOpenBrowser,
@@ -531,13 +626,24 @@ private fun WebsitesCard(state: ReaManager.State, cardBg: Color, cardBorder: Bor
 private fun SwitchRow(title: String, text: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clickable(enabled = enabled) { onChange(!checked) }
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (enabled) {
+                    Modifier.accessibleToggleRow(checked = checked, role = Role.Switch) { onChange(!checked) }
+                } else {
+                    Modifier.minTouchTarget(48.dp).semantics(mergeDescendants = true) {
+                        toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                        disabled()
+                    }
+                }
+            )
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-            Text(text, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(text, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f))
         }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = onChange)
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 
@@ -571,8 +677,8 @@ private fun ManualSetupCard(state: ReaManager.State, cardBg: Color, cardBorder: 
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.settings.rea.setUpInTheTerminal, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { open = !open }) { Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp) }
+                Text(L.settings.rea.setUpInTheTerminal, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
+                TextButton(onClick = { open = !open }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp) }
             }
             if (!open) {
                 Hint(L.settings.rea.preferTheTerminalOrSettingUp)
@@ -594,19 +700,27 @@ private fun RemoveCard(state: ReaManager.State, busy: Boolean, cardBg: Color, ca
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.common.remove, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { open = !open }) { Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp) }
+                Text(L.common.remove, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
+                TextButton(onClick = { open = !open }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp) }
             }
             if (!open) return@Column
             Hint(if (state.chroot) L.settings.rea.removeReaKeepsJavaAndNode
                 else L.settings.rea.removeReaKeepsTheUbuntuContainer)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(enabled = !busy && state.filesReady && (Component.REA in state.installed || Component.LAUNCHER in state.installed), onClick = { onConfirm("uninstall") }) { Text(L.settings.rea.removeRea2) }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    enabled = !busy && state.filesReady && (Component.REA in state.installed || Component.LAUNCHER in state.installed),
+                    onClick = { onConfirm("uninstall") },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.settings.rea.removeRea2) }
                 // the chroot is the phone's runtime, not REA's container: never deleted from here
                 if (!state.chroot) OutlinedButton(
                     enabled = !busy && state.filesReady && Component.CONTAINER in state.installed,
                     onClick = { onConfirm("remove-container") },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.settings.rea.deleteContainer) }
             }
             ReaTaskOutput(state, "uninstall")
@@ -706,14 +820,17 @@ internal fun ReaServerDialog(
                 Modifier.bouncyVerticalScroll(dialogScroll).padding(end = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                val dialogBg = AlertDialogDefaults.containerColor
+                val dialogAmber = ensureAccessibleContrast(Amber, dialogBg, 4.5f, MaterialTheme.colorScheme.surface)
+                val dialogMuted = accessibleMutedColor(alpha = 0.72f, background = dialogBg, surfaceFallback = MaterialTheme.colorScheme.surface)
                 if (!state.usable) {
-                    Text(L.settings.rea.reaIsNotInstalledYetSet, fontSize = 12.5.sp, color = Amber)
-                    if (onOpenRea != null) OutlinedButton(onClick = onOpenRea) { Text(L.settings.rea.openReaSetup) }
+                    Text(L.settings.rea.reaIsNotInstalledYetSet, fontSize = 12.5.sp, color = dialogAmber)
+                    if (onOpenRea != null) OutlinedButton(onClick = onOpenRea, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.rea.openReaSetup) }
                 }
                 if (ai.antigem.data.preferences.AuthPreferences.currentRemoteMode) {
                     Text(
                         L.settings.rea.serverModeIsOnAgentsStart,
-                        fontSize = 12.5.sp, color = Amber
+                        fontSize = 12.5.sp, color = dialogAmber
                     )
                 }
                 OutlinedTextField(
@@ -726,28 +843,38 @@ internal fun ReaServerDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Text(L.settings.rea.howTheAgentSeesReasTools, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                ModeCard(
-                    selected = mode == ReaManager.Mode.ON_DEMAND,
-                    title = L.settings.rea.onDemand,
-                    badge = L.common.recommended,
-                    cost = tk(onDemandTokens),
-                    text = L.settings.rea.theAgentGets4SmallTools
-                ) { mode = ReaManager.Mode.ON_DEMAND }
-                ModeCard(
-                    selected = mode == ReaManager.Mode.DIRECT,
-                    title = L.settings.rea.directly,
-                    badge = null,
-                    cost = tk(directTokens),
-                    text = L.settings.rea.everyAllowedToolIsANormal
-                ) { mode = ReaManager.Mode.DIRECT }
-
-                Text(L.settings.rea.toolsTheAgentMayUse, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { allTools = false }) {
-                    RadioButton(selected = !allTools, onClick = { allTools = false }); Text(L.settings.rea.chosenToolGroups, fontSize = 13.sp)
+                Text(L.settings.rea.howTheAgentSeesReasTools, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ModeCard(
+                        selected = mode == ReaManager.Mode.ON_DEMAND,
+                        title = L.settings.rea.onDemand,
+                        badge = L.common.recommended,
+                        cost = tk(onDemandTokens),
+                        text = L.settings.rea.theAgentGets4SmallTools
+                    ) { mode = ReaManager.Mode.ON_DEMAND }
+                    ModeCard(
+                        selected = mode == ReaManager.Mode.DIRECT,
+                        title = L.settings.rea.directly,
+                        badge = null,
+                        cost = tk(directTokens),
+                        text = L.settings.rea.everyAllowedToolIsANormal
+                    ) { mode = ReaManager.Mode.DIRECT }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { allTools = true }) {
-                    RadioButton(selected = allTools, onClick = { allTools = true }); Text("All REA tools (${state.allToolNames.size})", fontSize = 13.sp)
+
+                Text(L.settings.rea.toolsTheAgentMayUse, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                Column(Modifier.selectableGroup()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().accessibleSelectionRow(selected = !allTools, role = Role.RadioButton) { allTools = false }
+                    ) {
+                        RadioButton(selected = !allTools, onClick = null); Spacer(Modifier.width(8.dp)); Text(L.settings.rea.chosenToolGroups, fontSize = 13.sp)
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().accessibleSelectionRow(selected = allTools, role = Role.RadioButton) { allTools = true }
+                    ) {
+                        RadioButton(selected = allTools, onClick = null); Spacer(Modifier.width(8.dp)); Text("All REA tools (${state.allToolNames.size})", fontSize = 13.sp)
+                    }
                 }
                 if (!allTools) {
                     if (state.groups.isEmpty()) {
@@ -758,6 +885,7 @@ internal fun ReaServerDialog(
                                 FilterChip(
                                     selected = g.id in chosen,
                                     onClick = { if (g.id in chosen) chosen.remove(g.id) else chosen.add(g.id) },
+                                    modifier = Modifier.minTouchTarget(48.dp),
                                     label = {
                                         val cost = if (mode == ReaManager.Mode.DIRECT) state.tokensFor(listOf(g.id))?.let { " · ${formatTokens(it)}" }.orEmpty() else ""
                                         Text("${g.name} · ${g.tools.size}$cost", fontSize = 12.sp)
@@ -770,13 +898,15 @@ internal fun ReaServerDialog(
                             else L.settings.rea.directlyEachGroupAddsItsSize
                         )
                         val missing = initialGroups.orEmpty().filter { id -> state.groups.none { it.id == id } }
-                        if (missing.isNotEmpty()) Text(L.settings.rea.removedGroupsStillNamedHereJointostring(missing.joinToString()), fontSize = 11.5.sp, color = Amber)
-                        if (onOpenGroups != null) TextButton(onClick = onOpenGroups, contentPadding = PaddingValues(0.dp)) { Text(L.settings.rea.editToolGroups, fontSize = 12.5.sp) }
+                        if (missing.isNotEmpty()) Text(L.settings.rea.removedGroupsStillNamedHereJointostring(missing.joinToString()), fontSize = 11.5.sp, color = dialogAmber)
+                        if (onOpenGroups != null) TextButton(onClick = onOpenGroups, contentPadding = PaddingValues(0.dp), modifier = Modifier.minTouchTarget(48.dp)) {
+                            Text(L.settings.rea.editToolGroups, fontSize = 12.5.sp)
+                        }
                     }
                 }
 
                 if (mode == ReaManager.Mode.ON_DEMAND) {
-                    Text(L.settings.rea.alsoOfferDirectlyOptional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(L.settings.rea.alsoOfferDirectlyOptional, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                     Hint(L.settings.rea.forGroupsTheAgentUsesAll)
                     val offerable = state.groups.filter { allTools || it.id in chosen }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -784,6 +914,7 @@ internal fun ReaServerDialog(
                             FilterChip(
                                 selected = g.id in direct,
                                 onClick = { if (g.id in direct) direct.remove(g.id) else direct.add(g.id) },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 label = {
                                     val cost = state.tokensFor(listOf(g.id))?.let { " +${formatTokens(it)}" }.orEmpty()
                                     Text("${g.name}$cost", fontSize = 12.sp)
@@ -802,18 +933,21 @@ internal fun ReaServerDialog(
                             fontSize = 12.sp
                         )
                         if (mode == ReaManager.Mode.ON_DEMAND && directTokens != null) {
-                            Text(L.settings.rea.directlyTheSameToolsWouldCost(tk(directTokens)), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(L.settings.rea.directlyTheSameToolsWouldCost(tk(directTokens)), fontSize = 11.5.sp, color = dialogMuted)
                         }
-                        if (tokens != null && tokens > 40_000) Text(L.settings.rea.thatIsALotAgentsGet, fontSize = 11.5.sp, color = Amber)
+                        if (tokens != null && tokens > 40_000) Text(L.settings.rea.thatIsALotAgentsGet, fontSize = 11.5.sp, color = dialogAmber)
                     }
                 }
-                Row(verticalAlignment = Alignment.Top, modifier = Modifier.clickable { fullSchemas = !fullSchemas }) {
-                    Checkbox(checked = fullSchemas, onCheckedChange = { fullSchemas = it })
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.fillMaxWidth().accessibleToggleRow(checked = fullSchemas, role = Role.Checkbox) { fullSchemas = !fullSchemas }
+                ) {
+                    Checkbox(checked = fullSchemas, onCheckedChange = null)
                     Column(Modifier.padding(top = 12.dp)) {
                         Text(L.settings.rea.fullOutputSchemas, fontSize = 13.sp)
                         Text(
                             L.settings.rea.describesTheShapeOfEveryRea(ReaManager.FULL_SCHEMA_FACTOR),
-                            fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            fontSize = 11.5.sp, color = dialogMuted
                         )
                     }
                 }
@@ -823,7 +957,8 @@ internal fun ReaServerDialog(
             if (dialogScroll.canScrollForward) {
                 TextButton(
                     onClick = { scrollScope.launch { dialogScroll.animateScrollTo(dialogScroll.maxValue) } },
-                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(Icons.Outlined.KeyboardDoubleArrowDown, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
                     Text(L.settings.rea.moreOptionsBelow, fontSize = 12.5.sp)
@@ -843,31 +978,34 @@ internal fun ReaServerDialog(
                             base = current.orEmpty()
                         )
                     )
-                }
+                },
+                modifier = Modifier.minTouchTarget(48.dp)
             ) { Text(L.common.save) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
 /** One choice of how the agent sees the tools: a selectable card with what it does and what it costs. */
 @Composable
 private fun ModeCard(selected: Boolean, title: String, badge: String?, cost: String, text: String, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = bg, surfaceFallback = MaterialTheme.colorScheme.surface)
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
+        color = bg,
         border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+        modifier = Modifier.fillMaxWidth().accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onClick)
     ) {
         Row(Modifier.padding(end = 10.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.Top) {
-            RadioButton(selected = selected, onClick = onClick)
+            RadioButton(selected = selected, onClick = null)
             Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
                     badge?.let { Pill(it, QuotaGreen) }
                 }
                 Text(L.settings.rea.costPerRequest(cost), fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
-                Text(text, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Text(text, fontSize = 11.5.sp, color = muted)
             }
         }
     }
@@ -912,7 +1050,7 @@ private fun InfoCard(
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                 pill?.let { Pill(it.first, it.second) }
             }
             content()
@@ -927,7 +1065,9 @@ private fun CopyLine(text: String, mono: Boolean = false) {
         Box(Modifier.weight(1f)) {
             if (mono) Mono(text) else Text(text, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
         }
-        IconButton(onClick = { clipboard.setText(AnnotatedString(text)) }) { Icon(Icons.Outlined.ContentCopy, L.common.copy, Modifier.size(18.dp)) }
+        IconButton(onClick = { clipboard.setText(AnnotatedString(text)) }, modifier = Modifier.minTouchTarget(48.dp)) {
+            Icon(Icons.Outlined.ContentCopy, L.common.copy, Modifier.size(18.dp))
+        }
     }
 }
 

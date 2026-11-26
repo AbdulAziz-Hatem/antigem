@@ -46,6 +46,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -72,7 +74,7 @@ private fun durationText(ms: Long): String = when {
 @Composable
 fun TokenUsageDetailsSheet(usage: TokenUsage, onViewPayload: (() -> Unit)?, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
     val c = ai.antigem.theme.AppColors
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -81,7 +83,12 @@ fun TokenUsageDetailsSheet(usage: TokenUsage, onViewPayload: (() -> Unit)?, onDi
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 22.dp).navigationBarsPadding()) {
-            Text(L.components.tokenUsageDetails.replyDetails, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+            Text(
+                L.components.tokenUsageDetails.replyDetails,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() }
+            )
             Text(if (usage.isEstimated) L.components.tokenUsageDetails.tokenCountsAreEstimates else L.components.tokenUsageDetails.whatThisReplyUsed, fontSize = 12.sp, color = muted)
             Spacer(Modifier.height(14.dp))
 
@@ -105,10 +112,13 @@ fun TokenUsageDetailsSheet(usage: TokenUsage, onViewPayload: (() -> Unit)?, onDi
                             }
                             if (model.contains('/')) Text(L.components.tokenUsageDetails.providerSubstringbefore(model.substringBefore('/')), fontSize = 11.5.sp, color = muted)
                         }
-                        IconButton(onClick = {
-                            (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Model", model))
-                            Toast.makeText(context, L.components.tokenUsageDetails.modelNameCopied, Toast.LENGTH_SHORT).show()
-                        }) { Icon(Icons.Outlined.ContentCopy, L.components.tokenUsageDetails.copyModelName, tint = muted, modifier = Modifier.size(18.dp)) }
+                        IconButton(
+                            onClick = {
+                                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Model", model))
+                                Toast.makeText(context, L.components.tokenUsageDetails.modelNameCopied, Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) { Icon(Icons.Outlined.ContentCopy, L.components.tokenUsageDetails.copyModelName, tint = muted, modifier = Modifier.size(18.dp)) }
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -138,7 +148,13 @@ fun TokenUsageDetailsSheet(usage: TokenUsage, onViewPayload: (() -> Unit)?, onDi
                     }
                     rows.forEachIndexed { i, (icon, kv, color) ->
                         if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                        Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .semantics(mergeDescendants = true) {}
+                                .padding(vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Icon(icon, null, tint = color, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
                             Text(kv.first, fontSize = 13.5.sp, modifier = Modifier.weight(1f))
@@ -150,7 +166,11 @@ fun TokenUsageDetailsSheet(usage: TokenUsage, onViewPayload: (() -> Unit)?, onDi
 
             if (onViewPayload != null) {
                 Spacer(Modifier.height(12.dp))
-                OutlinedButton(onClick = { onDismiss(); onViewPayload() }, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { onDismiss(); onViewPayload() },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
+                ) {
                     Icon(Icons.Outlined.DataObject, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(L.components.tokenUsageDetails.viewRawPayload)

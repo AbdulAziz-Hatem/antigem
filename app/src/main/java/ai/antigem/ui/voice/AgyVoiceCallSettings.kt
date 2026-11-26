@@ -3,6 +3,7 @@ package ai.antigem.ui.voice
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BubbleChart
@@ -32,6 +34,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,6 +49,9 @@ import ai.antigem.data.voice.AgyVoicePreferences
 import ai.antigem.data.voice.VoiceCallLauncher
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /**
@@ -76,7 +86,7 @@ fun AgyVoiceCallSettingsCard(modifier: Modifier = Modifier) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.HeadsetMic, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text(L.voice.agyVoiceCallSettings.callFromAnywhere, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(L.voice.agyVoiceCallSettings.callFromAnywhere, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -84,19 +94,25 @@ fun AgyVoiceCallSettingsCard(modifier: Modifier = Modifier) {
                     fontSize = 12.5.sp, color = subtleText()
                 )
                 Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (VoiceCallLauncher.canRequestTile) {
-                        OutlinedButton(onClick = {
-                            if (!VoiceCallLauncher.requestAddTile(context)) {
-                                AppToastHelper.showToast(L.voice.agyVoiceCallSettings.addItByEditingTheQuick, ChatToastType.INFO)
-                            }
-                        }) { Text(L.voice.agyVoiceCallSettings.addTile) }
+                        OutlinedButton(
+                            onClick = {
+                                if (!VoiceCallLauncher.requestAddTile(context)) {
+                                    AppToastHelper.showToast(L.voice.agyVoiceCallSettings.addItByEditingTheQuick, ChatToastType.INFO)
+                                }
+                            },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) { Text(L.voice.agyVoiceCallSettings.addTile) }
                     }
-                    OutlinedButton(onClick = {
-                        if (!VoiceCallLauncher.pinShortcut(context)) {
-                            AppToastHelper.showToast(L.voice.agyVoiceCallSettings.thisLauncherCantAddShortcutsLong, ChatToastType.INFO)
-                        }
-                    }) { Text(L.common.addToHomeScreen) }
+                    OutlinedButton(
+                        onClick = {
+                            if (!VoiceCallLauncher.pinShortcut(context)) {
+                                AppToastHelper.showToast(L.voice.agyVoiceCallSettings.thisLauncherCantAddShortcutsLong, ChatToastType.INFO)
+                            }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Text(L.common.addToHomeScreen) }
                 }
                 if (!VoiceCallLauncher.canRequestTile) {
                     Spacer(Modifier.height(6.dp))
@@ -109,14 +125,18 @@ fun AgyVoiceCallSettingsCard(modifier: Modifier = Modifier) {
         }
         Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.BubbleChart, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(10.dp))
-                    Text(L.voice.agyVoiceCallSettings.floatingCallWindow, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Switch(checked = bubbleOn, onCheckedChange = { on ->
+                Row(
+                    Modifier.fillMaxWidth().accessibleToggleRow(checked = bubbleOn, role = Role.Switch) {
+                        val on = !bubbleOn
                         AgyVoicePreferences.setBubble(on)
                         if (on && !canDraw) openOverlaySettings()
-                    })
+                    },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.BubbleChart, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(L.voice.agyVoiceCallSettings.floatingCallWindow, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f).semantics { heading() })
+                    Switch(checked = bubbleOn, onCheckedChange = null)
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -127,10 +147,11 @@ fun AgyVoiceCallSettingsCard(modifier: Modifier = Modifier) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         L.voice.agyVoiceCallSettings.needsDisplayOverOtherAppsFor,
-                        fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error
+                        fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = openOverlaySettings) { Text(L.common.allow) }
+                    OutlinedButton(onClick = openOverlaySettings, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.allow) }
                 }
             }
         }
@@ -138,4 +159,4 @@ fun AgyVoiceCallSettingsCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun subtleText() = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+private fun subtleText() = accessibleMutedColor(alpha = 0.72f)

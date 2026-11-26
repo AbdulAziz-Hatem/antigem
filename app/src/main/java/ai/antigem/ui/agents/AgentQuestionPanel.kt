@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +52,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,8 +69,13 @@ import ai.antigem.domain.model.ToolCall
 import ai.antigem.domain.model.ToolType
 import ai.antigem.domain.model.ChatMessage
 import ai.antigem.ui.components.accent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.formatSelectionsSummary
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** A question an agent is waiting on (Claude's AskUserQuestion, Antigravity's ask-choice step). */
@@ -121,10 +133,18 @@ fun AgentQuestionPanel(
         }
     }
 
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accentText = ensureAccessibleContrast(accent, surfaceBg, 4.5f)
+    val submitBg = ensureAccessibleContrast(accent, Color.White, 4.5f)
+
     Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = surfaceBg,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.38f)),
         shadowElevation = 6.dp
     ) {
@@ -132,12 +152,15 @@ fun AgentQuestionPanel(
             // header
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(accent.copy(alpha = 0.14f)),
+                    Modifier.size(34.dp).clip(RoundedCornerShape(10.dp)).background(accent.copy(alpha = 0.14f)).clearAndSetSemantics {},
                     contentAlignment = Alignment.Center
                 ) { Icon(Icons.AutoMirrored.Outlined.HelpOutline, null, tint = accent, modifier = Modifier.size(19.dp)) }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(L.agents.agentQuestion.labelHasValue(question.agent.label(), if (questions.size > 1) "${questions.size} questions" else L.agents.agentQuestion.aQuestion), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        L.agents.agentQuestion.labelHasValue(question.agent.label(), if (questions.size > 1) "${questions.size} questions" else L.agents.agentQuestion.aQuestion),
+                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() }
+                    )
                     if (questions.size > 1) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 3.dp)) {
                             questions.forEachIndexed { i, q ->
@@ -153,15 +176,16 @@ fun AgentQuestionPanel(
                                                 else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
                                             }
                                         )
+                                        .clearAndSetSemantics {}
                                 )
                             }
                             Spacer(Modifier.width(4.dp))
-                            Text("${page + 1} of ${questions.size}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                            Text("${page + 1} of ${questions.size}", fontSize = 11.sp, color = muted)
                         }
                     }
                 }
-                IconButton(onClick = onCancel, modifier = Modifier.size(30.dp)) {
-                    Icon(Icons.Outlined.Close, L.agents.agentQuestion.dismissQuestion, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+                IconButton(onClick = onCancel, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(Icons.Outlined.Close, L.agents.agentQuestion.dismissQuestion, tint = muted, modifier = Modifier.size(18.dp))
                 }
             }
 
@@ -184,22 +208,25 @@ fun AgentQuestionPanel(
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.8.sp,
-                                color = accent,
+                                color = accentText,
                                 modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
                     }
-                    Text(q.prompt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp)
+                    Text(q.prompt, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, lineHeight = 20.sp, modifier = Modifier.semantics { heading() })
                     q.description?.takeIf { it.length > 28 }?.let {
-                        Text(it, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp))
+                        Text(it, fontSize = 12.5.sp, color = muted, modifier = Modifier.padding(top = 2.dp))
                     }
                     Text(
                         if (q.isMultiSelect) L.agents.agentQuestion.chooseAny else L.agents.agentQuestion.chooseOne,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        color = muted,
                         modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = if (!q.isMultiSelect) Modifier.selectableGroup() else Modifier
+                    ) {
                         q.options.forEach { opt ->
                             val isOn = opt.id in selected[q.id].orEmpty()
                             OptionCard(opt.label, opt.description, isOn, q.isMultiSelect, accent) {
@@ -238,12 +265,12 @@ fun AgentQuestionPanel(
             Spacer(Modifier.height(8.dp))
             val isLast = page >= questions.lastIndex
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { onSkip(responses(skipAll = true)) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
-                    Text(if (questions.size > 1) L.agents.agentQuestion.skipAll else L.common.skip, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                TextButton(onClick = { onSkip(responses(skipAll = true)) }, contentPadding = PaddingValues(horizontal = 8.dp), modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(if (questions.size > 1) L.agents.agentQuestion.skipAll else L.common.skip, fontSize = 13.sp, color = muted)
                 }
                 Spacer(Modifier.weight(1f))
                 if (page > 0) {
-                    TextButton(onClick = { page-- }) { Text(L.common.back, fontSize = 13.sp) }
+                    TextButton(onClick = { page-- }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.back, fontSize = 13.sp) }
                     Spacer(Modifier.width(4.dp))
                 }
                 val canSubmit = questions.any { answered(it) }
@@ -257,8 +284,9 @@ fun AgentQuestionPanel(
                     },
                     enabled = !isLast || canSubmit,
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
-                    contentPadding = PaddingValues(horizontal = 18.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = submitBg, contentColor = Color.White),
+                    contentPadding = PaddingValues(horizontal = 18.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Text(
                         when {
@@ -277,12 +305,17 @@ fun AgentQuestionPanel(
 @Composable
 private fun OptionCard(label: String, description: String?, selected: Boolean, multi: Boolean, accent: Color, onClick: () -> Unit) {
     val shape = RoundedCornerShape(12.dp)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val rowModifier = if (multi) {
+        Modifier.fillMaxWidth().clip(shape).accessibleToggleRow(checked = selected, role = Role.Checkbox, onClick = onClick)
+    } else {
+        Modifier.fillMaxWidth().clip(shape).accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onClick)
+    }
     Surface(
-        onClick = onClick,
         shape = shape,
         color = if (selected) accent.copy(alpha = 0.1f) else Color.Transparent,
         border = BorderStroke(if (selected) 1.5.dp else 1.dp, if (selected) accent.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = rowModifier
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             // radio / checkbox
@@ -292,7 +325,8 @@ private fun OptionCard(label: String, description: String?, selected: Boolean, m
                     .size(18.dp)
                     .clip(indicatorShape)
                     .background(if (selected) accent else Color.Transparent)
-                    .border(1.5.dp, if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), indicatorShape),
+                    .border(1.5.dp, if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), indicatorShape)
+                    .clearAndSetSemantics {},
                 contentAlignment = Alignment.Center
             ) {
                 if (selected) {
@@ -304,7 +338,7 @@ private fun OptionCard(label: String, description: String?, selected: Boolean, m
             Column(Modifier.weight(1f)) {
                 Text(label, fontSize = 13.5.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
                 description?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Text(it, fontSize = 12.sp, lineHeight = 16.sp, color = muted)
                 }
             }
         }

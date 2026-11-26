@@ -21,6 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selectableGroup
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +35,10 @@ import ai.antigem.theme.AppTheme
 import ai.antigem.theme.BuiltInThemes
 import ai.antigem.theme.ThemeManager
 import ai.antigem.i18n.L
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 
 /**
  * Settings → Themes: pick the light theme and the dark theme from previews of every built-in and custom theme.
@@ -50,38 +60,44 @@ fun ThemeGallery(cardBg: Color, themeMode: String, onSetThemeMode: (String) -> U
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        GalleryHeader(L.settings.themeGallery.lightTheme, L.settings.themeGallery.usedInLightModeAndBy)
+        GalleryHeader(L.settings.themeGallery.lightTheme, L.settings.themeGallery.usedInLightModeAndBy, cardBg)
         ThemeGrid(all.filter { !it.dark }, lightId, cardBg, ::pick) { toDelete = it }
-        GalleryHeader(L.settings.themeGallery.darkTheme, L.settings.themeGallery.usedInDarkModeAndBy)
+        GalleryHeader(L.settings.themeGallery.darkTheme, L.settings.themeGallery.usedInDarkModeAndBy, cardBg)
         ThemeGrid(all.filter { it.dark }, darkId, cardBg, ::pick) { toDelete = it }
         Text(
             L.settings.themeGallery.makeYourOwnAddTheTheme,
-            fontSize = 11.5.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            fontSize = 11.5.sp, lineHeight = 16.sp, color = accessibleMutedColor(alpha = 0.72f, background = cardBg)
         )
     }
 
     toDelete?.let { t ->
         AlertDialog(
             onDismissRequest = { toDelete = null },
-            title = { Text("Delete “${t.name}”?") },
+            title = { Text(L.settings.themeGallery.deleteThemeName(t.name)) },
             text = { Text(L.settings.themeGallery.thisCustomThemeIsRemovedIf) },
-            confirmButton = { TextButton(onClick = { ThemeManager.deleteCustom(t.id); toDelete = null }) { Text(L.common.delete) } },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text(L.common.cancel) } }
+            confirmButton = { TextButton(onClick = { ThemeManager.deleteCustom(t.id); toDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.delete) } },
+            dismissButton = { TextButton(onClick = { toDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
 
 @Composable
-private fun GalleryHeader(title: String, hint: String) {
+private fun GalleryHeader(title: String, hint: String, cardBg: Color) {
     Column {
-        Text(title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-        Text(hint, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Text(
+            title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() }
+        )
+        Text(hint, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f, background = cardBg))
     }
 }
 
 @Composable
 private fun ThemeGrid(themes: List<AppTheme>, selectedId: String, cardBg: Color, onPick: (AppTheme) -> Unit, onDelete: (AppTheme) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
         themes.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 row.forEach { t ->
@@ -102,15 +118,24 @@ internal fun ThemeCard(t: AppTheme, selected: Boolean, cardBg: Color, modifier: 
     val c = remember(t) { ThemeManager.resolvedColors(t).mapValues { Color(it.value.toInt()) } }
     fun col(k: String, d: Color = Color.Gray) = c[k] ?: d
     val accent = MaterialTheme.colorScheme.primary
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val deleteTint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), cardBg, 4.5f, surfaceBg)
     val shape = RoundedCornerShape(14.dp)
     Column(
         modifier
             .clip(shape)
             .background(cardBg)
-            .border(if (selected) 2.dp else 1.dp, if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f), shape)
-            .clickable { onClick() }
+            .border(if (selected) 2.dp else 1.dp, if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f), shape)
+            .accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onClick)
     ) {
-        Box(Modifier.fillMaxWidth().height(84.dp).background(col("background")).padding(8.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(84.dp)
+                .background(col("background"))
+                .padding(8.dp)
+                .clearAndSetSemantics {}
+        ) {
             // a card with two text lines and a button
             Column(
                 Modifier.fillMaxWidth(0.72f).clip(RoundedCornerShape(8.dp)).background(col("card", col("surface"))).padding(7.dp),
@@ -165,17 +190,23 @@ internal fun ThemeCard(t: AppTheme, selected: Boolean, cardBg: Color, modifier: 
                 }
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(t.name, fontSize = 12.5.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface)
             }
             if (onDelete != null) {
-                Icon(Icons.Outlined.Delete, L.common.delete, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    modifier = Modifier.size(18.dp).clip(CircleShape).clickable { onDelete() })
-                Spacer(Modifier.width(4.dp))
+                androidx.compose.material3.IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
+                    Icon(Icons.Outlined.Delete, L.common.delete, tint = deleteTint, modifier = Modifier.size(18.dp))
+                }
             }
-            if (selected) Icon(Icons.Filled.CheckCircle, L.common.inUse, tint = accent, modifier = Modifier.size(18.dp))
+            if (selected) {
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Filled.CheckCircle, L.common.inUse, tint = accent, modifier = Modifier.size(18.dp).clearAndSetSemantics {})
+            }
         }
     }
 }

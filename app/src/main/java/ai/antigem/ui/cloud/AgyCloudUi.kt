@@ -3,6 +3,7 @@ package ai.antigem.ui.cloud
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -68,6 +71,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,14 +86,17 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ai.antigem.data.agent.agy.AgyCloud
 import ai.antigem.theme.GeminiBlue
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import exa.language_server_pb.RemoteResource
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
-private val subtleAlpha = 0.6f
-
 @Composable
-private fun subtle() = MaterialTheme.colorScheme.onSurface.copy(alpha = subtleAlpha)
+private fun subtle() = accessibleMutedColor(alpha = 0.72f)
 
 /** Opens the page that connects [pluginId] to the cloud agents, as the Antigravity app does (see [AgyCloud.connectUrl]). */
 private fun openConnect(
@@ -150,11 +162,14 @@ fun AgyCloudSettingsCard(modifier: Modifier = Modifier) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().accessibleToggleRow(checked = enabled, role = Role.Switch) { AgyCloud.setEnabled(!enabled) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(10.dp))
                     Text(L.cloud.agyCloudUi.cloudAgents, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Switch(checked = enabled, onCheckedChange = { AgyCloud.setEnabled(it) })
+                    Switch(checked = enabled, onCheckedChange = null)
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -202,7 +217,7 @@ fun AgyCloudSettingsCard(modifier: Modifier = Modifier) {
                     )
                 }
             }
-            cloudError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+            cloudError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
         }
     }
 }
@@ -210,7 +225,7 @@ fun AgyCloudSettingsCard(modifier: Modifier = Modifier) {
 @Composable
 private fun CloudSettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, value: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().minTouchTarget(48.dp).clickable(role = Role.Button, onClick = onClick).heightIn(min = 52.dp).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, null, tint = GeminiBlue, modifier = Modifier.size(20.dp))
@@ -221,7 +236,7 @@ private fun CloudSettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVect
             Text(value, fontSize = 12.5.sp, color = subtle(), maxLines = 1)
         }
         Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+            Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = accessibleMutedColor(alpha = 0.72f),
             modifier = Modifier.padding(start = 2.dp).size(20.dp)
         )
     }
@@ -252,14 +267,14 @@ fun LazyListScope.cloudProjectsSection(
             Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
             Column(Modifier.weight(1f)) {
-                Text(L.cloud.agyCloudUi.cloud, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                Text(L.cloud.agyCloudUi.cloud, fontWeight = FontWeight.Bold, fontSize = 13.5.sp, modifier = Modifier.semantics { heading() })
                 Text(L.cloud.agyCloudUi.runsInGooglesCloudWithYour, fontSize = 11.sp, color = subtle(), lineHeight = 14.sp)
             }
-            TextButton(onClick = onManage) { Text(L.cloud.agyCloudUi.manage, fontSize = 12.5.sp) }
+            TextButton(onClick = onManage, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.cloud.agyCloudUi.manage, fontSize = 12.5.sp) }
         }
     }
     if (error != null && projects.isEmpty()) {
-        item(key = "cloud_error") { Text(error, fontSize = 11.5.sp, color = subtle(), lineHeight = 15.sp) }
+        item(key = "cloud_error") { Text(error, fontSize = 11.5.sp, color = subtle(), lineHeight = 15.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
     }
     items(projects, key = { "cloud_" + it.id }) { p ->
         val on = p.id == selectedId
@@ -267,11 +282,11 @@ fun LazyListScope.cloudProjectsSection(
             shape = RoundedCornerShape(14.dp),
             color = if (on) GeminiBlue.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
             border = BorderStroke(1.5.dp, if (on) GeminiBlue.copy(alpha = 0.7f) else Color.Transparent),
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { onSelect(p.id) }
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).accessibleSelectionRow(selected = on, role = Role.RadioButton) { onSelect(p.id) }
         ) {
             Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(34.dp).clip(CircleShape).background(GeminiBlue.copy(alpha = if (on) 0.25f else 0.12f)),
+                    Modifier.size(34.dp).clip(CircleShape).background(GeminiBlue.copy(alpha = if (on) 0.25f else 0.12f)).clearAndSetSemantics {},
                     contentAlignment = Alignment.Center
                 ) { Icon(if (on) Icons.Outlined.Check else Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(17.dp)) }
                 Spacer(Modifier.width(12.dp))
@@ -283,16 +298,17 @@ fun LazyListScope.cloudProjectsSection(
         }
     }
     item(key = "cloud_new") {
+        val blueText = ensureAccessibleContrast(GeminiBlue, MaterialTheme.colorScheme.surface, 4.5f)
         Surface(
             shape = RoundedCornerShape(14.dp),
             color = Color.Transparent,
             border = BorderStroke(1.dp, GeminiBlue.copy(alpha = 0.45f)),
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onCreate)
+            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).clip(RoundedCornerShape(14.dp)).clickable(role = Role.Button, onClick = onCreate)
         ) {
             Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Add, null, tint = GeminiBlue, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Add, null, tint = blueText, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(L.cloud.agyCloudUi.newCloudProject, color = GeminiBlue, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
+                Text(L.cloud.agyCloudUi.newCloudProject, color = blueText, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
             }
         }
     }
@@ -334,33 +350,43 @@ fun CloudProjectsDialog(
                     Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(L.cloud.agyCloudUi.cloudAgents, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                        Text(L.cloud.agyCloudUi.cloudAgents, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.semantics { heading() })
                         Text(L.cloud.agyCloudUi.antigravityRemoteAgentsGoogleAiPro, fontSize = 11.5.sp, color = subtle())
                     }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, L.common.close) }
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.close) }
                 }
-                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
-                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(L.common.projects) })
-                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(L.cloud.agyCloudUi.connections) })
+                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, modifier = Modifier.selectableGroup()) {
+                    Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(L.common.projects) }, modifier = Modifier.minTouchTarget(48.dp))
+                    Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(L.cloud.agyCloudUi.connections) }, modifier = Modifier.minTouchTarget(48.dp))
                 }
                 actionError?.let {
-                    Text(it, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp).clickable { actionError = null })
+                    Text(
+                        it,
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .minTouchTarget(48.dp)
+                            .clickable(role = Role.Button, onClickLabel = L.common.dismiss) { actionError = null }
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 if (tab == 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Button(
                             onClick = { editor = EditorTarget.New },
-                            colors = ButtonDefaults.buttonColors(containerColor = GeminiBlue),
-                            shape = RoundedCornerShape(12.dp)
+                            colors = ButtonDefaults.buttonColors(containerColor = ensureAccessibleContrast(GeminiBlue, Color.White, 4.5f)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.cloud.agyCloudUi.newCloudProject)
                         }
                         Spacer(Modifier.weight(1f))
                         if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else IconButton(onClick = { scope.launch { AgyCloud.refreshProjects() } }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+                        else IconButton(onClick = { scope.launch { AgyCloud.refreshProjects() } }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
                     }
-                    if (error != null) Text(error!!, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 6.dp))
+                    if (error != null) Text(error!!, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 6.dp).semantics { liveRegion = LiveRegionMode.Polite })
                     LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
                         if (projects.isEmpty() && !loading && error == null) item {
                             Text(
@@ -466,9 +492,9 @@ private fun ProjectCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(p.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(p.name, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f).semantics { heading() }, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Box {
-                    IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.MoreVert, L.common.more, modifier = Modifier.size(18.dp)) }
+                    IconButton(onClick = { menu = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.MoreVert, L.common.more, modifier = Modifier.size(18.dp)) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text(L.common.rename) }, onClick = { menu = false; onRename() })
                         DropdownMenuItem(text = { Text(L.common.delete, color = MaterialTheme.colorScheme.error) }, onClick = { menu = false; onDelete() })
@@ -486,10 +512,10 @@ private fun ProjectCard(
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (onNewChat != null) Button(onClick = onNewChat, colors = ButtonDefaults.buttonColors(containerColor = GeminiBlue), shape = RoundedCornerShape(12.dp)) {
+                if (onNewChat != null) Button(onClick = onNewChat, colors = ButtonDefaults.buttonColors(containerColor = ensureAccessibleContrast(GeminiBlue, Color.White, 4.5f)), shape = RoundedCornerShape(12.dp), modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.cloud.agyCloudUi.newChatHere, fontSize = 13.sp)
                 }
-                OutlinedButton(onClick = onRepos, shape = RoundedCornerShape(12.dp)) { Text(L.cloud.agyCloudUi.repos, fontSize = 13.sp) }
+                OutlinedButton(onClick = onRepos, shape = RoundedCornerShape(12.dp), modifier = Modifier.minTouchTarget(48.dp)) { Text(L.cloud.agyCloudUi.repos, fontSize = 13.sp) }
             }
         }
     }
@@ -536,7 +562,7 @@ private fun CloudProjectEditor(
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
-        title = { Text(title) },
+        title = { Text(title, modifier = Modifier.semantics { heading() }) },
         text = {
             Column {
                 if (askName) {
@@ -544,8 +570,8 @@ private fun CloudProjectEditor(
                     Spacer(Modifier.height(12.dp))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(L.cloud.agyCloudUi.githubRepos, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    IconButton(onClick = { reload++ }, modifier = Modifier.size(30.dp)) { Icon(Icons.Outlined.Refresh, L.common.reload, modifier = Modifier.size(18.dp)) }
+                    Text(L.cloud.agyCloudUi.githubRepos, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f).semantics { heading() })
+                    IconButton(onClick = { reload++ }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.reload, modifier = Modifier.size(18.dp)) }
                 }
                 when {
                     notConnected -> {
@@ -554,9 +580,9 @@ private fun CloudProjectEditor(
                             fontSize = 12.5.sp, lineHeight = 17.sp, color = subtle()
                         )
                         Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = { saveError = null; openConnect(connectScope, uri, "github", onError = { saveError = it }) { connecting = true } }) { Text(L.cloud.agyCloudUi.connectGithub) }
+                        OutlinedButton(onClick = { saveError = null; openConnect(connectScope, uri, "github", onError = { saveError = it }) { connecting = true } }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.cloud.agyCloudUi.connectGithub) }
                     }
-                    loadError != null -> Text(loadError!!, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error)
+                    loadError != null -> Text(loadError!!, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     available == null -> Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)); Text(L.cloud.agyCloudUi.loadingYourRepos, fontSize = 12.5.sp)
                     }
@@ -568,10 +594,12 @@ private fun CloudProjectEditor(
                             val on = r.resource_id in picked
                             Row(
                                 Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                    .clickable { picked = if (on) picked - r.resource_id else picked + r.resource_id },
+                                    .accessibleToggleRow(checked = on, role = Role.Checkbox) {
+                                        picked = if (on) picked - r.resource_id else picked + r.resource_id
+                                    },
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Checkbox(checked = on, onCheckedChange = { picked = if (on) picked - r.resource_id else picked + r.resource_id })
+                                Checkbox(checked = on, onCheckedChange = null)
                                 Column(Modifier.weight(1f)) {
                                     Text(r.display_name.ifBlank { r.resource_id }, fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     if (r.is_private) Text(L.cloud.agyCloudUi.private, fontSize = 10.5.sp, color = subtle())
@@ -581,7 +609,7 @@ private fun CloudProjectEditor(
                     }
                     Text(L.cloud.agyCloudUi.privateReposInOneProjectMust, fontSize = 11.sp, color = subtle(), modifier = Modifier.padding(top = 4.dp))
                 }
-                saveError?.let { Text(it, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
+                saveError?.let { Text(it, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }) }
             }
         },
         confirmButton = {
@@ -624,9 +652,9 @@ private fun ConnectionsTab(modifier: Modifier) {
                 L.cloud.agyCloudUi.connectOpensAntigravitysPageForIt,
                 fontSize = 12.sp, color = subtle(), lineHeight = 16.sp, modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = { reload++ }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+            IconButton(onClick = { reload++ }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
         }
-        if (error != null) Text(error!!, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error)
+        if (error != null) Text(error!!, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         if (plugins == null && error == null) CircularProgressIndicator(Modifier.padding(16.dp).size(22.dp), strokeWidth = 2.dp)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)) {
             items(plugins.orEmpty(), key = { it.id }) { p ->
@@ -641,11 +669,11 @@ private fun ConnectionsTab(modifier: Modifier) {
                                     else -> L.cloud.agyCloudUi.notConnected
                                 },
                                 fontSize = 12.sp,
-                                color = if (p.connected) ai.antigem.theme.AppColors.success else subtle()
+                                color = if (p.connected) ensureAccessibleContrast(ai.antigem.theme.AppColors.success, MaterialTheme.colorScheme.surface, 4.5f) else subtle()
                             )
                         }
-                        if (p.connected) TextButton(onClick = { disconnecting = p }) { Text(L.common.disconnect, color = MaterialTheme.colorScheme.error) }
-                        else OutlinedButton(onClick = { error = null; openConnect(scope, uri, p.id, onError = { error = it }) { connecting = true } }) { Text(if (p.expired) L.common.reconnect else L.common.connect) }
+                        if (p.connected) TextButton(onClick = { disconnecting = p }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.disconnect, color = MaterialTheme.colorScheme.error) }
+                        else OutlinedButton(onClick = { error = null; openConnect(scope, uri, p.id, onError = { error = it }) { connecting = true } }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (p.expired) L.common.reconnect else L.common.connect) }
                     }
                 }
             }
@@ -675,18 +703,19 @@ private fun ConnectionsTab(modifier: Modifier) {
 /** Above the message box of a cloud chat: its project, web preview, run a command. */
 @Composable
 fun CloudChatStrip(projectName: String?, onProject: () -> Unit, onPreview: () -> Unit, onRunCommand: () -> Unit, modifier: Modifier = Modifier) {
+    val blueText = ensureAccessibleContrast(GeminiBlue, MaterialTheme.colorScheme.surface, 4.5f)
     Row(
         modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
-            Modifier.weight(1f).clip(RoundedCornerShape(50)).clickable(onClick = onProject).padding(horizontal = 6.dp, vertical = 4.dp),
+            Modifier.weight(1f).minTouchTarget(48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button, onClick = onProject).padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(15.dp))
+            Icon(Icons.Outlined.Cloud, null, tint = blueText, modifier = Modifier.size(15.dp))
             Spacer(Modifier.width(5.dp))
-            Text(projectName ?: L.cloud.agyCloudUi.cloud, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = GeminiBlue, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(projectName ?: L.cloud.agyCloudUi.cloud, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = blueText, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         StripChip(Icons.Outlined.Visibility, L.common.preview, onPreview)
         StripChip(Icons.Outlined.Terminal, L.common.run, onRunCommand)
@@ -695,11 +724,18 @@ fun CloudChatStrip(projectName: String?, onProject: () -> Unit, onPreview: () ->
 
 @Composable
 private fun StripChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Surface(onClick = onClick, shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)) {
-        Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
-            Spacer(Modifier.width(4.dp))
-            Text(label, fontSize = 12.sp)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+        modifier = Modifier.minTouchTarget(48.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, modifier = Modifier.size(14.dp), tint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), MaterialTheme.colorScheme.surface, 4.5f))
+                Spacer(Modifier.width(4.dp))
+                Text(label, fontSize = 12.sp)
+            }
         }
     }
 }
@@ -715,7 +751,7 @@ fun CloudRunCommandDialog(onRun: (String) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Terminal, null) },
-        title = { Text(L.cloud.agyCloudUi.runACommandInTheCloud) },
+        title = { Text(L.cloud.agyCloudUi.runACommandInTheCloud, modifier = Modifier.semantics { heading() }) },
         text = {
             Column {
                 OutlinedTextField(
@@ -724,10 +760,17 @@ fun CloudRunCommandDialog(onRun: (String) -> Unit, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     examples.take(3).forEach { e ->
-                        Surface(onClick = { cmd = e }, shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)) {
-                            Text(e, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                        Surface(
+                            onClick = { cmd = e },
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(e, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                            }
                         }
                     }
                 }

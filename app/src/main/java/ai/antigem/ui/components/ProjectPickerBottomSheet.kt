@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,6 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -125,12 +130,13 @@ fun ProjectPickerDialog(
                                 text = L.components.projectPickerBottom.selectWorkspace,
                                 fontSize = 16.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = L.components.projectPickerBottom.projectscountAvailableWorkspaceValue(projects.size, if (projects.size == 1) "" else "s"),
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = accessibleMutedColor(alpha = 0.72f)
                             )
                         }
                     }
@@ -139,12 +145,12 @@ fun ProjectPickerDialog(
                         if (onRefresh != null) {
                             IconButton(
                                 onClick = onRefresh,
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = L.common.refresh,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                    tint = accessibleMutedColor(alpha = 0.8f),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -152,12 +158,12 @@ fun ProjectPickerDialog(
                         }
                         IconButton(
                             onClick = onDismiss,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Close,
                                 contentDescription = L.common.close,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                tint = accessibleMutedColor(alpha = 0.8f),
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -171,16 +177,18 @@ fun ProjectPickerDialog(
                     state = listState,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .selectableGroup(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     cloudSection?.invoke(this)
                     // Option 1: General / No Workspace
                     item {
                         val isSelected = !cloudSelected && (activeProject == null || activeProject.path.isBlank())
+                        val cardBg = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+                            color = cardBg,
                             border = BorderStroke(
                                 1.5.dp,
                                 if (isSelected) ClaudeTerracotta.copy(alpha = 0.7f) else Color.Transparent
@@ -188,7 +196,7 @@ fun ProjectPickerDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .clickable {
+                                .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
                                     onSelectProject(null)
                                     onDismiss()
                                 }
@@ -239,7 +247,7 @@ fun ProjectPickerDialog(
                                     Text(
                                         text = L.components.projectPickerBottom.chatWithoutAttachingToADirectory,
                                         fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                        color = accessibleMutedColor(alpha = 0.72f, background = cardBg)
                                     )
                                 }
                                 if (isSelected) {
@@ -247,13 +255,14 @@ fun ProjectPickerDialog(
                                         modifier = Modifier
                                             .size(24.dp)
                                             .clip(CircleShape)
-                                            .background(ClaudeTerracotta),
+                                            .background(ClaudeTerracotta)
+                                            .clearAndSetSemantics {},
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.Check,
-                                            contentDescription = L.common.selected,
-                                            tint = Color.White,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(15.dp)
                                         )
                                     }
@@ -266,10 +275,11 @@ fun ProjectPickerDialog(
                     itemsIndexed(projects, key = { _, it -> it.path }) { _, proj ->
                         val isSelected = activeProject?.path == proj.path
                         val folderName = proj.name.ifBlank { File(proj.path).name.ifBlank { L.common.workspace } }
+                        val itemBg = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
 
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+                            color = itemBg,
                             border = BorderStroke(
                                 1.5.dp,
                                 if (isSelected) ClaudeTerracotta.copy(alpha = 0.7f) else Color.Transparent
@@ -277,7 +287,7 @@ fun ProjectPickerDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .clickable {
+                                .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
                                     onSelectProject(proj)
                                     onDismiss()
                                 }
@@ -330,8 +340,8 @@ fun ProjectPickerDialog(
                                     Text(
                                         text = proj.path,
                                         fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                        maxLines = 1,
+                                        color = accessibleMutedColor(alpha = 0.72f, background = itemBg),
+                                        maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
@@ -340,13 +350,14 @@ fun ProjectPickerDialog(
                                         modifier = Modifier
                                             .size(24.dp)
                                             .clip(CircleShape)
-                                            .background(ClaudeTerracotta),
+                                            .background(ClaudeTerracotta)
+                                            .clearAndSetSemantics {},
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.Check,
-                                            contentDescription = L.common.selected,
-                                            tint = Color.White,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onPrimary,
                                             modifier = Modifier.size(15.dp)
                                         )
                                     }
@@ -367,7 +378,7 @@ fun ProjectPickerDialog(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp),
+                            .minTouchTarget(48.dp),
                         shape = RoundedCornerShape(14.dp),
                         border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.6f))
                     ) {
@@ -396,14 +407,16 @@ fun ProjectPickerDialog(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp),
+                        .minTouchTarget(48.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ClaudeTerracotta,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
                 ) {
                     Icon(
                         imageVector = Icons.Default.FolderOpen,
                         contentDescription = null,
-                        tint = Color.White,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))

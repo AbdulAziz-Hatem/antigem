@@ -35,6 +35,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -46,8 +53,12 @@ import ai.antigem.data.jarvis.JarvisController.Phase
 import ai.antigem.data.jarvis.JarvisManagers
 import ai.antigem.data.jarvis.JarvisPreferences
 import ai.antigem.data.jarvis.JarvisTasks
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
+
+private val PanelSheetBg = Color(0xFF070B14)
 
 /**
  * The Jarvis panel (long-press the orb): the quick switches the user pinned (the tune icon opens all quick settings),
@@ -95,22 +106,23 @@ fun JarvisPanel(onTalk: () -> Unit, onNoticeAction: (String) -> Unit, floating: 
                 .border(1.dp, Brush.verticalGradient(listOf(Cyan.copy(alpha = 0.5f), Color.Transparent)), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
                 // taps inside the sheet stay inside
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+                .semantics { paneTitle = L.common.jarvis }
                 .navigationBarsPadding()
                 .imePadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             // handle
-            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)))
+            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).clearAndSetSemantics {})
             Spacer(Modifier.height(12.dp))
 
             // ---- header
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(42.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(42.dp).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
                     if (phase == Phase.IDLE || phase == Phase.OFF) IdleOrb(42.dp, shownTasks.count { it.active }, false) else JarvisOrb(phase, 0.3f, 42.dp)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(L.common.jarvis, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                    Text(L.common.jarvis, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                     val sub = when (phase) {
                         Phase.LISTENING -> L.common.listening
                         Phase.THINKING -> steps.lastOrNull()?.text ?: L.jarvis.panel.working
@@ -123,10 +135,15 @@ fun JarvisPanel(onTalk: () -> Unit, onNoticeAction: (String) -> Unit, floating: 
                             else -> L.jarvis.panel.noAgentPickedSettingsJarvisAgent
                         }
                     }
-                    Text(sub, color = Color.White.copy(alpha = 0.55f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        sub,
+                        color = ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), PanelSheetBg, 4.5f),
+                        fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
                 }
                 RoundIcon(Icons.Filled.Tune, L.common.quickSettings, Cyan) { JarvisController.quickSettingsOpen.value = true }
-                RoundIcon(Icons.Filled.Close, L.common.close, Color.White.copy(alpha = 0.7f)) { close() }
+                RoundIcon(Icons.Filled.Close, L.common.close, Color.White.copy(alpha = 0.85f)) { close() }
             }
             Spacer(Modifier.height(12.dp))
 
@@ -148,7 +165,9 @@ fun JarvisPanel(onTalk: () -> Unit, onNoticeAction: (String) -> Unit, floating: 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             SectionTitle(L.jarvis.panel.tasks, Modifier.weight(1f))
                             if (shownTasks.any { !it.active }) {
-                                Text(L.jarvis.panel.clearFinished, color = Cyan, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(50)).clickable { JarvisTasks.clearFinished() }.padding(horizontal = 8.dp, vertical = 4.dp))
+                                Box(Modifier.minTouchTarget(48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button) { JarvisTasks.clearFinished() }, contentAlignment = Alignment.Center) {
+                                    Text(L.jarvis.panel.clearFinished, color = ensureAccessibleContrast(Cyan, PanelSheetBg, 4.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                }
                             }
                         }
                     }
@@ -166,22 +185,32 @@ fun JarvisPanel(onTalk: () -> Unit, onNoticeAction: (String) -> Unit, floating: 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             SectionTitle(L.jarvis.panel.conversation, Modifier.weight(1f))
                             if (voiceChat.isNotBlank()) {
-                                Text(L.jarvis.panel.openChat, color = Cyan, fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(50)).clickable {
-                                    close()
-                                    JarvisController.vm.selectConversation(voiceChat)
-                                    JarvisController.vm.requestViewMode("CHAT")
-                                }.padding(horizontal = 8.dp, vertical = 4.dp))
+                                Box(
+                                    Modifier.minTouchTarget(48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button) {
+                                        close()
+                                        JarvisController.vm.selectConversation(voiceChat)
+                                        JarvisController.vm.requestViewMode("CHAT")
+                                    },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(L.jarvis.panel.openChat, color = ensureAccessibleContrast(Cyan, PanelSheetBg, 4.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                }
                             }
                             if (log.isNotEmpty()) {
-                                Text(L.common.clear, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, modifier = Modifier.clip(RoundedCornerShape(50)).clickable {
-                                    JarvisController.clearHistory()
-                                }.padding(horizontal = 8.dp, vertical = 4.dp))
+                                Box(
+                                    Modifier.minTouchTarget(48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button) {
+                                        JarvisController.clearHistory()
+                                    },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(L.common.clear, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), PanelSheetBg, 4.5f), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                }
                             }
                         }
                         if (log.isEmpty()) {
                             Text(
                                 L.jarvis.panel.tapTheOrbAndTalkOr,
-                                color = Color.White.copy(alpha = 0.5f), fontSize = 12.5.sp, lineHeight = 18.sp
+                                color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), PanelSheetBg, 4.5f), fontSize = 12.5.sp, lineHeight = 18.sp
                             )
                         }
                     }
@@ -197,7 +226,7 @@ fun JarvisPanel(onTalk: () -> Unit, onNoticeAction: (String) -> Unit, floating: 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = input, onValueChange = { input = it },
-                    placeholder = { Text(L.jarvis.panel.typeToJarvis, color = Color.White.copy(alpha = 0.4f), fontSize = 14.sp) },
+                    placeholder = { Text(L.jarvis.panel.typeToJarvis, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.68f), PanelSheetBg, 4.5f), fontSize = 14.sp) },
                     modifier = Modifier.weight(1f),
                     maxLines = 4,
                     shape = RoundedCornerShape(22.dp),
@@ -234,7 +263,12 @@ fun JarvisPanel(onTalk: () -> Unit, onNoticeAction: (String) -> Unit, floating: 
 
 @Composable
 private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
-    Text(text.uppercase(), color = Cyan.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, modifier = modifier.padding(bottom = 6.dp))
+    Text(
+        text.uppercase(),
+        color = ensureAccessibleContrast(Cyan, PanelSheetBg, 4.5f),
+        fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp,
+        modifier = modifier.padding(bottom = 6.dp).semantics { heading() }
+    )
 }
 
 @Composable
@@ -243,27 +277,28 @@ private fun TaskRow(t: JarvisTasks.Task, onOpen: () -> Unit, onStop: () -> Unit,
     Row(
         Modifier
             .fillMaxWidth()
+            .minTouchTarget(48.dp)
             .padding(bottom = 6.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(Color.White.copy(alpha = 0.04f))
             .border(1.dp, c.copy(alpha = 0.25f), RoundedCornerShape(14.dp))
-            .clickable { onOpen() }
+            .clickable(role = Role.Button) { onOpen() }
             .padding(start = 12.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(9.dp).clip(CircleShape).background(c))
+        Box(Modifier.size(9.dp).clip(CircleShape).background(c).clearAndSetSemantics {})
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(t.title, color = Color.White, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val age = ((System.currentTimeMillis() - t.createdAt) / 60_000).let { if (it < 1) L.common.justNow else if (it < 60) "${it}m" else L.jarvis.panel.valueHValue2M(it / 60, it % 60) }
             Text(
                 listOf(t.team.takeIf { it.isNotBlank() }, when (t.agent.name) { "AGY" -> L.common.antigravity; "OPENCODE" -> "OpenCode"; "CODEX" -> L.common.codex; else -> L.common.claude }, t.state.label, age, t.note.takeIf { it.isNotBlank() && it != "Working" }).filterNotNull().joinToString(" · "),
-                color = c.copy(alpha = 0.85f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                color = ensureAccessibleContrast(c, PanelSheetBg, 4.5f), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
-        RoundIcon(Icons.Filled.OpenInNew, L.common.open, Color.White.copy(alpha = 0.7f), small = true) { onOpen() }
+        RoundIcon(Icons.Filled.OpenInNew, L.common.open, Color.White.copy(alpha = 0.8f), small = true) { onOpen() }
         if (t.active) RoundIcon(Icons.Filled.Stop, L.common.stop, Danger, small = true) { onStop() }
-        else RoundIcon(Icons.Filled.Close, L.common.dismiss, Color.White.copy(alpha = 0.5f), small = true) { onDismiss() }
+        else RoundIcon(Icons.Filled.Close, L.common.dismiss, ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), PanelSheetBg, 4.5f), small = true) { onDismiss() }
     }
 }
 
@@ -287,9 +322,9 @@ private fun LogBubble(mine: Boolean, text: String) {
 @Composable
 private fun LogDivider(text: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)))
-        Text(text, color = Color.White.copy(alpha = 0.4f), fontSize = 10.5.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp))
-        Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)))
+        Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)).clearAndSetSemantics {})
+        Text(text, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.68f), PanelSheetBg, 4.5f), fontSize = 10.5.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp))
+        Box(Modifier.weight(1f).height(1.dp).background(Color.White.copy(alpha = 0.1f)).clearAndSetSemantics {})
     }
 }
 
@@ -297,22 +332,32 @@ private fun LogDivider(text: String) {
 private fun RoundIcon(icon: ImageVector, label: String, tint: Color, filled: Boolean = false, small: Boolean = false, onClick: () -> Unit) {
     Box(
         Modifier
-            .size(if (small) 34.dp else 44.dp)
+            .minTouchTarget(48.dp)
             .clip(CircleShape)
-            .background(if (filled) tint.copy(alpha = 0.2f) else Color.Transparent)
-            .clickable { onClick() },
+            .clickable(role = Role.Button) { onClick() },
         contentAlignment = Alignment.Center
-    ) { Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(if (small) 18.dp else 22.dp)) }
+    ) {
+        Box(
+            Modifier
+                .size(if (small) 34.dp else 44.dp)
+                .clip(CircleShape)
+                .background(if (filled) tint.copy(alpha = 0.2f) else Color.Transparent),
+            contentAlignment = Alignment.Center
+        ) { Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(if (small) 18.dp else 22.dp)) }
+    }
 }
 
 @Composable
 private fun FooterButton(label: String, color: Color = Cyan, onClick: () -> Unit) {
-    Text(
-        label, color = color, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-        modifier = Modifier
+    Box(
+        Modifier
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(50))
             .border(1.dp, color.copy(alpha = 0.35f), RoundedCornerShape(50))
-            .clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    )
+            .clickable(role = Role.Button) { onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = ensureAccessibleContrast(color, PanelSheetBg, 4.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
 }

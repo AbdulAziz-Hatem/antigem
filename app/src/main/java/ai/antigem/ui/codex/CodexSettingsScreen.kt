@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +49,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +66,9 @@ import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.components.label
 import ai.antigem.ui.claude.ClaudeCard
 import ai.antigem.ui.components.CodexAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -163,21 +171,24 @@ fun CodexSettingsScreen(
 
     fun open(url: String) = runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
 
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(CodexAccent, MaterialTheme.colorScheme.surface, 4.5f)
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         // ---- CLI (install, update, restart)
         if (page == CodexSettingsPage.ACCOUNT) ClaudeCard {
-            Text(L.codex.settings.codexCli, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(L.codex.settings.codexCli, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
             Text(
                 listOfNotNull(status?.version?.let { L.codex.settings.codexValue(it) }, if (status?.running == true) "running" else if (status?.installed == true) L.codex.settings.startsWhenNeeded else null)
                     .joinToString(" · ").ifBlank { state.label },
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                fontSize = 12.sp, color = muted, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
             status?.binary?.let {
                 Spacer(Modifier.height(4.dp))
-                Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = muted)
             }
             if (state == CodexState.NOT_INSTALLED) {
                 Spacer(Modifier.height(8.dp))
@@ -193,11 +204,12 @@ fun CodexSettingsScreen(
                     Button(
                         onClick = { backend.startCliJob("install") },
                         enabled = !jobRunning,
+                        modifier = Modifier.minTouchTarget(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = CodexAccent, contentColor = Color.White)
                     ) { Text(if (jobRunning) L.common.installing else L.codex.settings.installCodex) }
                 } else {
-                    OutlinedButton(onClick = { backend.startCliJob("update") }, enabled = !jobRunning, shape = RoundedCornerShape(12.dp)) {
+                    OutlinedButton(onClick = { backend.startCliJob("update") }, enabled = !jobRunning, modifier = Modifier.minTouchTarget(48.dp), shape = RoundedCornerShape(12.dp)) {
                         Text(if (jobRunning) L.common.checking else L.common.checkForUpdates)
                     }
                     Spacer(Modifier.width(8.dp))
@@ -213,6 +225,7 @@ fun CodexSettingsScreen(
                             }
                         },
                         enabled = !restarting && !jobRunning,
+                        modifier = Modifier.minTouchTarget(48.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) { Text(if (restarting) L.common.restarting else L.common.restart) }
                 }
@@ -230,7 +243,8 @@ fun CodexSettingsScreen(
                         else -> "failed"
                     },
                     fontSize = 12.sp,
-                    color = if (!j.running && j.exit_code != 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = if (!j.running && j.exit_code != 0) MaterialTheme.colorScheme.error else muted,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 )
                 Text(
                     j.log.trim().lines().takeLast(14).joinToString("\n"),
@@ -241,11 +255,11 @@ fun CodexSettingsScreen(
             }
             Text(
                 L.codex.settings.restartingEndsRepliesThatAreRunning,
-                fontSize = 11.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 8.dp)
+                fontSize = 11.sp, lineHeight = 15.sp, color = muted, modifier = Modifier.padding(top = 8.dp)
             )
             status?.error?.takeIf { state != CodexState.READY }?.let {
                 Spacer(Modifier.height(6.dp))
-                Text(it, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error, maxLines = 5, overflow = TextOverflow.Ellipsis)
+                Text(it, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error, maxLines = 5, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
         }
 
@@ -255,18 +269,19 @@ fun CodexSettingsScreen(
                 ai.antigem.ui.agents.AgentMark(AgentKind.CODEX, size = 40.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(L.common.codex, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(L.common.codex, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.semantics { heading() })
                     Text(
                         when {
                             account != null -> listOfNotNull(account?.email, account?.plan?.replaceFirstChar { it.uppercase() }?.let { "$it plan" }).joinToString(" · ").ifBlank { L.common.signedIn }
                             else -> state.label
                         },
                         fontSize = 12.sp,
-                        color = if (state == CodexState.READY) CodexAccent else MaterialTheme.colorScheme.error
+                        color = if (state == CodexState.READY) accessibleAccent else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
                 if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else IconButton(onClick = { scope.launch { reload() } }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+                else IconButton(onClick = { scope.launch { reload() } }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
             }
             val l = login
             when {
@@ -275,7 +290,7 @@ fun CodexSettingsScreen(
                     if (l.code != null) {
                         Text(L.codex.settings.openTheLinkSignInWith, fontSize = 12.5.sp, lineHeight = 17.sp)
                         SelectionContainer {
-                            Text(l.code, fontSize = 26.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = CodexAccent,
+                            Text(l.code, fontSize = 26.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = accessibleAccent,
                                 modifier = Modifier.padding(vertical = 8.dp))
                         }
                     } else {
@@ -284,14 +299,15 @@ fun CodexSettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Button(
                             onClick = { open(l.url) },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CodexAccent, contentColor = Color.White)
                         ) { Text(L.codex.settings.openSignInPage) }
                         Spacer(Modifier.width(8.dp))
-                        TextButton(onClick = { backend.cancelLogin() }) { Text(L.common.cancel) }
+                        TextButton(onClick = { backend.cancelLogin() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
                     }
                     Text(l.url, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                        color = muted)
                 }
                 state == CodexState.SIGNED_OUT -> {
                     Spacer(Modifier.height(8.dp))
@@ -303,23 +319,24 @@ fun CodexSettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Button(
                             onClick = { backend.startLogin(deviceCode = remote) },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = CodexAccent, contentColor = Color.White)
                         ) { Text(L.codex.settings.signInWithChatgpt) }
                         Spacer(Modifier.width(8.dp))
-                        if (!remote) TextButton(onClick = { backend.startLogin(deviceCode = true) }) { Text(L.codex.settings.useACode) }
+                        if (!remote) TextButton(onClick = { backend.startLogin(deviceCode = true) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.codex.settings.useACode) }
                     }
                     Text(
                         if (remote) L.codex.settings.theServerIsRemoteYouGet
                         else L.codex.settings.useACodeWorksWhenThe,
-                        fontSize = 11.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        fontSize = 11.sp, lineHeight = 15.sp, color = muted,
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
                 account != null -> {
                     Spacer(Modifier.height(8.dp))
                     var confirmSignOut by remember { mutableStateOf(false) }
-                    OutlinedButton(onClick = { confirmSignOut = true }, shape = RoundedCornerShape(12.dp)) { Text(L.common.signOut) }
+                    OutlinedButton(onClick = { confirmSignOut = true }, modifier = Modifier.minTouchTarget(48.dp), shape = RoundedCornerShape(12.dp)) { Text(L.common.signOut) }
                     if (confirmSignOut) {
                         ai.antigem.ui.agents.ConfirmSignOutDialog(
                             AgentKind.CODEX.label(), account?.email,
@@ -336,20 +353,20 @@ fun CodexSettingsScreen(
             ClaudeCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text(L.codex.settings.usageLimits, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(L.codex.settings.usageLimits, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
                         (limits?.plan ?: account?.plan)?.let {
                             Text(L.codex.settings.valuePlanEveryCodexModelCounts(it.replaceFirstChar { c -> c.uppercase() }),
-                                fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                fontSize = 11.5.sp, color = muted)
                         }
                     }
-                    IconButton(onClick = { scope.launch { backend.refreshRateLimits() } }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+                    IconButton(onClick = { scope.launch { backend.refreshRateLimits() } }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
                 }
                 Spacer(Modifier.height(8.dp))
                 val lim = limits
                 when {
                     lim == null -> Text(
                         if (state == CodexState.READY) L.codex.settings.noUsageInformationYet else L.codex.settings.signInToCodexToSee,
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        fontSize = 12.sp, color = muted, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     lim.primary == null && lim.secondary == null -> Text(L.codex.settings.noLimitsReportedForThisAccount, fontSize = 12.sp)
                     else -> {
@@ -362,20 +379,22 @@ fun CodexSettingsScreen(
 
         // ---- approvals for new chats
         if (page == CodexSettingsPage.PERMISSIONS) ClaudeCard {
-            Text(L.common.approvals, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(L.common.approvals, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
             Text(L.codex.settings.whatCodexAsksBeforeActingEach,
-                fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                fontSize = 11.5.sp, color = muted)
             Spacer(Modifier.height(8.dp))
-            CodexPreferences.MODES.forEach { m ->
-                ai.antigem.ui.claude.PickerOption(
-                    title = codexModeLabel(m),
-                    description = codexModeDescription(m),
-                    color = codexModeColor(m),
-                    selected = m == mode,
-                    icon = codexModeIcon(m),
-                    onClick = { backend.setPermissionMode(m) }
-                )
-                Spacer(Modifier.height(6.dp))
+            Column(Modifier.selectableGroup()) {
+                CodexPreferences.MODES.forEach { m ->
+                    ai.antigem.ui.claude.PickerOption(
+                        title = codexModeLabel(m),
+                        description = codexModeDescription(m),
+                        color = codexModeColor(m),
+                        selected = m == mode,
+                        icon = codexModeIcon(m),
+                        onClick = { backend.setPermissionMode(m) }
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
             }
         }
     }
@@ -383,6 +402,7 @@ fun CodexSettingsScreen(
 
 @Composable
 private fun LimitRow(w: CodexLimitWindow) {
+    val muted = accessibleMutedColor(alpha = 0.72f)
     val used = (w.usedPercent / 100.0).coerceIn(0.0, 1.0).toFloat()
     val window = w.windowMinutes?.let { m ->
         when {
@@ -401,7 +421,7 @@ private fun LimitRow(w: CodexLimitWindow) {
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(window, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text("${w.usedPercent.toInt()}% used", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        Text("${w.usedPercent.toInt()}% used", fontSize = 12.sp, color = muted)
     }
     Spacer(Modifier.height(4.dp))
     LinearProgressIndicator(
@@ -410,5 +430,5 @@ private fun LimitRow(w: CodexLimitWindow) {
         color = if (used >= 0.9f) MaterialTheme.colorScheme.error else CodexAccent,
         trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     )
-    resets?.let { Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), modifier = Modifier.padding(top = 3.dp)) }
+    resets?.let { Text(it, fontSize = 11.sp, color = muted, modifier = Modifier.padding(top = 3.dp)) }
 }

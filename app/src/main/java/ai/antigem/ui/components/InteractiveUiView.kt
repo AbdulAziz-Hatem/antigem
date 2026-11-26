@@ -20,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import ai.antigem.theme.isAppInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -34,6 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,6 +89,7 @@ fun InteractiveUiView(
     modifier: Modifier = Modifier
 ) {
     val isDark = isAppInDarkTheme()
+    val screenAccessible = LocalScreenAccessible.current
     var isFullscreen by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) } // 0 = App, 1 = Code
     var reloadKey by remember { mutableIntStateOf(0) }
@@ -168,7 +173,7 @@ fun InteractiveUiView(
                         Text(
                             text = " · $subtitle",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                            color = accessibleMutedColor(alpha = 0.72f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -180,6 +185,7 @@ fun InteractiveUiView(
                     // Tab Selector: App vs Code
                     Row(
                         modifier = Modifier
+                            .selectableGroup()
                             .clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.surface)
                             .padding(2.dp)
@@ -188,28 +194,30 @@ fun InteractiveUiView(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(if (selectedTab == 0) ClaudeTerracotta else Color.Transparent)
-                                .clickable { selectedTab = 0 }
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .accessibleSelectionRow(selected = selectedTab == 0, role = Role.Tab) { selectedTab = 0 }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = L.components.interactiveUiView.app,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = if (selectedTab == 0) MaterialTheme.colorScheme.onPrimary else accessibleMutedColor(alpha = 0.78f)
                             )
                         }
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(if (selectedTab == 1) ClaudeTerracotta else Color.Transparent)
-                                .clickable { selectedTab = 1 }
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .accessibleSelectionRow(selected = selectedTab == 1, role = Role.Tab) { selectedTab = 1 }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = L.common.code,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = if (selectedTab == 1) MaterialTheme.colorScheme.onPrimary else accessibleMutedColor(alpha = 0.78f)
                             )
                         }
                     }
@@ -219,13 +227,13 @@ fun InteractiveUiView(
                     // Reload Button
                     IconButton(
                         onClick = { reloadKey++ },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = L.components.interactiveUiView.restartApp,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.size(15.dp)
+                            tint = accessibleMutedColor(alpha = 0.78f),
+                            modifier = Modifier.size(16.dp)
                         )
                     }
 
@@ -235,7 +243,7 @@ fun InteractiveUiView(
                             runAnyway = true
                             isFullscreen = true
                         },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Fullscreen,
@@ -274,12 +282,12 @@ fun InteractiveUiView(
                         Text(
                             text = files.keys.joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = accessibleMutedColor(alpha = 0.72f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    TextButton(onClick = { runAnyway = true }) {
+                    TextButton(onClick = { runAnyway = true }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Text(L.components.interactiveUiView.runNow, color = ClaudeTerracotta, fontSize = 12.sp)
                     }
                 }
@@ -309,6 +317,7 @@ fun InteractiveUiView(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .selectableGroup()
                                     .horizontalScroll(rememberScrollState())
                                     .padding(horizontal = 10.dp, vertical = 6.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -319,14 +328,15 @@ fun InteractiveUiView(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
                                             .background(if (on) ClaudeTerracotta else MaterialTheme.colorScheme.surface)
-                                            .clickable { shown = name }
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            .accessibleSelectionRow(selected = on, role = Role.Tab) { shown = name }
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = name,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (on) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                                            color = if (on) MaterialTheme.colorScheme.onPrimary else accessibleMutedColor(alpha = 0.78f)
                                         )
                                     }
                                 }
@@ -376,19 +386,20 @@ fun InteractiveUiView(
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { heading() }
                             )
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { reloadKey++ }) {
+                            IconButton(onClick = { reloadKey++ }, modifier = Modifier.minTouchTarget(48.dp)) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
                                     contentDescription = L.components.interactiveUiView.restartApp,
                                     tint = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                            IconButton(onClick = { isFullscreen = false }) {
+                            IconButton(onClick = { isFullscreen = false }, modifier = Modifier.minTouchTarget(48.dp)) {
                                 Icon(
                                     imageVector = Icons.Default.FullscreenExit,
                                     contentDescription = L.components.interactiveUiView.exitFullscreen,
@@ -403,7 +414,14 @@ fun InteractiveUiView(
                         key(reloadKey, isDark) {
                             AndroidView(
                                 factory = { ctx -> newBlockWebView(ctx, blockOrigin, kept = false, zoom = true) },
-                                update = { view -> updateBlockWebView(view, blockOrigin, site, pageKey, load) },
+                                update = { view ->
+                                    view.importantForAccessibility = if (screenAccessible) {
+                                        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                                    } else {
+                                        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                    }
+                                    updateBlockWebView(view, blockOrigin, site, pageKey, load)
+                                },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

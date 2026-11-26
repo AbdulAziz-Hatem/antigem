@@ -22,12 +22,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import ai.antigem.data.preferences.AuthPreferences
+import ai.antigem.i18n.L
 import ai.antigem.theme.ClaudeTerracotta
 
 @Composable
@@ -173,7 +176,8 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                             text = "Chat System Prompt",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                     }
 
@@ -185,11 +189,11 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                 clipboard.setPrimaryClip(clip)
                                 Toast.makeText(context, "System prompt copied to clipboard", Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.ContentCopy,
-                                contentDescription = "Copy Prompt",
+                                contentDescription = L.components.customSystemPrompt.copyPrompt,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -267,7 +271,7 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                             Text(
                                 text = "e.g. You are an expert Android Kotlin engineer. Write clean Compose code with 0 bugs...",
                                 fontSize = 12.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                color = accessibleMutedColor(alpha = 0.72f)
                             )
                         },
                         modifier = Modifier
@@ -294,10 +298,10 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (selectedTab == 1 && promptText.isNotBlank()) {
-                        TextButton(onClick = { promptText = "" }) {
+                        TextButton(onClick = { promptText = "" }, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(
                                 imageVector = Icons.Outlined.RestartAlt,
-                                contentDescription = "Clear",
+                                contentDescription = L.common.clear,
                                 modifier = Modifier.size(16.dp),
                                 tint = MaterialTheme.colorScheme.error
                             )
@@ -309,8 +313,8 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                     }
 
                     Row {
-                        TextButton(onClick = onDismiss) {
-                            Text("Close", fontSize = 13.sp)
+                        TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
+                            Text(L.common.close, fontSize = 13.sp)
                         }
                         if (selectedTab == 1) {
                             Spacer(modifier = Modifier.width(6.dp))
@@ -319,10 +323,14 @@ Available slash commands: /goal, /schedule, /browser, /plan, /grill-me, /teamwor
                                     onSavePrompt(promptText.ifBlank { null })
                                     onDismiss()
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                                shape = RoundedCornerShape(8.dp)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ClaudeTerracotta,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
-                                Text("Save Prompt", fontSize = 13.sp, color = Color.White)
+                                Text("Save Prompt", fontSize = 13.sp)
                             }
                         }
                     }

@@ -49,6 +49,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -61,7 +66,10 @@ import ai.antigem.data.agent.claude.ClaudeCliStatus
 import ai.antigem.data.remote.AgyHubClient
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.components.accent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.ui.drawer.parseProfileAvatarModel
 import ai.antigem.i18n.L
 
@@ -100,7 +108,7 @@ private fun AccountAvatar(
     size: Dp = 26.dp
 ) {
     val accent = agent.accent()
-    Box(Modifier.size(size)) {
+    Box(Modifier.size(size).clearAndSetSemantics {}) {
         val ring = Modifier.size(size).clip(CircleShape).border(1.5.dp, accent.copy(alpha = 0.7f), CircleShape)
         when {
             !entry.isReady -> Box(ring.background(accent.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
@@ -165,7 +173,7 @@ fun AccountsButton(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
-        modifier = modifier
+        modifier = modifier.minTouchTarget(48.dp).semantics(mergeDescendants = true) {}
     ) {
         Row(Modifier.padding(start = 5.dp, end = 10.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy((-7).dp)) {
@@ -188,7 +196,7 @@ fun AccountsButton(
                 text,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (needsSignIn) (entries.first { it.isSignedOut }.agent.accent()) else MaterialTheme.colorScheme.onSurface,
+                color = if (needsSignIn) ensureAccessibleContrast(entries.first { it.isSignedOut }.agent.accent(), MaterialTheme.colorScheme.surface, 4.5f) else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 104.dp)
@@ -239,9 +247,9 @@ fun AccountsDialog(
         ) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(L.agents.accountsUi.accounts, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Outlined.Close, L.common.close, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Text(L.agents.accountsUi.accounts, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Outlined.Close, L.common.close, tint = accessibleMutedColor(alpha = 0.72f))
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -412,6 +420,8 @@ private fun AccountSection(
     actions: @Composable () -> Unit
 ) {
     val accent = entry.agent.accent()
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f)
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = accent.copy(alpha = 0.05f),
@@ -423,9 +433,9 @@ private fun AccountSection(
                 avatar()
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
                     subtitle?.let {
-                        Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 3, overflow = TextOverflow.Ellipsis)
+                        Text(it, fontSize = 12.sp, color = muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -439,7 +449,7 @@ private fun AccountSection(
                             fact,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), surfaceBg, 4.5f),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
@@ -456,16 +466,18 @@ private fun AccountSection(
 
 @Composable
 private fun StatusChip(entry: AgentStatusEntry) {
+    val labelColor = ensureAccessibleContrast(entry.color, MaterialTheme.colorScheme.surface, 4.5f)
     Row(
         Modifier
             .clip(RoundedCornerShape(10.dp))
             .background(entry.color.copy(alpha = 0.12f))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(entry.color))
+        Box(Modifier.size(6.dp).clip(CircleShape).background(entry.color).clearAndSetSemantics {})
         Spacer(Modifier.width(5.dp))
-        Text(entry.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = entry.color, maxLines = 1)
+        Text(entry.label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = labelColor, maxLines = 1)
     }
 }
 
@@ -477,18 +489,21 @@ private fun SectionButton(
     primary: Color? = null,
     onClick: () -> Unit
 ) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
     val color = when {
-        danger -> ai.antigem.theme.AppColors.danger
+        danger -> ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, surfaceBg, 4.5f)
         primary != null -> primary
-        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+        else -> ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f), surfaceBg, 4.5f)
     }
     if (primary != null) {
-        Surface(onClick = onClick, shape = RoundedCornerShape(12.dp), color = primary) {
-            Text(text, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp))
+        Surface(onClick = onClick, shape = RoundedCornerShape(12.dp), color = ensureAccessibleContrast(primary, Color.White, 4.5f), modifier = Modifier.minTouchTarget(48.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(text, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color.White, modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp))
+            }
         }
         return
     }
-    TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
+    TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp), modifier = Modifier.minTouchTarget(48.dp)) {
         icon?.let {
             Icon(it, null, tint = color, modifier = Modifier.size(15.dp))
             Spacer(Modifier.width(5.dp))

@@ -22,11 +22,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.antigem.ui.components.accessibleMutedColor
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 
 /**
  * One row of a settings list: an icon in a soft colored square, the title, an optional short value on the right
@@ -72,7 +77,7 @@ fun SettingsRowGroup(items: List<SettingsRowItem>, cardBg: Color) {
             .border(BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)), shape)
     ) {
         items.forEachIndexed { i, item ->
-            SettingsRow(item)
+            SettingsRow(item, cardBg)
             if (i < items.lastIndex) {
                 HorizontalDivider(
                     modifier = Modifier.padding(start = 60.dp),
@@ -85,12 +90,16 @@ fun SettingsRowGroup(items: List<SettingsRowItem>, cardBg: Color) {
 }
 
 @Composable
-private fun SettingsRow(item: SettingsRowItem) {
+private fun SettingsRow(item: SettingsRowItem, cardBg: Color) {
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val accessibleTint = ensureAccessibleContrast(item.tint, cardBg, 3.0f, surfaceBg)
+    val accessibleValueColor = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = item.onClick)
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button, onClick = item.onClick)
             .heightIn(min = 56.dp)
             .padding(start = 14.dp, end = 10.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -99,27 +108,27 @@ private fun SettingsRow(item: SettingsRowItem) {
             Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(item.tint.copy(alpha = 0.14f)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(item.icon, null, tint = item.tint, modifier = Modifier.size(19.dp))
+            Icon(item.icon, null, tint = accessibleTint, modifier = Modifier.size(19.dp))
         }
         Spacer(Modifier.width(14.dp))
         Text(
             item.title, fontSize = 15.sp, fontWeight = FontWeight.Medium, color = onSurface,
-            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
         )
         if (!item.value.isNullOrBlank()) {
             Spacer(Modifier.width(8.dp))
             if (item.valueColor != null) {
-                Box(Modifier.size(7.dp).clip(CircleShape).background(item.valueColor))
+                Box(Modifier.size(7.dp).clip(CircleShape).background(item.valueColor).clearAndSetSemantics {})
                 Spacer(Modifier.width(5.dp))
             }
             Text(
-                item.value, fontSize = 12.5.sp, color = onSurface.copy(alpha = 0.55f),
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp)
+                item.value, fontSize = 12.5.sp, color = accessibleValueColor,
+                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp)
             )
         }
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight, null,
-            tint = onSurface.copy(alpha = 0.35f), modifier = Modifier.padding(start = 2.dp).size(20.dp)
+            tint = onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(start = 2.dp).size(20.dp)
         )
     }
 }

@@ -3,9 +3,12 @@ package ai.antigem.ui.settings
 import ai.antigem.data.preferences.AuthPreferences
 import ai.antigem.theme.ClaudeTerracotta
 import ai.antigem.ui.components.PageOverviewPillIcon
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.floatingSwitcherHandleIcon
+import ai.antigem.ui.components.minTouchTarget
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,7 +44,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -144,6 +153,7 @@ private fun ChoiceRow(
     onSelect: (String) -> Unit
 ) {
     val current = options.firstOrNull { it.first == selected } ?: options.first()
+    val mutedColor = accessibleMutedColor(alpha = 0.72f)
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
@@ -155,11 +165,13 @@ private fun ChoiceRow(
         Text(
             text = current.third,
             fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            color = mutedColor
         )
         Spacer(modifier = Modifier.height(6.dp))
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             options.forEach { (id, label, _) ->
@@ -168,16 +180,18 @@ private fun ChoiceRow(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable { if (!isSelected) onSelect(id) },
+                        .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
+                            if (!isSelected) onSelect(id)
+                        },
                     shape = RoundedCornerShape(10.dp),
                     color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
                     border = BorderStroke(
                         1.dp,
-                        if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                        if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
                     )
                 ) {
                     Box(
-                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+                        modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -185,7 +199,8 @@ private fun ChoiceRow(
                             fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -201,8 +216,12 @@ private fun SettingSwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val mutedColor = accessibleMutedColor(alpha = 0.72f)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .accessibleToggleRow(checked = checked, role = Role.Switch) { onCheckedChange(!checked) }
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -217,14 +236,14 @@ private fun SettingSwitchRow(
             Text(
                 text = description,
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                color = mutedColor
             )
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = null,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                 checkedTrackColor = ClaudeTerracotta
             )
         )
@@ -244,6 +263,8 @@ private fun PillSizeSlider(
     onValueChange: (Float) -> Unit
 ) {
     var dragValue by remember(value) { mutableFloatStateOf(value.coerceIn(MIN_PILL_SCALE, MAX_PILL_SCALE)) }
+    val pct = (dragValue * 100).roundToInt()
+    val mutedColor = accessibleMutedColor(alpha = 0.72f)
     // saved once the slider rests, not on every step of the drag
     LaunchedEffect(dragValue) {
         if (dragValue != value) {
@@ -261,7 +282,7 @@ private fun PillSizeSlider(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                text = "${(dragValue * 100).roundToInt()}%",
+                text = "$pct%",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = ClaudeTerracotta
@@ -271,7 +292,7 @@ private fun PillSizeSlider(
         Text(
             text = description,
             fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+            color = mutedColor
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             // The collapsed pill at this size: 44dp with a 20dp icon at 100%, like the real one
@@ -303,7 +324,13 @@ private fun PillSizeSlider(
                     thumbColor = ClaudeTerracotta,
                     activeTrackColor = ClaudeTerracotta
                 ),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .minTouchTarget(48.dp)
+                    .semantics {
+                        contentDescription = title
+                        stateDescription = "$pct%"
+                    }
             )
         }
     }

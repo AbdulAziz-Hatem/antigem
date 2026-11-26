@@ -5,8 +5,10 @@ import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -27,6 +29,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -34,7 +45,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.data.egm.EgmManager
 import ai.antigem.theme.QuotaGreen
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** The EGM row of Settings → Agents, with what is installed. */
@@ -44,17 +60,21 @@ fun EgmEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
     LaunchedEffect(Unit) { EgmManager.init(context) }
     val state by EgmManager.state.collectAsState()
     val settings by EgmManager.settings.collectAsState()
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val rowBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val iconTint = ensureAccessibleContrast(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f), 3.0f, rowBg)
+    val subtitleColor = accessibleMutedColor(alpha = 0.72f, background = rowBg, surfaceFallback = surfaceBg)
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier.fillMaxWidth()
+        color = rowBg,
+        modifier = modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
-            ) { Icon(Icons.Outlined.Psychology, null, tint = MaterialTheme.colorScheme.tertiary) }
+            ) { Icon(Icons.Outlined.Psychology, null, tint = iconTint) }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(L.settings.egm.egmElephantGoldfish, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -65,10 +85,10 @@ fun EgmEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
                         else -> "${state.label}  ·  " + EgmManager.Command.entries.filter { EgmManager.available(it, state) }.joinToString { "/${it.token}" }
                     },
                     fontSize = 12.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = subtitleColor
                 )
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = subtitleColor)
         }
     }
 }
@@ -93,7 +113,9 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
     var confirmRemove by remember { mutableStateOf(false) }
     // true: the Jarvis instructions, false: the normal-chat ones
     var editTemplate by remember { mutableStateOf<Boolean?>(null) }
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val accessibleAmber = ensureAccessibleContrast(Amber, cardBg, 4.5f, surfaceBg)
 
     Column(
         Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp),
@@ -102,16 +124,28 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
         EgmCard(L.settings.egm.whatEgmDoes, cardBg, cardBorder) {
             Hint(L.settings.egm.googlesElephantGoldfishModelOpenSource)
             Hint(L.settings.egm.itUsesMoreTokensThanA)
-            TextButton(onClick = { egmOpenUrl(context, EgmManager.HOMEPAGE) }, contentPadding = PaddingValues(0.dp)) {
+            TextButton(
+                onClick = { egmOpenUrl(context, EgmManager.HOMEPAGE) },
+                contentPadding = PaddingValues(0.dp),
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Text("github.com/google/elephant-goldfish-model", fontSize = 12.5.sp)
             }
         }
 
         state.message?.let { msg ->
-            Surface(shape = RoundedCornerShape(12.dp), color = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)) {
+            val msgBg = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)
+            val msgFg = ensureAccessibleContrast(if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, msgBg, 4.5f, surfaceBg)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = msgBg,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            ) {
                 Row(Modifier.fillMaxWidth().padding(start = 14.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(msg, fontSize = 12.5.sp, color = if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, modifier = Modifier.weight(1f))
-                    IconButton(onClick = EgmManager::clearMessage) { Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp)) }
+                    Text(msg, fontSize = 12.5.sp, color = msgFg, modifier = Modifier.weight(1f))
+                    IconButton(onClick = EgmManager::clearMessage, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp))
+                    }
                 }
             }
         }
@@ -126,50 +160,75 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
             badgeColor = if (state.hasUpdate) Amber else QuotaGreen
         ) {
             Hint(L.settings.egm.downloadsEgmFromGithubTheSkills)
-            EgmManager.Source.entries.forEach { src ->
-                Row(
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = !busy) {
-                        if (settings.source != src) {
-                            EgmManager.update { it.copy(source = src) }
-                            EgmManager.checkForUpdate()
+            Column(Modifier.selectableGroup()) {
+                EgmManager.Source.entries.forEach { src ->
+                    val isSelected = settings.source == src
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (!busy) {
+                                    Modifier.accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
+                                        if (!isSelected) {
+                                            EgmManager.update { it.copy(source = src) }
+                                            EgmManager.checkForUpdate()
+                                        }
+                                    }
+                                } else {
+                                    Modifier.minTouchTarget(48.dp).semantics(mergeDescendants = true) {
+                                        selected = isSelected
+                                        disabled()
+                                    }
+                                }
+                            )
+                            .padding(vertical = 4.dp)
+                    ) {
+                        RadioButton(selected = isSelected, onClick = null, enabled = !busy, modifier = Modifier.padding(top = 2.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(src.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                            Text(src.description, fontSize = 11.5.sp, color = muted)
                         }
-                    }
-                ) {
-                    RadioButton(selected = settings.source == src, onClick = null, enabled = !busy, modifier = Modifier.padding(top = 2.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(src.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                        Text(src.description, fontSize = 11.5.sp, color = muted)
                     }
                 }
             }
             // installed from the other source: one tap installs from the chosen one instead
             val switching = state.version != null && state.installedSource != settings.source
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 when {
-                    state.version == null -> Button(enabled = !busy, onClick = EgmManager::install) {
+                    state.version == null -> Button(enabled = !busy, onClick = EgmManager::install, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.egm.installEgm)
                     }
-                    switching -> Button(enabled = !busy, onClick = EgmManager::install) {
+                    switching -> Button(enabled = !busy, onClick = EgmManager::install, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                         Text(if (settings.source == EgmManager.Source.MAIN) L.settings.egm.installTheDevelopmentVersion else L.settings.egm.installTheNewestRelease)
                     }
-                    state.hasUpdate -> Button(enabled = !busy, onClick = EgmManager::install) {
+                    state.hasUpdate -> Button(enabled = !busy, onClick = EgmManager::install, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                         Text(if (state.installedSource == EgmManager.Source.MAIN) L.settings.egm.updateToMainLatestcommit(state.latestCommit) else L.settings.egm.updateToVLatest(state.latest))
                     }
-                    else -> OutlinedButton(enabled = !busy, onClick = EgmManager::install) { Text(L.common.reinstall) }
+                    else -> OutlinedButton(enabled = !busy, onClick = EgmManager::install, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.reinstall) }
                 }
                 if (state.version != null && !state.hasUpdate && !switching) {
-                    TextButton(enabled = !busy, onClick = { EgmManager.checkForUpdate() }) { Text(L.common.checkForUpdate) }
+                    TextButton(enabled = !busy, onClick = { EgmManager.checkForUpdate() }, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Text(L.common.checkForUpdate)
+                    }
                 }
             }
             if (busy) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
-                    Text(state.progress ?: L.common.working, fontSize = 12.5.sp)
+                    Text(
+                        state.progress ?: L.common.working,
+                        fontSize = 12.5.sp,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
                 }
             }
             if (state.log.isNotEmpty()) LogBox(state.log)
@@ -190,7 +249,7 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
                         color = if (available) Color.Unspecified else muted
                     )
                     Hint(c.description)
-                    if (!available) Text(liteMissingNote(state.label), fontSize = 11.5.sp, color = Amber)
+                    if (!available) Text(liteMissingNote(state.label), fontSize = 11.5.sp, color = accessibleAmber)
                 }
             }
             Hint(L.settings.egm.inANormalChatTheAgent)
@@ -200,12 +259,13 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
 
         EgmCard(L.settings.egm.goldfishReviewers, cardBg, cardBorder, pill = "${settings.reviewers.size} of ${EgmManager.Persona.entries.size}" to MaterialTheme.colorScheme.primary) {
             Hint(L.settings.egm.whichOfEgmsReviewerPersonasLook)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(modifier = Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 EgmManager.Preset.entries.forEach { p ->
                     FilterChip(
                         selected = settings.reviewers == p.reviewers,
                         onClick = { EgmManager.update { it.copy(reviewers = p.reviewers) } },
-                        label = { Text(p.label) }
+                        label = { Text(p.label) },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     )
                 }
             }
@@ -215,9 +275,20 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
                 val canChange = !(checked && settings.reviewers.size == 1)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clickable(enabled = canChange) {
-                        EgmManager.update { s -> s.copy(reviewers = if (checked) s.reviewers - p else s.reviewers + p) }
-                    }
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (canChange) {
+                                Modifier.accessibleToggleRow(checked = checked, role = Role.Checkbox) {
+                                    EgmManager.update { s -> s.copy(reviewers = if (checked) s.reviewers - p else s.reviewers + p) }
+                                }
+                            } else {
+                                Modifier.minTouchTarget(48.dp).semantics(mergeDescendants = true) {
+                                    toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                                    disabled()
+                                }
+                            }
+                        )
                 ) {
                     Checkbox(checked = checked, enabled = canChange, onCheckedChange = null)
                     Spacer(Modifier.width(6.dp))
@@ -250,16 +321,24 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
 
         EgmCard(L.common.jarvis, cardBg, cardBorder) {
             Hint(L.settings.egm.whoIsTheElephantWritesAnd)
-            EgmManager.Elephant.entries.forEach { e ->
-                Row(
-                    verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth().clickable { EgmManager.update { it.copy(elephant = e) } }
-                ) {
-                    RadioButton(selected = settings.elephant == e, onClick = null, modifier = Modifier.padding(top = 2.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(e.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                        Text(e.description, fontSize = 11.5.sp, color = muted)
+            Column(Modifier.selectableGroup()) {
+                EgmManager.Elephant.entries.forEach { e ->
+                    val isSelected = settings.elephant == e
+                    Row(
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
+                                EgmManager.update { it.copy(elephant = e) }
+                            }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        RadioButton(selected = isSelected, onClick = null, modifier = Modifier.padding(top = 2.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(e.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                            Text(e.description, fontSize = 11.5.sp, color = muted)
+                        }
                     }
                 }
             }
@@ -278,7 +357,8 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
             OutlinedButton(
                 enabled = !busy,
                 onClick = { confirmRemove = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(Icons.Outlined.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.egm.removeEgm)
             }
@@ -291,11 +371,11 @@ fun EgmScreen(cardBg: Color, cardBorder: BorderStroke) {
             title = { Text(L.settings.egm.removeEgm2, fontWeight = FontWeight.Bold) },
             text = { Text(L.settings.egm.theEgmCommandsStopWorkingYour, fontSize = 13.5.sp) },
             confirmButton = {
-                TextButton(onClick = { confirmRemove = false; EgmManager.uninstall() }) {
+                TextButton(onClick = { confirmRemove = false; EgmManager.uninstall() }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.common.remove, color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { confirmRemove = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 
@@ -315,7 +395,7 @@ private fun EgmCard(
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                 pill?.let { Pill(it.first, it.second) }
             }
             content()
@@ -329,10 +409,16 @@ private fun EgmGuideCard(cardBg: Color, cardBorder: BorderStroke, artifactDir: S
     var open by remember { mutableStateOf(false) }
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth().clickable { open = !open }, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Button) { open = !open },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.width(10.dp))
-                Text(L.settings.egm.howToUseEgm, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(L.settings.egm.howToUseEgm, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                 Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, if (open) L.settings.egm.hideTheGuide else L.settings.egm.showTheGuide)
             }
             if (!open) {
@@ -380,17 +466,18 @@ private fun EgmGuideCard(cardBg: Color, cardBorder: BorderStroke, artifactDir: S
 
 @Composable
 private fun EgmGuideHeading(text: String) {
-    Text(text, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp))
+    Text(text, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 4.dp).semantics { heading() })
 }
 
 @Composable
 private fun EgmGuideCommand(command: String, whenToUse: String, steps: String, example: String, note: String? = null) {
+    val accessibleAmber = ensureAccessibleContrast(Amber, MaterialTheme.colorScheme.surfaceContainerLow, 4.5f, MaterialTheme.colorScheme.surface)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(command, fontFamily = FontFamily.Monospace, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-        note?.let { Text(it, fontSize = 11.5.sp, color = Amber) }
+        note?.let { Text(it, fontSize = 11.5.sp, color = accessibleAmber) }
         Hint(whenToUse)
         Hint(steps)
-        Text(L.settings.egm.example, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Text(L.settings.egm.example, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = accessibleMutedColor(alpha = 0.72f))
         Mono(example)
     }
 }
@@ -399,13 +486,15 @@ private fun EgmGuideCommand(command: String, whenToUse: String, steps: String, e
 private fun EgmSwitchRow(title: String, text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clickable { onChange(!checked) }
+        modifier = Modifier
+            .fillMaxWidth()
+            .accessibleToggleRow(checked = checked, role = Role.Switch) { onChange(!checked) }
     ) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-            Text(text, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(text, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f))
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -414,11 +503,21 @@ private fun EgmStepper(title: String, text: String, value: Int, min: Int, max: I
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.weight(1f).padding(end = 8.dp)) {
             Text(title, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-            Text(text, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(text, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f))
         }
-        IconButton(enabled = value > min, onClick = { onChange(value - 1) }) { Icon(Icons.Outlined.Remove, L.settings.egm.less, Modifier.size(18.dp)) }
-        Text("$value", fontSize = 15.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.widthIn(min = 20.dp))
-        IconButton(enabled = value < max, onClick = { onChange(value + 1) }) { Icon(Icons.Outlined.Add, L.common.more, Modifier.size(18.dp)) }
+        IconButton(enabled = value > min, onClick = { onChange(value - 1) }, modifier = Modifier.minTouchTarget(48.dp)) {
+            Icon(Icons.Outlined.Remove, L.settings.egm.less, Modifier.size(18.dp))
+        }
+        Text(
+            "$value",
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(min = 20.dp).semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        IconButton(enabled = value < max, onClick = { onChange(value + 1) }, modifier = Modifier.minTouchTarget(48.dp)) {
+            Icon(Icons.Outlined.Add, L.common.more, Modifier.size(18.dp))
+        }
     }
 }
 
@@ -436,7 +535,11 @@ private fun EgmArtifactDirField(saved: String) {
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(8.dp))
-            TextButton(enabled = dir.trim().trimEnd('/') != saved && dir.isNotBlank(), onClick = { EgmManager.update { it.copy(artifactDir = dir) } }) {
+            TextButton(
+                enabled = dir.trim().trimEnd('/') != saved && dir.isNotBlank(),
+                onClick = { EgmManager.update { it.copy(artifactDir = dir) } },
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Text(L.common.save)
             }
         }
@@ -450,7 +553,7 @@ private fun EgmTemplateRow(title: String, changed: Boolean, onClick: () -> Unit)
         onClick = onClick,
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
@@ -481,17 +584,21 @@ private fun EgmTemplateDialog(jarvis: Boolean, current: String, onDismiss: () ->
                 )
                 TextButton(
                     onClick = { text = if (jarvis) EgmManager.DEFAULT_JARVIS_TEMPLATE else EgmManager.DEFAULT_CHAT_TEMPLATE },
-                    contentPadding = PaddingValues(0.dp)
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.settings.egm.resetToDefault) }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                EgmManager.update { if (jarvis) it.copy(jarvisTemplate = text) else it.copy(chatTemplate = text) }
-                onDismiss()
-            }) { Text(L.common.save) }
+            Button(
+                onClick = {
+                    EgmManager.update { if (jarvis) it.copy(jarvisTemplate = text) else it.copy(chatTemplate = text) }
+                    onDismiss()
+                },
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) { Text(L.common.save) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 

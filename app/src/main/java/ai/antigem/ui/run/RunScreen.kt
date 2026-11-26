@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,6 +31,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -53,7 +64,11 @@ import ai.antigem.data.run.RunTemplateGroup
 import ai.antigem.data.run.RunTemplates
 import ai.antigem.theme.AppColors
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.LocalScreenAccessible
 import ai.antigem.ui.components.WorkspaceFolderBrowserDialog
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -90,7 +105,7 @@ fun RunScreen(isVisible: Boolean, onClose: () -> Unit, onSendToChat: () -> Unit)
     BackHandler(enabled = isVisible) { onClose() }
     // results that finish while the screen is in front are seen already (no bubble for them later)
     LaunchedEffect(isVisible, runs) { if (isVisible) RunPanel.markSeen() }
-    RunScreenContent(runs = runs, onClose = onClose, onSendToChat = onSendToChat)
+    RunScreenContent(runs = runs, isVisible = isVisible, onClose = onClose, onSendToChat = onSendToChat)
 }
 
 /**
@@ -101,19 +116,31 @@ fun RunScreen(isVisible: Boolean, onClose: () -> Unit, onSendToChat: () -> Unit)
 fun RunBubbleHost(isRunScreen: Boolean) {
     val runs by RunManager.runs.collectAsState()
     val seen by RunPanel.seen.collectAsState()
+    val screenAccessible = LocalScreenAccessible.current
     val anyRunning = runs.any { it.status == RunStatus.RUNNING }
     // keepScreenOn on any view of the window keeps it on, without touching the flag other screens set
     androidx.compose.ui.viewinterop.AndroidView(
-        factory = { android.view.View(it) },
-        update = { it.keepScreenOn = anyRunning },
-        modifier = Modifier.size(1.dp)
+        factory = { android.view.View(it).apply {
+            isFocusable = false
+            importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+        } },
+        update = {
+            it.keepScreenOn = anyRunning
+            it.isFocusable = false
+            it.importantForAccessibility = if (screenAccessible) {
+                android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            } else {
+                android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            }
+        },
+        modifier = Modifier.size(1.dp).clearAndSetSemantics { hideFromAccessibility() }
     )
     val showBubble = !isRunScreen && runs.any { it.status == RunStatus.RUNNING || RunPanel.key(it) !in seen }
     if (showBubble) RunBubble(runs, seen)
 }
 
 @Composable
-private fun RunScreenContent(runs: List<RunEntry>, onClose: () -> Unit, onSendToChat: () -> Unit) {
+private fun RunScreenContent(runs: List<RunEntry>, isVisible: Boolean, onClose: () -> Unit, onSendToChat: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefs = remember { RunPanelPrefs(context) }
@@ -226,6 +253,7 @@ private fun RunScreenContent(runs: List<RunEntry>, onClose: () -> Unit, onSendTo
                     RunsView(
                         runs = runs,
                         selected = selectedRun ?: runs.lastOrNull(),
+                        isVisible = isVisible,
                         onSelect = { RunPanel.selectedRunId.value = it },
                         onSendToChat = { run ->
                             RunPanel.chatHandoff.value = chatText(run, RunManager.recentOutput(run.id))
@@ -303,18 +331,18 @@ private fun PanelHeader(
             .padding(start = 4.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onClose) {
+        IconButton(onClick = onClose, modifier = Modifier.minTouchTarget(48.dp)) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, L.common.back, tint = AppColors.editorText)
         }
         Box(
-            Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(ClaudeTerracotta.copy(alpha = 0.15f)),
+            Modifier.size(32.dp).clip(RoundedCornerShape(9.dp)).background(ClaudeTerracotta.copy(alpha = 0.15f)).clearAndSetSemantics {},
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Filled.PlayArrow, null, tint = ClaudeTerracotta, modifier = Modifier.size(20.dp)) }
         Spacer(Modifier.width(8.dp))
-        Text(L.common.run, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.editorText)
+        Text(L.common.run, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.editorText, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.width(12.dp))
         Row(
-            Modifier.clip(RoundedCornerShape(10.dp)).background(AppColors.editorBg).padding(3.dp),
+            Modifier.clip(RoundedCornerShape(10.dp)).background(AppColors.editorBg).padding(3.dp).selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             SegmentButton(L.run.screen.commands, selected = !showRuns, onClick = onShowCommands)
@@ -331,24 +359,31 @@ private fun PanelHeader(
 
 @Composable
 private fun SegmentButton(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
+    val bg = if (selected) ClaudeTerracotta.copy(alpha = 0.18f) else Color.Transparent
     Surface(
         onClick = onClick,
         enabled = enabled,
         shape = RoundedCornerShape(8.dp),
-        color = if (selected) ClaudeTerracotta.copy(alpha = 0.18f) else Color.Transparent
+        color = bg,
+        modifier = Modifier.minTouchTarget(48.dp).semantics {
+            role = Role.Tab
+            this.selected = selected
+        }
     ) {
-        Text(
-            label,
-            fontSize = 12.5.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = when {
-                selected -> ClaudeTerracotta
-                enabled -> AppColors.editorText
-                else -> AppColors.editorMuted
-            },
-            maxLines = 1,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                fontSize = 12.5.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = when {
+                    selected -> ensureAccessibleContrast(ClaudeTerracotta, bg, 4.5f, AppColors.editorBg)
+                    enabled -> AppColors.editorText
+                    else -> ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorBg, 4.5f)
+                },
+                maxLines = 1,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
     }
 }
 
@@ -387,7 +422,7 @@ private fun CommandsView(
         FolderRow(folder, activeProjectPath, ideProjects, recent, onPickFolder, onBrowse)
 
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup().padding(horizontal = 12.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             CommandFilter.entries.forEach { f ->
@@ -431,7 +466,14 @@ private fun CommandsView(
                                 onEdit = { onEdit(cfg, false) }, onDuplicate = { onDuplicate(cfg, false) }, onDelete = { onDelete(cfg, false) })
                         }
                         if (hiddenIdeOnly > 0) {
-                            item { Text("$hiddenIdeOnly IDE-only command(s) hidden (they use the IDE's open file).", fontSize = 11.5.sp, color = AppColors.editorMuted, modifier = Modifier.padding(4.dp)) }
+                            item {
+                                Text(
+                                    "$hiddenIdeOnly IDE-only command(s) hidden (they use the IDE's open file).",
+                                    fontSize = 11.5.sp,
+                                    color = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorBg, 4.5f),
+                                    modifier = Modifier.padding(4.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -450,7 +492,13 @@ private fun CommandsView(
                     }
                     suggested.forEach { group ->
                         item(key = "h:" + group.kind) {
-                            Text(group.kind, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ClaudeTerracotta, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp))
+                            Text(
+                                group.kind,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorBg, 4.5f),
+                                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp).semantics { heading() }
+                            )
                         }
                         if (group.needsAndroidSetup) {
                             item(key = "w:" + group.kind) {
@@ -467,7 +515,7 @@ private fun CommandsView(
 
         HorizontalDivider(color = AppColors.editorBorder, thickness = 0.5.dp)
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.End) {
-            Button(onClick = onNew, colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)) {
+            Button(onClick = onNew, colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.run.screen.newCommand)
             }
         }
@@ -484,13 +532,14 @@ private fun FolderRow(
     onBrowse: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
+    val mutedPanel = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorPanel, 4.5f, AppColors.editorBg)
     Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp)) {
         Surface(
             onClick = { menu = true },
             shape = RoundedCornerShape(12.dp),
             color = AppColors.editorPanel,
             border = BorderStroke(1.dp, AppColors.editorBorder),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).semantics(mergeDescendants = true) {}
         ) {
             Row(Modifier.padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.FolderOpen, null, tint = ClaudeTerracotta, modifier = Modifier.size(20.dp))
@@ -501,10 +550,10 @@ private fun FolderRow(
                         fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppColors.editorText, maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                     if (folder.isNotBlank()) {
-                        Text(shortPath(folder), fontSize = 11.sp, color = AppColors.editorMuted, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace)
+                        Text(shortPath(folder), fontSize = 11.sp, color = mutedPanel, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = FontFamily.Monospace)
                     }
                 }
-                Icon(Icons.Filled.UnfoldMore, L.run.screen.changeFolder, tint = AppColors.editorMuted, modifier = Modifier.size(20.dp))
+                Icon(Icons.Filled.UnfoldMore, L.run.screen.changeFolder, tint = mutedPanel, modifier = Modifier.size(20.dp))
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -519,7 +568,7 @@ private fun FolderRow(
                     text = {
                         Column {
                             Text(path.substringAfterLast('/').ifBlank { path }, fontSize = 13.5.sp, fontWeight = if (path == folder) FontWeight.Bold else FontWeight.Normal)
-                            Text("$label · ${shortPath(path)}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("$label · ${shortPath(path)}", fontSize = 11.sp, color = accessibleMutedColor(alpha = 0.72f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     onClick = { menu = false; onPick(path) }
@@ -548,27 +597,28 @@ private fun CommandRow(
 ) {
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val mutedPanel = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorPanel, 4.5f, AppColors.editorBg)
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = AppColors.editorPanel,
         border = BorderStroke(0.5.dp, AppColors.editorBorder),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onRun, onLongClick = { menu = true })
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onRun, onLongClick = { menu = true })
     ) {
         Row(Modifier.padding(start = 6.dp, end = 2.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onRun) {
+            IconButton(onClick = onRun, modifier = Modifier.minTouchTarget(48.dp)) {
                 Box(Modifier.size(32.dp).clip(CircleShape).background(ClaudeTerracotta.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Filled.PlayArrow, L.run.screen.runName(name), tint = ClaudeTerracotta, modifier = Modifier.size(20.dp))
                 }
             }
             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
                 Text(name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppColors.editorText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(command, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = AppColors.editorMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(command, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = mutedPanel, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (!cwd.isNullOrBlank() && cwd != "\${workspaceFolder}") {
-                    Text(L.run.screen.inCwd(cwd), fontSize = 10.5.sp, color = AppColors.editorMuted.copy(alpha = 0.8f), maxLines = 1)
+                    Text(L.run.screen.inCwd(cwd), fontSize = 10.5.sp, color = mutedPanel, maxLines = 1)
                 }
             }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, L.common.more, tint = AppColors.editorMuted) }
+                IconButton(onClick = { menu = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Filled.MoreVert, L.common.more, tint = mutedPanel) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(leadingIcon = { Icon(Icons.Outlined.Edit, null) }, text = { Text(L.common.edit) }, onClick = { menu = false; onEdit() })
                     DropdownMenuItem(leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) }, text = { Text(L.run.screen.duplicate) }, onClick = { menu = false; onDuplicate() })
@@ -589,15 +639,16 @@ private fun CommandRow(
 
 @Composable
 private fun TemplateRow(t: RunTemplate, onRun: () -> Unit, onAdd: (() -> Unit)?) {
+    val mutedPanel = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorPanel, 4.5f, AppColors.editorBg)
     Surface(
         onClick = onRun,
         shape = RoundedCornerShape(12.dp),
         color = AppColors.editorPanel,
         border = BorderStroke(0.5.dp, AppColors.editorBorder),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Row(Modifier.padding(start = 6.dp, end = 2.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onRun) {
+            IconButton(onClick = onRun, modifier = Modifier.minTouchTarget(48.dp)) {
                 Box(Modifier.size(32.dp).clip(CircleShape).background(ClaudeTerracotta.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                     Icon(Icons.Filled.PlayArrow, L.run.screen.runName(t.name), tint = ClaudeTerracotta, modifier = Modifier.size(20.dp))
                 }
@@ -606,46 +657,59 @@ private fun TemplateRow(t: RunTemplate, onRun: () -> Unit, onAdd: (() -> Unit)?)
                 Text(t.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppColors.editorText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     (t.cwd?.let { "cd $it && " } ?: "") + t.command,
-                    fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = AppColors.editorMuted, maxLines = 2, overflow = TextOverflow.Ellipsis
+                    fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, color = mutedPanel, maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
                 t.note?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, fontSize = 10.5.sp, color = AppColors.editorMuted.copy(alpha = 0.85f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(it, fontSize = 10.5.sp, color = mutedPanel, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (onAdd != null) {
-                IconButton(onClick = onAdd) { Icon(Icons.Outlined.BookmarkAdd, L.run.screen.saveToThisProject, tint = AppColors.editorMuted) }
+                IconButton(onClick = onAdd, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.BookmarkAdd, L.run.screen.saveToThisProject, tint = mutedPanel) }
             }
         }
     }
 }
 
 @Composable
-private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun FilterPill(label: String, selected: Boolean, role: Role = Role.Tab, onClick: () -> Unit) {
+    val bg = if (selected) ClaudeTerracotta.copy(alpha = 0.18f) else AppColors.editorPanel
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(50),
-        color = if (selected) ClaudeTerracotta.copy(alpha = 0.18f) else AppColors.editorPanel,
-        border = BorderStroke(1.dp, if (selected) ClaudeTerracotta.copy(alpha = 0.6f) else AppColors.editorBorder)
+        color = bg,
+        border = BorderStroke(1.dp, if (selected) ClaudeTerracotta.copy(alpha = 0.6f) else AppColors.editorBorder),
+        modifier = Modifier.minTouchTarget(48.dp).semantics {
+            this.role = role
+            this.selected = selected
+        }
     ) {
-        Text(
-            label, fontSize = 12.5.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) ClaudeTerracotta else AppColors.editorText,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label, fontSize = 12.5.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) ensureAccessibleContrast(ClaudeTerracotta, bg, 4.5f, AppColors.editorBg) else AppColors.editorText,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+            )
+        }
     }
 }
 
 @Composable
 private fun Banner(text: String, color: Color) {
+    val textColor = ensureAccessibleContrast(color, AppColors.editorBg, 4.5f)
     Surface(shape = RoundedCornerShape(10.dp), color = color.copy(alpha = 0.12f), border = BorderStroke(1.dp, color.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(text, fontSize = 12.sp, color = color, modifier = Modifier.padding(10.dp))
+        Text(text, fontSize = 12.sp, color = textColor, modifier = Modifier.padding(10.dp))
     }
 }
 
 @Composable
 private fun EmptyHint(text: String) {
-    Text(text, fontSize = 12.5.sp, color = AppColors.editorMuted, modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 14.dp))
+    Text(
+        text,
+        fontSize = 12.5.sp,
+        color = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorBg, 4.5f),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 14.dp)
+    )
 }
 
 // ---------------------------------------------------------------- editor
@@ -679,7 +743,12 @@ private fun CommandEditorDialog(
             modifier = Modifier.fillMaxWidth(0.94f).imePadding()
         ) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(if (edit.originalName == null) L.run.screen.newCommand else L.run.screen.editCommand, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.editorText)
+                val mutedBg = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorBg, 4.5f)
+                Text(
+                    if (edit.originalName == null) L.run.screen.newCommand else L.run.screen.editCommand,
+                    fontSize = 16.sp, fontWeight = FontWeight.Bold, color = AppColors.editorText,
+                    modifier = Modifier.semantics { heading() }
+                )
                 OutlinedTextField(
                     value = name, onValueChange = { name = it }, singleLine = true,
                     label = { Text(L.common.name) }, placeholder = { Text(L.run.screen.buildDebugApk) },
@@ -700,22 +769,23 @@ private fun CommandEditorDialog(
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(L.run.screen.saveTo, fontSize = 12.sp, color = AppColors.editorMuted)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterPill(L.run.screen.thisProject, selected = !global) { if (canSaveToProject) global = false }
-                    FilterPill(L.run.screen.globalAnyFolder, selected = global) { global = true }
+                Text(L.run.screen.saveTo, fontSize = 12.sp, color = mutedBg)
+                Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterPill(L.run.screen.thisProject, selected = !global, role = Role.RadioButton) { if (canSaveToProject) global = false }
+                    FilterPill(L.run.screen.globalAnyFolder, selected = global, role = Role.RadioButton) { global = true }
                 }
                 Text(
                     if (global) "Kept in the app's home (~/.antigem/global-run.json); runs in the folder picked in the panel."
                     else L.run.screen.savedInTheProjectsAntigemRun,
-                    fontSize = 11.5.sp, color = AppColors.editorMuted
+                    fontSize = 11.5.sp, color = mutedBg
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text(L.common.cancel) }
+                    TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
                     Spacer(Modifier.width(6.dp))
                     Button(
                         enabled = canSave,
                         colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                        modifier = Modifier.minTouchTarget(48.dp),
                         onClick = {
                             val base = edit.config ?: RunConfiguration(name = name.trim())
                             onSave(base.copy(name = name.trim(), type = "terminal", command = command.trim(), cwd = cwd.trim().ifBlank { null }), global)
@@ -733,16 +803,19 @@ private fun CommandEditorDialog(
 private fun RunsView(
     runs: List<RunEntry>,
     selected: RunEntry?,
+    isVisible: Boolean,
     onSelect: (String) -> Unit,
     onSendToChat: (RunEntry) -> Unit,
     onBackToCommands: () -> Unit
 ) {
     val context = LocalContext.current
+    val screenAccessible = LocalScreenAccessible.current
+    val mutedPanel = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorPanel, 4.5f, AppColors.editorBg)
     if (selected == null) {
         Box(Modifier.fillMaxSize().navigationBarsPadding(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(L.run.screen.nothingRunning, color = AppColors.editorMuted)
-                TextButton(onClick = onBackToCommands) { Text(L.run.screen.showCommands) }
+                Text(L.run.screen.nothingRunning, color = ensureAccessibleContrast(AppColors.editorMuted, AppColors.editorBg, 4.5f))
+                TextButton(onClick = onBackToCommands, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.run.screen.showCommands) }
             }
         }
         return
@@ -750,7 +823,7 @@ private fun RunsView(
     Column(Modifier.fillMaxSize()) {
         // one tab per run (Metro and a build side by side)
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).selectableGroup().padding(horizontal = 8.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             runs.forEach { run ->
@@ -759,14 +832,18 @@ private fun RunsView(
                     onClick = { onSelect(run.id) },
                     shape = RoundedCornerShape(10.dp),
                     color = if (isSel) AppColors.editorPanel else Color.Transparent,
-                    border = BorderStroke(1.dp, if (isSel) ClaudeTerracotta.copy(alpha = 0.55f) else AppColors.editorBorder)
+                    border = BorderStroke(1.dp, if (isSel) ClaudeTerracotta.copy(alpha = 0.55f) else AppColors.editorBorder),
+                    modifier = Modifier.minTouchTarget(48.dp).semantics {
+                        role = Role.Tab
+                        this.selected = isSel
+                    }
                 ) {
                     Row(Modifier.padding(start = 10.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                         StatusDot(run.status, Modifier.size(14.dp))
                         Spacer(Modifier.width(7.dp))
                         Text(run.name, fontSize = 12.5.sp, color = AppColors.editorText, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
-                        IconButton(onClick = { RunManager.remove(run.id) }, modifier = Modifier.size(30.dp)) {
-                            Icon(Icons.Filled.Close, if (run.status == RunStatus.RUNNING) L.run.screen.stopAndClose else L.common.close, tint = AppColors.editorMuted, modifier = Modifier.size(15.dp))
+                        IconButton(onClick = { RunManager.remove(run.id) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                            Icon(Icons.Filled.Close, if (run.status == RunStatus.RUNNING) L.run.screen.stopAndClose else L.common.close, tint = mutedPanel, modifier = Modifier.size(15.dp))
                         }
                     }
                 }
@@ -781,18 +858,29 @@ private fun RunsView(
             Column(Modifier.weight(1f)) {
                 Text(selected.command.lineSequence().lastOrNull { it.isNotBlank() && !it.startsWith("export ") } ?: selected.command,
                     fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = AppColors.editorText, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(statusLine(selected), fontSize = 11.sp, color = statusColor(selected.status), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    statusLine(selected),
+                    fontSize = 11.sp,
+                    color = ensureAccessibleContrast(statusColor(selected.status), AppColors.editorPanel, 4.5f, AppColors.editorBg),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
             }
             if (selected.status == RunStatus.RUNNING) {
-                TextButton(onClick = { RunManager.stop(selected.id) }) {
-                    Icon(Icons.Filled.Stop, null, tint = AppColors.danger, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L.common.stop, color = AppColors.danger)
+                TextButton(onClick = { RunManager.stop(selected.id) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(Icons.Filled.Stop, null, tint = AppColors.danger, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L.common.stop, color = ensureAccessibleContrast(AppColors.danger, AppColors.editorPanel, 4.5f, AppColors.editorBg))
                 }
             } else {
-                IconButton(onClick = { onSendToChat(selected) }) {
-                    Icon(Icons.Outlined.ForwardToInbox, L.run.screen.sendOutputToChat, tint = if (selected.status == RunStatus.FAILED) ClaudeTerracotta else AppColors.editorMuted)
+                IconButton(onClick = { onSendToChat(selected) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(
+                        Icons.Outlined.ForwardToInbox,
+                        L.run.screen.sendOutputToChat,
+                        tint = if (selected.status == RunStatus.FAILED) ensureAccessibleContrast(ClaudeTerracotta, AppColors.editorPanel, 4.5f, AppColors.editorBg) else mutedPanel
+                    )
                 }
             }
-            IconButton(onClick = { RunManager.restart(context, selected.id) }) {
+            IconButton(onClick = { RunManager.restart(context, selected.id) }, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Filled.Refresh, L.run.screen.runAgain, tint = AppColors.editorText)
             }
         }
@@ -800,18 +888,19 @@ private fun RunsView(
             Surface(
                 onClick = { onSendToChat(selected) },
                 color = AppColors.danger.copy(alpha = 0.12f),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.ForwardToInbox, null, tint = AppColors.danger, modifier = Modifier.size(16.dp))
+                    val dangerText = ensureAccessibleContrast(AppColors.danger, AppColors.editorBg, 4.5f)
+                    Icon(Icons.Outlined.ForwardToInbox, null, tint = dangerText, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(L.run.screen.failedSendTheOutputToThe, fontSize = 12.sp, color = AppColors.danger)
+                    Text(L.run.screen.failedSendTheOutputToThe, fontSize = 12.sp, color = dangerText)
                 }
             }
         }
 
         // the Terminal screen's own terminal (font size, cursor, colors, the two key rows); Enter after the end closes the tab
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().semantics { contentDescription = L.run.screen.commandOutput }) {
             key(selected.id, selected.startedAt) {
                 ai.antigem.ui.components.LocalTerminalContent(
                     onClose = { RunManager.remove(selected.id) },
@@ -819,7 +908,8 @@ private fun RunsView(
                     showFloatingPill = false,
                     showSessionHeader = false,
                     focusScreenMode = null,
-                    showKeyboardOnOpen = false
+                    showKeyboardOnOpen = false,
+                    isVisible = isVisible && screenAccessible
                 )
             }
         }
@@ -829,7 +919,11 @@ private fun RunsView(
 @Composable
 private fun StatusDot(status: RunStatus, modifier: Modifier = Modifier) {
     when (status) {
-        RunStatus.RUNNING -> CircularProgressIndicator(modifier, strokeWidth = 2.dp, color = ClaudeTerracotta)
+        RunStatus.RUNNING -> CircularProgressIndicator(
+            modifier.semantics { contentDescription = L.common.running },
+            strokeWidth = 2.dp,
+            color = ClaudeTerracotta
+        )
         RunStatus.SUCCEEDED -> Icon(Icons.Filled.CheckCircle, L.common.done, tint = AppColors.success, modifier = modifier)
         RunStatus.FAILED -> Icon(Icons.Filled.Error, L.common.failed, tint = AppColors.danger, modifier = modifier)
         RunStatus.STOPPED -> Icon(Icons.Filled.StopCircle, L.common.stopped, tint = AppColors.editorMuted, modifier = modifier)
@@ -890,28 +984,37 @@ private fun RunBubble(runs: List<RunEntry>, seen: Set<String>) {
                     detectDragGestures { change, drag -> change.consume(); offset += drag }
                 }
         ) {
+            val bubbleDescription = when {
+                running > 0 -> L.run.screen.runsRunningcountRunning(running)
+                failed -> L.run.screen.aRunFailed
+                else -> L.run.screen.runsFinished
+            }
             Surface(
                 onClick = { RunPanel.show(target?.id) },
                 shape = CircleShape,
                 color = AppColors.editorPanel,
                 border = BorderStroke(2.dp, ring.copy(alpha = 0.85f)),
                 shadowElevation = 10.dp,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription = bubbleDescription
+                    liveRegion = LiveRegionMode.Polite
+                }
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     when {
                         running > 0 -> {
-                            CircularProgressIndicator(Modifier.size(44.dp), strokeWidth = 2.5.dp, color = ClaudeTerracotta)
-                            Icon(Icons.Filled.PlayArrow, L.run.screen.runs, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
+                            CircularProgressIndicator(Modifier.size(44.dp).clearAndSetSemantics {}, strokeWidth = 2.5.dp, color = ClaudeTerracotta)
+                            Icon(Icons.Filled.PlayArrow, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                         }
-                        failed -> Icon(Icons.Filled.Close, L.run.screen.aRunFailed, tint = AppColors.danger, modifier = Modifier.size(26.dp))
-                        else -> Icon(Icons.Filled.Check, L.run.screen.runsFinished, tint = AppColors.success, modifier = Modifier.size(26.dp))
+                        failed -> Icon(Icons.Filled.Close, null, tint = AppColors.danger, modifier = Modifier.size(26.dp))
+                        else -> Icon(Icons.Filled.Check, null, tint = AppColors.success, modifier = Modifier.size(26.dp))
                     }
                 }
             }
             if (running > 1) {
                 Box(
-                    Modifier.align(Alignment.TopEnd).size(20.dp).clip(CircleShape).background(ClaudeTerracotta),
+                    Modifier.align(Alignment.TopEnd).size(20.dp).clip(CircleShape).background(ClaudeTerracotta).clearAndSetSemantics {},
                     contentAlignment = Alignment.Center
                 ) { Text("$running", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White) }
             }

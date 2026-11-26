@@ -2,6 +2,7 @@ package ai.antigem.ui.settings
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -41,6 +43,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -53,7 +61,11 @@ import ai.antigem.data.updater.BetaUpdates
 import ai.antigem.theme.AppColors
 import ai.antigem.theme.ClaudeTerracotta
 import ai.antigem.theme.QuotaGreen
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.ui.updater.AppUpdateDialog
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
@@ -107,18 +119,23 @@ internal fun UpdateSettingsScreen(cardBg: Color, cardBorder: BorderStroke) {
                             }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Text(L.settings.updateSettings.turnOn, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showBetaConfirm = false }) {
+                TextButton(onClick = { showBetaConfirm = false }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.common.cancel)
                 }
             }
         )
     }
+
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val errorTextColor = ensureAccessibleContrast(AppColors.danger, cardBg, 4.5f, surfaceBg)
 
     Column(
         modifier = Modifier
@@ -134,6 +151,7 @@ internal fun UpdateSettingsScreen(cardBg: Color, cardBorder: BorderStroke) {
                 title = L.settings.updateSettings.getBetaUpdates2,
                 subtitle = L.settings.updateSettings.earlyVersionsWithNewFeaturesBefore,
                 checked = betaUpdates,
+                cardBg = cardBg,
                 onCheckedChange = { on ->
                     if (on) {
                         // already on a beta: nothing new to warn about
@@ -162,8 +180,9 @@ internal fun UpdateSettingsScreen(cardBg: Color, cardBorder: BorderStroke) {
                     else -> L.settings.updateSettings.youGetTheStableReleasesOnly
                 },
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 16.sp
+                color = cardMuted,
+                lineHeight = 16.sp,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
 
@@ -174,6 +193,7 @@ internal fun UpdateSettingsScreen(cardBg: Color, cardBorder: BorderStroke) {
                 title = L.settings.updateSettings.checkInTheBackground,
                 subtitle = L.settings.updateSettings.notifiesYouWhenANewVersion,
                 checked = backgroundOn,
+                cardBg = cardBg,
                 onCheckedChange = { on ->
                     backgroundOn = on
                     saveInterval()
@@ -197,10 +217,18 @@ internal fun UpdateSettingsScreen(cardBg: Color, cardBorder: BorderStroke) {
                         singleLine = true,
                         isError = !everyValid,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.width(76.dp)
+                        modifier = Modifier
+                            .width(84.dp)
+                            .semantics { contentDescription = L.settings.updateSettings.every }
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     BackgroundUpdateCheck.IntervalUnit.entries.forEach { u ->
                         FilterChip(
                             selected = unit == u,
@@ -208,22 +236,25 @@ internal fun UpdateSettingsScreen(cardBg: Color, cardBorder: BorderStroke) {
                                 unit = u
                                 saveInterval()
                             },
-                            label = { Text(u.label) }
+                            label = { Text(u.label) },
+                            modifier = Modifier.minTouchTarget(48.dp)
                         )
                     }
                 }
                 if (!everyValid) Text(
                     text = L.settings.updateSettings.enterANumberFrom1To(BackgroundUpdateCheck.MAX_EVERY),
                     fontSize = 12.sp,
-                    color = AppColors.danger
+                    color = errorTextColor,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 )
             }
             Text(
                 text = if (backgroundOn) L.settings.updateSettings.antigemChecksDescribeInTheBackground(describe(every, unit))
                 else L.settings.updateSettings.noBackgroundChecksAntigemStillChecks,
                 fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 16.sp
+                color = cardMuted,
+                lineHeight = 16.sp,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
     }
@@ -253,14 +284,23 @@ private fun UpdatesCard(cardBg: Color, cardBorder: BorderStroke, content: @Compo
 private fun CardTitle(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Icon(imageVector = icon, contentDescription = null, tint = ClaudeTerracotta, modifier = Modifier.size(20.dp))
-        Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() }
+        )
     }
 }
 
 @Composable
-private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SwitchRow(title: String, subtitle: String, checked: Boolean, cardBg: Color, onCheckedChange: (Boolean) -> Unit) {
+    val subtitleColor = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = MaterialTheme.colorScheme.surface)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .accessibleToggleRow(checked = checked, role = Role.Switch) { onCheckedChange(!checked) },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -269,13 +309,13 @@ private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onCheck
             Text(
                 text = subtitle,
                 fontSize = 11.5.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = subtitleColor,
                 lineHeight = 15.sp
             )
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = null,
             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = QuotaGreen)
         )
     }

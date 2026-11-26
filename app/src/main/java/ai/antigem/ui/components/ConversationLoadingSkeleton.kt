@@ -22,6 +22,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,10 +37,12 @@ import ai.antigem.i18n.L
 fun EngineWarmingUpView(
     modifier: Modifier = Modifier
 ) {
+    val surface = MaterialTheme.colorScheme.surface
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp, vertical = 40.dp),
+            .padding(horizontal = 32.dp, vertical = 40.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -50,7 +56,7 @@ fun EngineWarmingUpView(
             Icon(
                 imageVector = Icons.Outlined.SmartToy,
                 contentDescription = null,
-                tint = ClaudeTerracotta,
+                tint = ensureAccessibleContrast(ClaudeTerracotta, surface, minRatio = 3.0f),
                 modifier = Modifier.size(32.dp)
             )
         }
@@ -62,7 +68,8 @@ fun EngineWarmingUpView(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -70,7 +77,7 @@ fun EngineWarmingUpView(
         Text(
             text = L.components.conversationLoadingSkeleton.theBackgroundAiEngineIsStarting,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+            color = accessibleMutedColor(alpha = 0.8f),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )
@@ -84,7 +91,8 @@ fun DrawerEngineWarmingUpView(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 32.dp),
+            .padding(horizontal = 16.dp, vertical = 32.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -98,7 +106,7 @@ fun DrawerEngineWarmingUpView(
             Icon(
                 imageVector = Icons.Outlined.SmartToy,
                 contentDescription = null,
-                tint = ClaudeTerracotta,
+                tint = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, minRatio = 3.0f),
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -110,7 +118,8 @@ fun DrawerEngineWarmingUpView(
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -118,7 +127,7 @@ fun DrawerEngineWarmingUpView(
         Text(
             text = L.components.conversationLoadingSkeleton.yourChatsWillAppearAsSoon,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            color = accessibleMutedColor(alpha = 0.78f),
             textAlign = TextAlign.Center,
             lineHeight = 16.sp
         )
@@ -385,7 +394,8 @@ fun NewChatSignInPromptCard(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -393,19 +403,21 @@ fun NewChatSignInPromptCard(
         Text(
             text = L.components.conversationLoadingSkeleton.pleaseSignInToSendMessages,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            color = accessibleMutedColor(alpha = 0.78f),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )
 
         Spacer(modifier = Modifier.height(20.dp))
 
+        val signInFg = ensureAccessibleContrast(Color.White, ClaudeTerracotta, minRatio = 4.5f, surfaceFallback = ClaudeTerracotta)
         Button(
             onClick = onSignInClick,
+            modifier = Modifier.minTouchTarget(48.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = ClaudeTerracotta,
-                contentColor = Color.White
+                contentColor = signInFg
             ),
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
         ) {
@@ -434,7 +446,8 @@ fun NewChatOfflinePromptCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 24.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
@@ -453,7 +466,7 @@ fun NewChatOfflinePromptCard(
                 Icon(
                     imageVector = Icons.Default.CloudOff,
                     contentDescription = null,
-                    tint = ai.antigem.theme.AppColors.danger,
+                    tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, MaterialTheme.colorScheme.surface, minRatio = 3.0f),
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -465,13 +478,14 @@ fun NewChatOfflinePromptCard(
                     text = L.components.conversationLoadingSkeleton.youSeemToBeOffline,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = L.components.conversationLoadingSkeleton.noInternetConnectionDetectedYouCan,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                    color = accessibleMutedColor(alpha = 0.78f)
                 )
             }
         }
@@ -488,7 +502,8 @@ fun NewChatCheckingAuthPromptCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 24.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -502,7 +517,7 @@ fun NewChatCheckingAuthPromptCard(
             Icon(
                 imageVector = Icons.Outlined.SmartToy,
                 contentDescription = null,
-                tint = ClaudeTerracotta,
+                tint = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, minRatio = 3.0f),
                 modifier = Modifier.size(30.dp)
             )
         }
@@ -514,7 +529,8 @@ fun NewChatCheckingAuthPromptCard(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -522,7 +538,7 @@ fun NewChatCheckingAuthPromptCard(
         Text(
             text = L.components.conversationLoadingSkeleton.verifyingYourSignInWithAntigravity,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            color = accessibleMutedColor(alpha = 0.78f),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )
@@ -540,7 +556,8 @@ fun ServerStoppedPromptCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 24.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -554,7 +571,7 @@ fun ServerStoppedPromptCard(
             Icon(
                 imageVector = Icons.Outlined.PowerSettingsNew,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                tint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), MaterialTheme.colorScheme.surface, minRatio = 3.0f),
                 modifier = Modifier.size(28.dp)
             )
         }
@@ -566,7 +583,8 @@ fun ServerStoppedPromptCard(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            modifier = Modifier.semantics { heading() }
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -574,7 +592,7 @@ fun ServerStoppedPromptCard(
         Text(
             text = L.components.conversationLoadingSkeleton.theLocalAiEngineIsCurrently,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            color = accessibleMutedColor(alpha = 0.78f),
             textAlign = TextAlign.Center,
             lineHeight = 20.sp
         )

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -40,11 +41,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.data.jarvis.JarvisController
 import ai.antigem.data.jarvis.JarvisPreferences
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** The switches that can sit in the Jarvis panel's quick row (pinned in the quick settings sheet). */
@@ -127,19 +138,24 @@ fun QuickSwitchChip(q: QuickSwitch) {
     }
 }
 
+private val QsSheetBg = Color(0xFF070B14)
+
 @Composable
 fun JarvisQuickChip(title: String, value: String, on: Boolean, onClick: () -> Unit) {
-    val c = if (on) Cyan else Color.White.copy(alpha = 0.5f)
+    val c = if (on) Cyan else ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), QsSheetBg, 4.5f)
     Column(
         Modifier
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(if (on) Cyan.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.04f))
-            .border(1.dp, c.copy(alpha = if (on) 0.5f else 0.2f), RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .border(1.dp, c.copy(alpha = if (on) 0.5f else 0.25f), RoundedCornerShape(16.dp))
+            .clickable(role = Role.Button) { onClick() }
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.Center
     ) {
-        Text(title, color = Color.White.copy(alpha = 0.55f), fontSize = 10.5.sp)
-        Text(value, color = if (on) Color.White else Color.White.copy(alpha = 0.7f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(title, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), QsSheetBg, 4.5f), fontSize = 10.5.sp)
+        Text(value, color = if (on) Color.White else ensureAccessibleContrast(Color.White.copy(alpha = 0.85f), QsSheetBg, 4.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -186,20 +202,21 @@ fun JarvisQuickSettings(onClose: () -> Unit, floating: Boolean = false) {
                 .background(Brush.verticalGradient(listOf(Color(0xFA111A2C), Color(0xFC070B14))))
                 .border(1.dp, Brush.verticalGradient(listOf(Cyan.copy(alpha = 0.5f), Color.Transparent)), RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }
+                .semantics { paneTitle = L.common.quickSettings }
                 .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)))
+            Box(Modifier.align(Alignment.CenterHorizontally).width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.18f)).clearAndSetSemantics {})
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                JarvisBotIcon(28.dp, Cyan)
+                JarvisBotIcon(28.dp, Cyan, modifier = Modifier.clearAndSetSemantics {})
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(L.common.quickSettings, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    Text(L.jarvis.quickSettings.appliesFromTheNextTimeThe, color = Color.White.copy(alpha = 0.5f), fontSize = 11.5.sp)
+                    Text(L.common.quickSettings, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                    Text(L.jarvis.quickSettings.appliesFromTheNextTimeThe, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), QsSheetBg, 4.5f), fontSize = 11.5.sp)
                 }
-                Box(Modifier.size(40.dp).clip(CircleShape).clickable { onClose() }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Filled.Close, L.common.close, tint = Color.White.copy(alpha = 0.7f))
+                Box(Modifier.minTouchTarget(48.dp).clip(CircleShape).clickable(role = Role.Button) { onClose() }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Close, L.common.close, tint = Color.White.copy(alpha = 0.85f))
                 }
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
@@ -234,23 +251,32 @@ fun JarvisQuickSettings(onClose: () -> Unit, floating: Boolean = false) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     QuickSwitch.entries.forEach { q ->
                         val on = q in pins
-                        Text(
-                            (if (on) "✓ " else "+ ") + q.title,
-                            color = if (on) Color.White else Color.White.copy(alpha = 0.6f), fontSize = 12.sp,
-                            modifier = Modifier
+                        Box(
+                            Modifier
+                                .minTouchTarget(48.dp)
                                 .clip(RoundedCornerShape(50))
                                 .background(if (on) Cyan.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f))
-                                .border(1.dp, if (on) Cyan.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.15f), RoundedCornerShape(50))
-                                .clickable {
+                                .border(1.dp, if (on) Cyan.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.18f), RoundedCornerShape(50))
+                                .clickable(role = Role.Checkbox) {
                                     val next = if (on) pins - q else pins + q
                                     P.quickPins.set(next.joinToString(",") { it.id })
                                 }
-                                .padding(horizontal = 11.dp, vertical = 6.dp)
-                        )
+                                .semantics(mergeDescendants = true) {
+                                    toggleableState = if (on) ToggleableState.On else ToggleableState.Off
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                (if (on) "✓ " else "+ ") + q.title,
+                                color = if (on) Color.White else ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), QsSheetBg, 4.5f),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     QsLink(L.jarvis.quickSettings.phrasesShortcuts) { onClose(); JarvisController.requestSettings("JARVIS_LISTEN") }
                     QsLink(L.jarvis.quickSettings.allJarvisSettings) { onClose(); JarvisController.requestSettings("JARVIS") }
                 }
@@ -263,32 +289,38 @@ fun JarvisQuickSettings(onClose: () -> Unit, floating: Boolean = false) {
 @Composable
 private fun QsTitle(text: String) {
     Text(
-        text.uppercase(), color = Cyan.copy(alpha = 0.85f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp,
-        modifier = Modifier.padding(top = 14.dp, bottom = 6.dp)
+        text.uppercase(), color = ensureAccessibleContrast(Cyan, QsSheetBg, 4.5f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp,
+        modifier = Modifier.padding(top = 14.dp, bottom = 6.dp).semantics { heading() }
     )
 }
 
 @Composable
 private fun QsHint(text: String) {
-    Text(text, color = Color.White.copy(alpha = 0.5f), fontSize = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
+    Text(text, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.75f), QsSheetBg, 4.5f), fontSize = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QsChoice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 2.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 2.dp).selectableGroup()) {
         options.forEach { (value, label) ->
             val on = value == selected
-            Text(
-                label, color = if (on) Color.White else Color.White.copy(alpha = 0.65f), fontSize = 12.5.sp,
-                fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
-                modifier = Modifier
+            Box(
+                Modifier
+                    .minTouchTarget(48.dp)
                     .clip(RoundedCornerShape(50))
                     .background(if (on) Cyan.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f))
-                    .border(1.dp, if (on) Cyan.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.14f), RoundedCornerShape(50))
-                    .clickable { onSelect(value) }
-                    .padding(horizontal = 12.dp, vertical = 7.dp)
-            )
+                    .border(1.dp, if (on) Cyan.copy(alpha = 0.7f) else Color.White.copy(alpha = 0.18f), RoundedCornerShape(50))
+                    .clickable(role = Role.RadioButton) { onSelect(value) }
+                    .semantics(mergeDescendants = true) { this.selected = on },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    label, color = if (on) Color.White else ensureAccessibleContrast(Color.White.copy(alpha = 0.78f), QsSheetBg, 4.5f), fontSize = 12.5.sp,
+                    fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                )
+            }
         }
     }
 }
@@ -297,8 +329,8 @@ private fun QsChoice(options: List<Pair<String, String>>, selected: String, onSe
 private fun QsSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, shown: String, onChange: (Float) -> Unit) {
     Column(Modifier.padding(top = 4.dp)) {
         Row {
-            Text(label, color = Color.White.copy(alpha = 0.85f), fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Text(shown, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(label, color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, modifier = Modifier.weight(1f))
+            Text(shown, color = ensureAccessibleContrast(Cyan, QsSheetBg, 4.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
         Slider(
             value = value.coerceIn(range), onValueChange = onChange, valueRange = range,
@@ -309,9 +341,13 @@ private fun QsSlider(label: String, value: Float, range: ClosedFloatingPointRang
 
 @Composable
 private fun QsLink(label: String, onClick: () -> Unit) {
-    Text(
-        label, color = Cyan, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-        modifier = Modifier.clip(RoundedCornerShape(50)).border(1.dp, Cyan.copy(alpha = 0.35f), RoundedCornerShape(50)).clickable { onClick() }
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    )
+    Box(
+        Modifier.minTouchTarget(48.dp).clip(RoundedCornerShape(50)).border(1.dp, Cyan.copy(alpha = 0.35f), RoundedCornerShape(50)).clickable(role = Role.Button) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            label, color = ensureAccessibleContrast(Cyan, QsSheetBg, 4.5f), fontSize = 13.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        )
+    }
 }

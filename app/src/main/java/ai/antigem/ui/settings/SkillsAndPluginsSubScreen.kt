@@ -4,11 +4,13 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -21,6 +23,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -36,6 +44,9 @@ import ai.antigem.theme.*
 import ai.antigem.ui.components.MarkdownContent
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.components.AgyAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,23 +92,26 @@ fun SkillsAndPluginsSubScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // Status/Error Banners
+            val surfaceBg = MaterialTheme.colorScheme.surface
             if (!errorMessage.isNullOrBlank()) {
+                val errBg = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
+                val errFg = ensureAccessibleContrast(MaterialTheme.colorScheme.error, errBg, 4.5f, surfaceBg)
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
+                    colors = CardDefaults.cardColors(containerColor = errBg),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                        Text(text = errorMessage, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
-                        IconButton(onClick = onClearStatus, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = errFg, modifier = Modifier.size(18.dp))
+                        Text(text = errorMessage, fontSize = 12.5.sp, color = errFg, modifier = Modifier.weight(1f))
+                        IconButton(onClick = onClearStatus, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(Icons.Default.Close, contentDescription = L.common.dismiss, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -105,22 +119,24 @@ fun SkillsAndPluginsSubScreen(
             }
 
             if (!statusMessage.isNullOrBlank()) {
+                val okBg = QuotaGreen.copy(alpha = 0.12f)
+                val okFg = ensureAccessibleContrast(QuotaGreen, okBg, 4.5f, surfaceBg)
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = QuotaGreen.copy(alpha = 0.12f)),
+                    colors = CardDefaults.cardColors(containerColor = okBg),
                     border = BorderStroke(1.dp, QuotaGreen.copy(alpha = 0.35f))
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = QuotaGreen, modifier = Modifier.size(18.dp))
-                        Text(text = statusMessage, fontSize = 12.5.sp, color = QuotaGreen, modifier = Modifier.weight(1f))
-                        IconButton(onClick = onClearStatus, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = okFg, modifier = Modifier.size(18.dp))
+                        Text(text = statusMessage, fontSize = 12.5.sp, color = okFg, modifier = Modifier.weight(1f))
+                        IconButton(onClick = onClearStatus, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(Icons.Default.Close, contentDescription = L.common.dismiss, modifier = Modifier.size(16.dp))
                         }
                     }
@@ -137,6 +153,7 @@ fun SkillsAndPluginsSubScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
+                    modifier = Modifier.minTouchTarget(48.dp),
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(Icons.Outlined.Psychology, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -147,6 +164,7 @@ fun SkillsAndPluginsSubScreen(
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
+                    modifier = Modifier.minTouchTarget(48.dp),
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(Icons.Outlined.Extension, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -157,6 +175,7 @@ fun SkillsAndPluginsSubScreen(
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
+                    modifier = Modifier.minTouchTarget(48.dp),
                     text = {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Icon(Icons.Outlined.Storefront, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -258,7 +277,10 @@ private fun SkillsTabView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()).selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 FilterChip(
                     selected = filterScope == "GLOBAL",
                     onClick = { onSetScope("GLOBAL") },
@@ -266,7 +288,8 @@ private fun SkillsTabView(
                     leadingIcon = if (filterScope == "GLOBAL") {
                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     } else null,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 )
                 FilterChip(
                     selected = filterScope == "WORKSPACE",
@@ -275,17 +298,19 @@ private fun SkillsTabView(
                     leadingIcon = if (filterScope == "WORKSPACE") {
                         { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
                     } else null,
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 )
                 FilterChip(
                     selected = filterScope == "ALL",
                     onClick = { onSetScope("ALL") },
                     label = { Text(L.settings.skillsAndPlugins.all, fontSize = 11.5.sp) },
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 )
             }
 
-            IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRefresh, modifier = Modifier.minTouchTarget(48.dp)) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = GeminiBlue)
                 } else {
@@ -303,7 +328,7 @@ private fun SkillsTabView(
                 Text(
                     text = if (filterScope == "WORKSPACE") L.settings.skillsAndPlugins.noWorkspaceScopedSkillsAgentsSkills else L.settings.skillsAndPlugins.noSkillsDiscovered,
                     fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = accessibleMutedColor(alpha = 0.72f)
                 )
             }
         } else {
@@ -343,12 +368,19 @@ private fun SkillItemCard(
         else -> L.common.global
     }
 
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBgColor, surfaceFallback = surfaceBg)
+    val badgeFg = ensureAccessibleContrast(categoryColor, categoryColor.copy(alpha = 0.12f), 4.5f, surfaceBg)
+    val pluginFg = ensureAccessibleContrast(GeminiBlue, cardBgColor, 4.5f, surfaceBg)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button) { onClick() },
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(
@@ -374,7 +406,7 @@ private fun SkillItemCard(
                             modifier = Modifier.size(22.dp)
                         )
                     } else {
-                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = categoryColor, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.AutoAwesome, contentDescription = null, tint = badgeFg, modifier = Modifier.size(18.dp))
                     }
 
                     Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
@@ -396,7 +428,7 @@ private fun SkillItemCard(
                                 Text(
                                     text = "(${skill.displayName})",
                                     fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    color = muted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -406,7 +438,7 @@ private fun SkillItemCard(
                             Text(
                                 text = "from ${skill.pluginName}",
                                 fontSize = 11.sp,
-                                color = GeminiBlue,
+                                color = pluginFg,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -423,7 +455,7 @@ private fun SkillItemCard(
                         text = categoryBadgeText,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = categoryColor,
+                        color = badgeFg,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
@@ -433,7 +465,7 @@ private fun SkillItemCard(
                 text = skill.description.ifBlank { L.settings.skillsAndPlugins.agentCapabilityInstructionsAndWorkflows },
                 fontSize = 12.5.sp,
                 lineHeight = 17.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f),
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
@@ -447,7 +479,7 @@ private fun SkillItemCard(
                     text = skill.path.ifBlank { skill.discoveredIn },
                     fontSize = 10.5.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    color = muted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
@@ -485,9 +517,10 @@ private fun InstalledPluginsTabView(
                 text = L.settings.skillsAndPlugins.installedBundlesExtensions,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                modifier = Modifier.weight(1f).semantics { heading() }
             )
-            IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRefresh, modifier = Modifier.minTouchTarget(48.dp)) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = GeminiBlue)
                 } else {
@@ -502,7 +535,7 @@ private fun InstalledPluginsTabView(
             }
         } else if (plugins.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(L.settings.skillsAndPlugins.noPluginBundlesInstalledInGemini, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(L.settings.skillsAndPlugins.noPluginBundlesInstalledInGemini, fontSize = 13.sp, color = accessibleMutedColor(alpha = 0.72f))
             }
         } else {
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -549,23 +582,29 @@ private fun InstalledPluginCard(
                         showDeleteConfirmDialog = false
                         onDelete()
                     },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Text(L.common.delete, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                TextButton(onClick = { showDeleteConfirmDialog = false }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.common.cancel)
                 }
             }
         )
     }
 
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBgColor, surfaceFallback = surfaceBg)
+    val badgeFg = ensureAccessibleContrast(GeminiBlue, GeminiBlue.copy(alpha = 0.12f), 4.5f, surfaceBg)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(
@@ -593,7 +632,7 @@ private fun InstalledPluginCard(
                             .background(GeminiBlue.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Outlined.Extension, contentDescription = null, tint = GeminiBlue, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Outlined.Extension, contentDescription = null, tint = badgeFg, modifier = Modifier.size(20.dp))
                     }
                 }
 
@@ -620,7 +659,7 @@ private fun InstalledPluginCard(
                                     text = "v${plugin.version}",
                                     fontSize = 10.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                                    color = muted,
                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                                 )
                             }
@@ -630,7 +669,7 @@ private fun InstalledPluginCard(
                         text = plugin.name,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = muted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -645,7 +684,7 @@ private fun InstalledPluginCard(
                             text = L.common.global,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = GeminiBlue,
+                            color = badgeFg,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
@@ -654,7 +693,7 @@ private fun InstalledPluginCard(
                 IconButton(
                     onClick = { showDeleteConfirmDialog = true },
                     enabled = !isDeleting,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     if (isDeleting) {
                         CircularProgressIndicator(
@@ -666,7 +705,7 @@ private fun InstalledPluginCard(
                         Icon(
                             Icons.Outlined.Delete,
                             contentDescription = L.settings.skillsAndPlugins.deletePlugin2,
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                            tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -677,7 +716,7 @@ private fun InstalledPluginCard(
                 text = plugin.description,
                 fontSize = 12.5.sp,
                 lineHeight = 17.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
             )
 
             // Exposed Skills
@@ -687,7 +726,8 @@ private fun InstalledPluginCard(
                         text = "Bundled Skills (${plugin.skills.size}):",
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = muted,
+                        modifier = Modifier.semantics { heading() }
                     )
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(plugin.skills) { s ->
@@ -695,7 +735,8 @@ private fun InstalledPluginCard(
                                 onClick = { onSkillClick(s.name) },
                                 label = { Text("/${s.name}", fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
                                 leadingIcon = { Icon(Icons.Outlined.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp)) },
-                                shape = RoundedCornerShape(6.dp)
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.minTouchTarget(48.dp)
                             )
                         }
                     }
@@ -729,9 +770,10 @@ private fun GooglePluginsStoreTabView(
                 text = L.settings.skillsAndPlugins.officialBuildWithGooglePlugins,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                modifier = Modifier.weight(1f).semantics { heading() }
             )
-            IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRefresh, modifier = Modifier.minTouchTarget(48.dp)) {
                 if (isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = GeminiBlue)
                 } else {
@@ -746,7 +788,7 @@ private fun GooglePluginsStoreTabView(
             }
         } else if (catalog.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Text(L.settings.skillsAndPlugins.noOfficialGooglePluginsCatalogAvailable, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(L.settings.skillsAndPlugins.noOfficialGooglePluginsCatalogAvailable, fontSize = 13.sp, color = accessibleMutedColor(alpha = 0.72f))
             }
         } else {
             val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -783,11 +825,16 @@ private fun GoogleCatalogPluginCard(
     onInstall: () -> Unit
 ) {
     val p = item.plugin ?: return
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBgColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBgColor, surfaceFallback = surfaceBg)
+    val trustFg = ensureAccessibleContrast(GeminiBlue, GeminiBlue.copy(alpha = 0.12f), 4.5f, surfaceBg)
+    val installedFg = ensureAccessibleContrast(QuotaGreen, QuotaGreen.copy(alpha = 0.15f), 4.5f, surfaceBg)
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
     ) {
         Column(
@@ -824,7 +871,7 @@ private fun GoogleCatalogPluginCard(
                                     text = p.trustLevel,
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = GeminiBlue,
+                                    color = trustFg,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
@@ -834,7 +881,7 @@ private fun GoogleCatalogPluginCard(
                         text = p.uid,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = muted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -851,8 +898,8 @@ private fun GoogleCatalogPluginCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = QuotaGreen, modifier = Modifier.size(14.dp))
-                            Text(L.common.installed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = QuotaGreen)
+                            Icon(Icons.Default.Check, contentDescription = null, tint = installedFg, modifier = Modifier.size(14.dp))
+                            Text(L.common.installed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = installedFg)
                         }
                     }
                 } else {
@@ -862,7 +909,7 @@ private fun GoogleCatalogPluginCard(
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = GeminiBlue),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         if (isInstalling) {
                             CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.White)
@@ -879,7 +926,7 @@ private fun GoogleCatalogPluginCard(
                 text = p.description,
                 fontSize = 12.5.sp,
                 lineHeight = 17.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
             )
 
             // Available versions or tool bindings
@@ -891,13 +938,13 @@ private fun GoogleCatalogPluginCard(
                     Text(
                         text = L.settings.skillsAndPlugins.versions,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        color = muted
                     )
                     Text(
                         text = item.versionShas.keys.take(3).joinToString(", ") + if (item.versionShas.size > 3) "..." else "",
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = muted
                     )
                 }
             }
@@ -912,6 +959,7 @@ fun SkillDetailMarkdownDialog(
     skill: SkillDefinitionDto,
     onDismiss: () -> Unit
 ) {
+    val muted = accessibleMutedColor(alpha = 0.72f)
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -919,7 +967,8 @@ fun SkillDetailMarkdownDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
-                .fillMaxHeight(0.85f),
+                .fillMaxHeight(0.85f)
+                .semantics { paneTitle = "/${skill.name}" },
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp
@@ -942,13 +991,14 @@ fun SkillDetailMarkdownDialog(
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             if (!skill.displayName.isNullOrBlank()) {
                                 Text(
                                     text = "• ${skill.displayName}",
                                     fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    color = muted
                                 )
                             }
                         }
@@ -956,12 +1006,12 @@ fun SkillDetailMarkdownDialog(
                             text = skill.path.ifBlank { skill.discoveredIn },
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = muted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Default.Close, contentDescription = L.common.close)
                     }
                 }
@@ -984,7 +1034,7 @@ fun SkillDetailMarkdownDialog(
                         }
                     } else {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text(L.settings.skillsAndPlugins.noMarkdownContentFoundInSkill, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                            Text(L.settings.skillsAndPlugins.noMarkdownContentFoundInSkill, fontSize = 13.sp, color = muted)
                         }
                     }
                 }

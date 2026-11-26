@@ -16,6 +16,9 @@ import ai.antigem.data.local.chroot.ChrootSource
 import ai.antigem.data.local.chroot.UbuntuRelease
 import ai.antigem.theme.AppColors
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
@@ -36,6 +39,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -77,7 +81,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -231,10 +242,10 @@ fun ChrootSetupScreen(
     Column(Modifier.fillMaxSize()) {
         // header
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, L.common.back, tint = AppColors.onBackground) }
+            IconButton(onClick = onClose, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, L.common.back, tint = AppColors.onBackground) }
             Column(Modifier.weight(1f)) {
-                Text(if (restore) L.settings.chrootSetup.restoreAnUbuntuBackup else L.common.ubuntuChrootRoot, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.onBackground)
-                Text(L.settings.chrootSetup.aRealUbuntuOnThisPhone, fontSize = 11.5.sp, color = AppColors.textSecondary)
+                Text(if (restore) L.settings.chrootSetup.restoreAnUbuntuBackup else L.common.ubuntuChrootRoot, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.onBackground, modifier = Modifier.semantics { heading() })
+                Text(L.settings.chrootSetup.aRealUbuntuOnThisPhone, fontSize = 11.5.sp, color = ensureAccessibleContrast(AppColors.textSecondary, AppColors.background, 4.5f))
             }
         }
         HorizontalDivider(color = AppColors.border.copy(alpha = 0.5f))
@@ -249,14 +260,14 @@ fun ChrootSetupScreen(
                 // ---------------- the phone
                 ChrootSection(L.common.thisPhone, L.settings.chrootSetup.rootTheMountToolsAndFree, Icons.Outlined.Search) {
                     when {
-                        checking -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        checking -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeTerracotta)
                             Spacer(Modifier.width(10.dp))
                             Text(L.settings.chrootSetup.checkingAcceptTheRootManagersPrompt, fontSize = 12.5.sp, color = AppColors.onBackground)
                         }
                         probe == null -> Text(L.settings.chrootSetup.notCheckedYet, fontSize = 12.5.sp, color = AppColors.textSecondary)
                         probe?.rootOk != true -> {
-                            Text(probe?.error ?: L.settings.chrootSetup.noRootAccess, fontSize = 12.5.sp, color = AppColors.danger)
+                            Text(probe?.error ?: L.settings.chrootSetup.noRootAccess, fontSize = 12.5.sp, color = ensureAccessibleContrast(AppColors.danger, AppColors.card, 4.5f, AppColors.background), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         }
                         else -> {
                             val p = probe!!
@@ -270,7 +281,7 @@ fun ChrootSetupScreen(
                         }
                     }
                     if (!checking) {
-                        TextButton(onClick = { runCheck() }) { Text(if (probe == null) L.common.check else L.common.checkAgain, color = ClaudeTerracotta) }
+                        TextButton(onClick = { runCheck() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (probe == null) L.common.check else L.common.checkAgain, color = ensureAccessibleContrast(ClaudeTerracotta, AppColors.card, 4.5f, AppColors.background)) }
                     }
                 }
 
@@ -299,11 +310,13 @@ fun ChrootSetupScreen(
                                                     onDone(inst)
                                                 }
                                             },
+                                            modifier = Modifier.minTouchTarget(48.dp),
                                             colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(10.dp)
                                         ) { Text(L.settings.chrootSetup.useThis, fontSize = 12.5.sp) }
                                     } else {
                                         Button(
                                             onClick = { adoptTarget = f; adoptError = null },
+                                            modifier = Modifier.minTouchTarget(48.dp),
                                             colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(10.dp)
                                         ) { Text(L.settings.chrootSetup.adopt, fontSize = 12.5.sp) }
                                     }
@@ -331,31 +344,33 @@ fun ChrootSetupScreen(
 
                 // ---------------- source
                 ChrootSection(L.settings.chrootSetup.source, L.settings.chrootSetup.whereTheUbuntuRootfsComesFrom, Icons.Outlined.Cloud) {
-                    ChrootRadioRow(
-                        L.settings.chrootSetup.antigemUbuntuPrebuilt,
-                        L.settings.chrootSetup.ubuntu2404WithSudoGit,
-                        selected = source == SourceChoice.PREBUILT,
-                        enabled = prebuiltAvailable == true,
-                        tag = when (prebuiltAvailable) { true -> "recommended"; false -> L.settings.chrootSetup.notPublishedYet; null -> "checking…" },
-                        tagColor = if (prebuiltAvailable == true) AppColors.success else AppColors.textSecondary
-                    ) { source = SourceChoice.PREBUILT }
-                    ChrootRadioRow(UbuntuRelease.NOBLE.label, L.settings.chrootSetup.officialUbuntuBaseFromCdimageUbuntu,
-                        source == SourceChoice.OFFICIAL_2404, tag = "LTS") { source = SourceChoice.OFFICIAL_2404 }
-                    ChrootRadioRow(UbuntuRelease.RESOLUTE.label, L.settings.chrootSetup.officialUbuntuBaseTheNewestLts, source == SourceChoice.OFFICIAL_2604) { source = SourceChoice.OFFICIAL_2604 }
-                    ChrootRadioRow(UbuntuRelease.JAMMY.label, L.settings.chrootSetup.officialUbuntuBaseTheOlderLts, source == SourceChoice.OFFICIAL_2204) { source = SourceChoice.OFFICIAL_2204 }
-                    ChrootRadioRow(L.settings.chrootSetup.anotherUrl, L.settings.chrootSetup.anyRootfsTarGzTarXz, source == SourceChoice.URL) { source = SourceChoice.URL }
-                    if (source == SourceChoice.URL) {
-                        OutlinedTextField(url, { url = it }, label = { Text(L.settings.chrootSetup.rootfsUrl) }, singleLine = true,
-                            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
-                        Spacer(Modifier.height(6.dp))
-                        OutlinedTextField(sha, { sha = it }, label = { Text(L.settings.chrootSetup.sha256Optional) }, singleLine = true,
-                            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
-                    }
-                    ChrootRadioRow(L.settings.chrootSetup.aFileOnThisPhone, L.settings.chrootSetup.anAntigemBackupKeepsItsUser, source == SourceChoice.FILE) {
-                        if (fileUri == null) filePicker.launch(arrayOf("*/*")) else source = SourceChoice.FILE
+                    Column(Modifier.selectableGroup()) {
+                        ChrootRadioRow(
+                            L.settings.chrootSetup.antigemUbuntuPrebuilt,
+                            L.settings.chrootSetup.ubuntu2404WithSudoGit,
+                            selected = source == SourceChoice.PREBUILT,
+                            enabled = prebuiltAvailable == true,
+                            tag = when (prebuiltAvailable) { true -> "recommended"; false -> L.settings.chrootSetup.notPublishedYet; null -> "checking…" },
+                            tagColor = if (prebuiltAvailable == true) AppColors.success else AppColors.textSecondary
+                        ) { source = SourceChoice.PREBUILT }
+                        ChrootRadioRow(UbuntuRelease.NOBLE.label, L.settings.chrootSetup.officialUbuntuBaseFromCdimageUbuntu,
+                            source == SourceChoice.OFFICIAL_2404, tag = "LTS") { source = SourceChoice.OFFICIAL_2404 }
+                        ChrootRadioRow(UbuntuRelease.RESOLUTE.label, L.settings.chrootSetup.officialUbuntuBaseTheNewestLts, source == SourceChoice.OFFICIAL_2604) { source = SourceChoice.OFFICIAL_2604 }
+                        ChrootRadioRow(UbuntuRelease.JAMMY.label, L.settings.chrootSetup.officialUbuntuBaseTheOlderLts, source == SourceChoice.OFFICIAL_2204) { source = SourceChoice.OFFICIAL_2204 }
+                        ChrootRadioRow(L.settings.chrootSetup.anotherUrl, L.settings.chrootSetup.anyRootfsTarGzTarXz, source == SourceChoice.URL) { source = SourceChoice.URL }
+                        if (source == SourceChoice.URL) {
+                            OutlinedTextField(url, { url = it }, label = { Text(L.settings.chrootSetup.rootfsUrl) }, singleLine = true,
+                                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedTextField(sha, { sha = it }, label = { Text(L.settings.chrootSetup.sha256Optional) }, singleLine = true,
+                                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
+                        }
+                        ChrootRadioRow(L.settings.chrootSetup.aFileOnThisPhone, L.settings.chrootSetup.anAntigemBackupKeepsItsUser, source == SourceChoice.FILE) {
+                            if (fileUri == null) filePicker.launch(arrayOf("*/*")) else source = SourceChoice.FILE
+                        }
                     }
                     if (source == SourceChoice.FILE) {
-                        OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }, shape = RoundedCornerShape(10.dp)) {
+                        OutlinedButton(onClick = { filePicker.launch(arrayOf("*/*")) }, modifier = Modifier.minTouchTarget(48.dp), shape = RoundedCornerShape(10.dp)) {
                             Icon(Icons.Outlined.FolderOpen, null, Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(if (fileUri == null) L.settings.chrootSetup.chooseAFile else fileName.ifBlank { L.settings.chrootSetup.chosen }, fontSize = 12.5.sp)
@@ -365,11 +380,13 @@ fun ChrootSetupScreen(
 
                 // ---------------- location
                 ChrootSection(L.common.location, L.settings.chrootSetup.theRootfsNeedsLinuxPermissionsSo, Icons.Outlined.Storage) {
-                    ChrootRadioRow("${ChrootManager.BASE_DIR}/<name>", L.settings.chrootSetup.staysWhenAntigemIsUninstalledOr,
-                        location == LocationChoice.DEFAULT, tag = "recommended") { location = LocationChoice.DEFAULT }
-                    ChrootRadioRow(L.settings.chrootSetup.antigemsAppStorage, L.settings.chrootSetup.removedTogetherWithTheAppUninstall,
-                        location == LocationChoice.APP) { location = LocationChoice.APP; nsMode = ChrootNsMode.PRIVATE }
-                    ChrootRadioRow(L.settings.chrootSetup.anotherFolderOnData, null, location == LocationChoice.CUSTOM) { location = LocationChoice.CUSTOM }
+                    Column(Modifier.selectableGroup()) {
+                        ChrootRadioRow("${ChrootManager.BASE_DIR}/<name>", L.settings.chrootSetup.staysWhenAntigemIsUninstalledOr,
+                            location == LocationChoice.DEFAULT, tag = "recommended") { location = LocationChoice.DEFAULT }
+                        ChrootRadioRow(L.settings.chrootSetup.antigemsAppStorage, L.settings.chrootSetup.removedTogetherWithTheAppUninstall,
+                            location == LocationChoice.APP) { location = LocationChoice.APP; nsMode = ChrootNsMode.PRIVATE }
+                        ChrootRadioRow(L.settings.chrootSetup.anotherFolderOnData, null, location == LocationChoice.CUSTOM) { location = LocationChoice.CUSTOM }
+                    }
                     if (location == LocationChoice.CUSTOM) {
                         OutlinedTextField(customPath, { customPath = it }, label = { Text(L.settings.chrootSetup.folder) }, singleLine = true,
                             modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
@@ -395,8 +412,11 @@ fun ChrootSetupScreen(
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         trailingIcon = {
-                            IconButton(onClick = { showPassword = !showPassword }) {
-                                Icon(if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, null)
+                            IconButton(onClick = { showPassword = !showPassword }, modifier = Modifier.minTouchTarget(48.dp)) {
+                                Icon(
+                                    if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                                    contentDescription = if (showPassword) L.common.hide else L.common.show
+                                )
                             }
                         },
                         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp)
@@ -421,20 +441,22 @@ fun ChrootSetupScreen(
                             modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp))
                     }
                     Spacer(Modifier.height(4.dp))
-                    Text(L.settings.chrootSetup.mountNamespace, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground)
-                    ChrootRadioRow(ChrootNsMode.PRIVATE.label,
-                        L.settings.chrootSetup.theChrootsMountsDevProcSdcard,
-                        nsMode == ChrootNsMode.PRIVATE, enabled = probe?.canPrivateNs != false) { nsMode = ChrootNsMode.PRIVATE }
-                    ChrootRadioRow(ChrootNsMode.GLOBAL.label,
-                        L.settings.chrootSetup.mountsVisibleToTheWholePhone,
-                        nsMode == ChrootNsMode.GLOBAL, enabled = !inAppStorage) { nsMode = ChrootNsMode.GLOBAL }
+                    Text(L.settings.chrootSetup.mountNamespace, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground, modifier = Modifier.semantics { heading() })
+                    Column(Modifier.selectableGroup()) {
+                        ChrootRadioRow(ChrootNsMode.PRIVATE.label,
+                            L.settings.chrootSetup.theChrootsMountsDevProcSdcard,
+                            nsMode == ChrootNsMode.PRIVATE, enabled = probe?.canPrivateNs != false) { nsMode = ChrootNsMode.PRIVATE }
+                        ChrootRadioRow(ChrootNsMode.GLOBAL.label,
+                            L.settings.chrootSetup.mountsVisibleToTheWholePhone,
+                            nsMode == ChrootNsMode.GLOBAL, enabled = !inAppStorage) { nsMode = ChrootNsMode.GLOBAL }
+                    }
                     Spacer(Modifier.height(10.dp))
                     ChrootFoldersEditor(user = user, binds = sharedFolders) { sharedFolders = it }
                 }
 
                 // ---------------- packages
                 ChrootSection(L.settings.chrootSetup.packages, L.settings.chrootSetup.installedWithAptRightAfterThe, Icons.Outlined.Inventory2) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).padding(vertical = 4.dp).semantics(mergeDescendants = true) {}) {
                         Checkbox(true, null, enabled = false)
                         Column(Modifier.weight(1f)) {
                             Text(ChrootPackageBundle.ESSENTIALS.title + " (always)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground)
@@ -442,8 +464,18 @@ fun ChrootSetupScreen(
                         }
                     }
                     ChrootPackageBundle.entries.filter { it != ChrootPackageBundle.ESSENTIALS }.forEach { b ->
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                            Checkbox(b in bundles, { on -> bundles = if (on) bundles + b else bundles - b },
+                        val checked = b in bundles
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleToggleRow(checked = checked, role = Role.Checkbox) {
+                                    bundles = if (checked) bundles - b else bundles + b
+                                }
+                                .padding(vertical = 2.dp)
+                        ) {
+                            Checkbox(checked, null,
                                 colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta))
                             Column(Modifier.weight(1f)) {
                                 Text(b.title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground)
@@ -511,7 +543,7 @@ fun ChrootSetupScreen(
                         extra.any { !ChrootScripts.isPackageName(it) } -> L.settings.chrootSetup.checkThePackageNames
                         else -> null
                     }
-                    if (problem != null) Text(problem, fontSize = 12.sp, color = AppColors.warning)
+                    if (problem != null) Text(problem, fontSize = 12.sp, color = ensureAccessibleContrast(AppColors.warning, AppColors.background, 4.5f), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                     Button(
                         onClick = {
                             // shared folders added for another user name follow the one chosen now
@@ -560,6 +592,7 @@ private fun AdoptPanel(found: ChrootFound, busy: Boolean, error: String?, onAdop
             if (error != null) ChrootNote(error, AppColors.danger)
             Spacer(Modifier.height(8.dp))
             Button(onClick = { onAdopt(user) }, enabled = !busy && ChrootManager.isUserName(user),
+                modifier = Modifier.minTouchTarget(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(10.dp)) {
                 if (busy) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = AppColors.onBackground)
@@ -581,39 +614,41 @@ private fun InstallProgress(
     finished: Boolean,
     logs: List<String>
 ) {
-    ChrootSection(
-        when { finished -> L.settings.chrootSetup.ubuntuChrootIsReady; error != null -> L.settings.chrootSetup.installationStopped; else -> L.common.installing },
-        if (finished) L.settings.chrootSetup.theBridgeAndTheTerminalUse else null,
-        if (finished) Icons.Filled.CheckCircle else if (error != null) Icons.Filled.Error else Icons.Outlined.Inventory2,
-        tint = if (finished) AppColors.success else if (error != null) AppColors.danger else ClaudeTerracotta
-    ) {
-        ChrootInstallStep.entries.forEach { s ->
-            val isCurrent = s == step && !finished && error == null
-            val isDone = s in done
-            val failed = error != null && s == step
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 5.dp)) {
-                Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
-                    when {
-                        isDone -> Icon(Icons.Filled.CheckCircle, null, tint = AppColors.success, modifier = Modifier.size(18.dp))
-                        failed -> Icon(Icons.Filled.Error, null, tint = AppColors.danger, modifier = Modifier.size(18.dp))
-                        isCurrent -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = ClaudeTerracotta)
-                        else -> Text("·", color = AppColors.textSecondary)
+    Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+        ChrootSection(
+            when { finished -> L.settings.chrootSetup.ubuntuChrootIsReady; error != null -> L.settings.chrootSetup.installationStopped; else -> L.common.installing },
+            if (finished) L.settings.chrootSetup.theBridgeAndTheTerminalUse else null,
+            if (finished) Icons.Filled.CheckCircle else if (error != null) Icons.Filled.Error else Icons.Outlined.Inventory2,
+            tint = if (finished) AppColors.success else if (error != null) AppColors.danger else ClaudeTerracotta
+        ) {
+            ChrootInstallStep.entries.forEach { s ->
+                val isCurrent = s == step && !finished && error == null
+                val isDone = s in done
+                val failed = error != null && s == step
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 5.dp)) {
+                    Box(Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                        when {
+                            isDone -> Icon(Icons.Filled.CheckCircle, null, tint = AppColors.success, modifier = Modifier.size(18.dp))
+                            failed -> Icon(Icons.Filled.Error, null, tint = AppColors.danger, modifier = Modifier.size(18.dp))
+                            isCurrent -> CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = ClaudeTerracotta)
+                            else -> Text("·", color = AppColors.textSecondary, modifier = Modifier.clearAndSetSemantics {})
+                        }
                     }
+                    Spacer(Modifier.width(10.dp))
+                    Text(s.label, fontSize = 13.sp, fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isDone || isCurrent) AppColors.onBackground else AppColors.textSecondary)
                 }
-                Spacer(Modifier.width(10.dp))
-                Text(s.label, fontSize = 13.sp, fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isDone || isCurrent) AppColors.onBackground else AppColors.textSecondary)
+                if (isCurrent) {
+                    if (progress != null) LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, color = ClaudeTerracotta,
+                        modifier = Modifier.fillMaxWidth().padding(start = 30.dp, top = 2.dp, bottom = 2.dp))
+                    if (detail.isNotBlank()) Text(detail, fontSize = 11.5.sp, color = AppColors.textSecondary, maxLines = 2,
+                        modifier = Modifier.padding(start = 30.dp))
+                }
             }
-            if (isCurrent) {
-                if (progress != null) LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, color = ClaudeTerracotta,
-                    modifier = Modifier.fillMaxWidth().padding(start = 30.dp, top = 2.dp, bottom = 2.dp))
-                if (detail.isNotBlank()) Text(detail, fontSize = 11.5.sp, color = AppColors.textSecondary, maxLines = 2,
-                    modifier = Modifier.padding(start = 30.dp))
+            if (error != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(error, fontSize = 12.5.sp, lineHeight = 17.sp, color = ensureAccessibleContrast(AppColors.danger, AppColors.card, 4.5f, AppColors.background))
             }
-        }
-        if (error != null) {
-            Spacer(Modifier.height(8.dp))
-            Text(error, fontSize = 12.5.sp, lineHeight = 17.sp, color = AppColors.danger)
         }
     }
     ChrootSection(L.settings.chrootSetup.log, null) { ChrootLog(logs, maxHeight = 320) }

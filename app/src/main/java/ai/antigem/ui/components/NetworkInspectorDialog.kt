@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -28,6 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -105,7 +109,10 @@ fun NetworkInspectorDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(32.dp)
@@ -126,12 +133,17 @@ fun NetworkInspectorDialog(
                                 text = L.components.networkInspector.networkInspector,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = L.components.networkInspector.logscountCallsRecordedActivestreams(logs.size, activeStreams, if (activeStreams == 1) "" else "s"),
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -139,19 +151,18 @@ fun NetworkInspectorDialog(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
                             onClick = { NetworkInspectorManager.clearLogs() },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
                                 contentDescription = L.components.networkInspector.clearLogs,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(19.dp)
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                         IconButton(
                             onClick = onDismiss,
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
@@ -174,15 +185,15 @@ fun NetworkInspectorDialog(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
+                            .heightIn(min = 48.dp),
                         placeholder = { Text(L.components.networkInspector.filterByEndpointRouteOrStatus, fontSize = 12.5.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                         },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(20.dp)) {
-                                    Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(14.dp))
+                                IconButton(onClick = { searchQuery = "" }, modifier = Modifier.minTouchTarget(48.dp)) {
+                                    Icon(Icons.Default.Clear, contentDescription = L.common.clear, modifier = Modifier.size(16.dp))
                                 }
                             }
                         },
@@ -197,6 +208,7 @@ fun NetworkInspectorDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .selectableGroup()
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -230,14 +242,14 @@ fun NetworkInspectorDialog(
                             Icon(
                                 imageVector = Icons.Outlined.NetworkCheck,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                tint = accessibleMutedColor(alpha = 0.72f),
                                 modifier = Modifier.size(44.dp)
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 text = if (logs.isEmpty()) L.components.networkInspector.noNetworkCallsCapturedYet else L.components.networkInspector.noMatchingCallsFound,
                                 fontSize = 13.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                color = accessibleMutedColor(alpha = 0.72f)
                             )
                         }
                     }
@@ -318,11 +330,18 @@ private fun NetworkLogItemRow(
         !entry.isSuccess -> ai.antigem.theme.AppColors.danger
         else -> ai.antigem.theme.AppColors.success
     }
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val accessibleMethodColor = ensureAccessibleContrast(methodColor, surfaceBg, 4.5f)
+    val accessibleStatusColor = ensureAccessibleContrast(statusColor, surfaceBg, 4.5f)
+    val accessibleSuccessColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.success, surfaceBg, 4.5f)
+    val mutedText = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics(mergeDescendants = true) {}
             .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -336,7 +355,7 @@ private fun NetworkLogItemRow(
                 text = entry.method,
                 fontSize = 9.5.sp,
                 fontWeight = FontWeight.Bold,
-                color = methodColor,
+                color = accessibleMethodColor,
                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
             )
         }
@@ -364,7 +383,7 @@ private fun NetworkLogItemRow(
                             text = if (isConnected) L.components.networkInspector.streaming else L.components.networkInspector.stream,
                             fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ai.antigem.theme.AppColors.success,
+                            color = accessibleSuccessColor,
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                         )
                     }
@@ -375,14 +394,14 @@ private fun NetworkLogItemRow(
                 Text(
                     text = entry.formattedTime,
                     fontSize = 10.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    color = mutedText,
                     fontFamily = FontFamily.Monospace
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = entry.serviceType,
                     fontSize = 10.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    color = mutedText
                 )
             }
         }
@@ -406,7 +425,7 @@ private fun NetworkLogItemRow(
                     },
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (isConnected) ai.antigem.theme.AppColors.success else statusColor,
+                    color = if (isConnected) accessibleSuccessColor else accessibleStatusColor,
                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                 )
             }
@@ -417,7 +436,7 @@ private fun NetworkLogItemRow(
                 text = liveDurationText,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = if (isConnected) ai.antigem.theme.AppColors.success else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                color = if (isConnected) accessibleSuccessColor else accessibleMutedColor(alpha = 0.8f, background = surfaceBg),
                 fontFamily = FontFamily.Monospace
             )
         }
@@ -469,7 +488,8 @@ private fun NetworkLogDetailDialog(
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = entry.url,
@@ -479,7 +499,7 @@ private fun NetworkLogDetailDialog(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Default.Close, contentDescription = L.common.close, modifier = Modifier.size(18.dp))
                     }
                 }
@@ -571,7 +591,7 @@ private fun HeadersTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text("Request Headers (${entry.requestHeaders.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text("Request Headers (${entry.requestHeaders.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.semantics { heading() })
         if (entry.requestHeaders.isEmpty()) {
             Text(L.components.networkInspector.noRequestHeadersRecorded, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -582,7 +602,7 @@ private fun HeadersTab(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        Text("Response Headers (${entry.responseHeaders.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text("Response Headers (${entry.responseHeaders.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.semantics { heading() })
         if (entry.responseHeaders.isEmpty()) {
             Text(L.components.networkInspector.noResponseHeadersRecorded, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
@@ -600,11 +620,13 @@ private fun HeaderItem(key: String, value: String, onCopy: (String, String) -> U
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCopy(key, "$key: $value") }
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button) { onCopy(key, "$key: $value") }
+            .semantics(mergeDescendants = true) {}
             .padding(vertical = 2.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -641,7 +663,13 @@ private fun DetailRow(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         modifier = Modifier
             .fillMaxWidth()
-            .let { if (isCopyable && onCopy != null) it.clickable { onCopy(label, value) } else it }
+            .let {
+                if (isCopyable && onCopy != null) {
+                    it.minTouchTarget(48.dp)
+                        .clickable(role = Role.Button) { onCopy(label, value) }
+                        .semantics(mergeDescendants = true) {}
+                } else it
+            }
     ) {
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
             Text(

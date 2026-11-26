@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -70,6 +74,10 @@ import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.chat.ChatViewModelHolder
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.flow.MutableStateFlow
 import ai.antigem.i18n.L
 
@@ -114,6 +122,7 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
         Section(Icons.Outlined.Widgets, L.homescreen.settings.widgets) {
             Hint(L.homescreen.settings.liveAntigemOnYourHomeScreen)
             Spacer(Modifier.height(8.dp))
+            val primaryOnSurface = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
             WidgetKind.entries.forEach { k ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -123,7 +132,7 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
                             if (n > 0) {
                                 Spacer(Modifier.width(8.dp))
                                 Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) {
-                                    Text(if (n == 1) L.homescreen.settings.onHomeScreen else L.homescreen.settings.nOnHomeScreen(n), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.primary,
+                                    Text(if (n == 1) L.homescreen.settings.onHomeScreen else L.homescreen.settings.nOnHomeScreen(n), fontSize = 10.5.sp, color = primaryOnSurface,
                                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 1.dp))
                                 }
                             }
@@ -132,7 +141,10 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
                     }
                     Spacer(Modifier.width(8.dp))
                     if (canPinWidgets) {
-                        OutlinedButton(onClick = { if (k == WidgetKind.CHAT) picking = "widget" else HomeWidgets.pin(context, k) }) { Text(L.common.add) }
+                        OutlinedButton(
+                            onClick = { if (k == WidgetKind.CHAT) picking = "widget" else HomeWidgets.pin(context, k) },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) { Text(L.common.add) }
                     }
                 }
             }
@@ -140,7 +152,7 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     L.homescreen.settings.toAddOneLongPressAn,
-                    fontSize = 12.5.sp, color = MaterialTheme.colorScheme.primary
+                    fontSize = 12.5.sp, color = primaryOnSurface
                 )
             } else {
                 Hint(L.homescreen.settings.orLongPressTheHomeScreen)
@@ -153,7 +165,11 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 HomeAction.entries.filter { it.availableFor(enabled) }.forEach { a ->
                     Column(
-                        Modifier.width(74.dp).clickable { HomeShortcuts.pinAction(context, a) }.padding(vertical = 4.dp),
+                        Modifier
+                            .width(74.dp)
+                            .minTouchTarget(48.dp)
+                            .clickable(role = Role.Button) { HomeShortcuts.pinAction(context, a) }
+                            .padding(vertical = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         ActionDisc(a, 44)
@@ -175,12 +191,18 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
         }
 
         Section(Icons.Outlined.TouchApp, L.homescreen.settings.appIconMenu) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .accessibleToggleRow(checked = recentOn) { HomePrefs.setRecentInMenu(!recentOn) }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(L.homescreen.settings.newestChats, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Hint(L.homescreen.settings.longPressTheAntigemIconYour)
                 }
-                Switch(checked = recentOn, onCheckedChange = { HomePrefs.setRecentInMenu(it) })
+                Switch(checked = recentOn, onCheckedChange = null)
             }
         }
 
@@ -192,14 +214,17 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(6.dp))
             if (!HomeScripts.dir(context).isDirectory) {
-                OutlinedButton(onClick = {
-                    if (HomeScripts.ensureFolders(context)) {
-                        AppToastHelper.showToast(L.homescreen.settings.madeShortcutsAndShortcutsTasks, ChatToastType.SUCCESS)
-                        HomeWidgets.refreshScripts(context)
-                    } else {
-                        AppToastHelper.showToast(L.homescreen.settings.setUpTheTerminalFirst, ChatToastType.INFO)
-                    }
-                }) { Text(L.homescreen.settings.makeTheFolders) }
+                OutlinedButton(
+                    onClick = {
+                        if (HomeScripts.ensureFolders(context)) {
+                            AppToastHelper.showToast(L.homescreen.settings.madeShortcutsAndShortcutsTasks, ChatToastType.SUCCESS)
+                            HomeWidgets.refreshScripts(context)
+                        } else {
+                            AppToastHelper.showToast(L.homescreen.settings.setUpTheTerminalFirst, ChatToastType.INFO)
+                        }
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.homescreen.settings.makeTheFolders) }
             } else if (scripts.isEmpty()) {
                 Text(L.homescreen.settings.noScriptsYet, fontSize = 12.5.sp, color = subtle())
             }
@@ -209,12 +234,18 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
                         Text(s.label, fontWeight = FontWeight.Medium, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(if (s.background) L.homescreen.settings.inTheBackground else L.homescreen.settings.inATerminalTab, fontSize = 11.5.sp, color = subtle())
                     }
-                    TextButton(onClick = { HomeShortcuts.pinScript(context, s) }) { Text(L.homescreen.settings.addIcon) }
+                    TextButton(
+                        onClick = { HomeShortcuts.pinScript(context, s) },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Text(L.homescreen.settings.addIcon) }
                 }
             }
             if (HomeScripts.dir(context).isDirectory) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { HomeWidgets.refreshScripts(context) }) { Icon(Icons.Outlined.Refresh, L.homescreen.settings.lookAgain) }
+                    IconButton(
+                        onClick = { HomeWidgets.refreshScripts(context) },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Icon(Icons.Outlined.Refresh, L.homescreen.settings.lookAgain) }
                     Hint(L.homescreen.settings.addedOrRenamedScriptsLookAgain)
                 }
             }
@@ -222,53 +253,89 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
 
         Section(Icons.Outlined.Palette, L.homescreen.settings.widgetLook) {
             Text(L.homescreen.settings.colors, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = colors == HomePrefs.COLORS_APP, onClick = { HomePrefs.setColors(HomePrefs.COLORS_APP); HomeWidgets.refreshAll(context) },
-                    label = { Text(L.homescreen.settings.antigemTheme) })
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth().selectableGroup()
+            ) {
+                FilterChip(
+                    selected = colors == HomePrefs.COLORS_APP,
+                    onClick = { HomePrefs.setColors(HomePrefs.COLORS_APP); HomeWidgets.refreshAll(context) },
+                    label = { Text(L.homescreen.settings.antigemTheme) },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                )
                 if (Build.VERSION.SDK_INT >= 31) {
-                    FilterChip(selected = colors == HomePrefs.COLORS_WALLPAPER, onClick = { HomePrefs.setColors(HomePrefs.COLORS_WALLPAPER); HomeWidgets.refreshAll(context) },
-                        label = { Text(L.homescreen.settings.wallpaperColors) })
+                    FilterChip(
+                        selected = colors == HomePrefs.COLORS_WALLPAPER,
+                        onClick = { HomePrefs.setColors(HomePrefs.COLORS_WALLPAPER); HomeWidgets.refreshAll(context) },
+                        label = { Text(L.homescreen.settings.wallpaperColors) },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    )
                 }
             }
             Spacer(Modifier.height(6.dp))
             Text(L.homescreen.settings.background, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth().selectableGroup()
+            ) {
                 listOf(100 to L.homescreen.settings.solid, 85 to L.homescreen.settings.glass, 60 to L.common.clear).forEach { (v, label) ->
-                    FilterChip(selected = opacity == v, onClick = { HomePrefs.setOpacity(v); HomeWidgets.refreshAll(context) }, label = { Text(label) })
+                    FilterChip(
+                        selected = opacity == v,
+                        onClick = { HomePrefs.setOpacity(v); HomeWidgets.refreshAll(context) },
+                        label = { Text(label) },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    )
                 }
             }
             Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .accessibleToggleRow(checked = hideTitles) {
+                        val next = !hideTitles
+                        HomePrefs.setHideTitles(next)
+                        HomeWidgets.refreshAll(context)
+                    }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(L.homescreen.settings.hideChatNames, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Hint(L.homescreen.settings.widgetsShowClaudeCodeChatAnd)
                 }
-                Switch(checked = hideTitles, onCheckedChange = { HomePrefs.setHideTitles(it); HomeWidgets.refreshAll(context) })
+                Switch(checked = hideTitles, onCheckedChange = null)
             }
         }
 
         Section(Icons.Outlined.Key, L.homescreen.settings.linkKey) {
             Hint(L.homescreen.settings.shortcutsAndWidgetsCarryAKey)
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { askNewKey = true }) { Text(L.homescreen.settings.newKey) }
+            OutlinedButton(onClick = { askNewKey = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.homescreen.settings.newKey) }
         }
     }
 
     if (askNewKey) {
         AlertDialog(
             onDismissRequest = { askNewKey = false },
-            title = { Text(L.homescreen.settings.makeANewKeyForHome, fontSize = 18.sp) },
+            title = { Text(L.homescreen.settings.makeANewKeyForHome, fontSize = 18.sp, modifier = Modifier.semantics { heading() }) },
             text = { Text(L.homescreen.settings.shortcutsAndWidgetsOnAndroid8) },
             confirmButton = {
-                TextButton(onClick = {
-                    askNewKey = false
-                    scope.launch {
-                        withContext(Dispatchers.IO) { HomeLinks.resetKey(context.applicationContext) }
-                        AppToastHelper.showToast(L.homescreen.settings.newKeyMadeShortcutsAndWidgets, ChatToastType.SUCCESS)
-                    }
-                }) { Text(L.homescreen.settings.newKey) }
+                TextButton(
+                    onClick = {
+                        askNewKey = false
+                        scope.launch {
+                            withContext(Dispatchers.IO) { HomeLinks.resetKey(context.applicationContext) }
+                            AppToastHelper.showToast(L.homescreen.settings.newKeyMadeShortcutsAndWidgets, ChatToastType.SUCCESS)
+                        }
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.homescreen.settings.newKey) }
             },
-            dismissButton = { TextButton(onClick = { askNewKey = false }) { Text(L.common.cancel) } }
+            dismissButton = {
+                TextButton(onClick = { askNewKey = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
+            }
         )
     }
 
@@ -289,7 +356,7 @@ fun HomeScreenSettingsCard(modifier: Modifier = Modifier) {
 private fun ChatPickerDialog(title: String, chats: List<HomeChat>, onDismiss: () -> Unit, onPick: (HomeChat) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, fontSize = 18.sp) },
+        title = { Text(title, fontSize = 18.sp, modifier = Modifier.semantics { heading() }) },
         text = {
             if (chats.isEmpty()) {
                 Text(L.homescreen.settings.noChatsYet)
@@ -300,7 +367,7 @@ private fun ChatPickerDialog(title: String, chats: List<HomeChat>, onDismiss: ()
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
@@ -311,7 +378,7 @@ private fun Section(icon: ImageVector, title: String, content: @Composable () ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
             }
             Spacer(Modifier.height(6.dp))
             content()
@@ -325,4 +392,4 @@ private fun Hint(text: String) {
 }
 
 @Composable
-private fun subtle() = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+private fun subtle() = accessibleMutedColor(alpha = 0.72f)

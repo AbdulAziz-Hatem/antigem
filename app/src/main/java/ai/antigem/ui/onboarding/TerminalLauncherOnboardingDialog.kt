@@ -23,9 +23,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Terminal
@@ -83,6 +89,9 @@ fun TerminalLauncherOnboardingDialog(
 ) {
     var isEnabled by remember { mutableStateOf(initialEnabled) }
     var selectedStyle by remember { mutableStateOf(initialStyle) }
+    val previewCardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+    val mutedPreviewText = accessibleMutedColor(alpha = 0.72f, background = previewCardBg)
+    val mutedToggleDesc = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
 
     OnboardingStepScreen(
         step = step,
@@ -137,13 +146,13 @@ fun TerminalLauncherOnboardingDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     ai.antigem.ui.components.AppIconImage(
-                                        contentDescription = "AntiGem",
+                                        contentDescription = L.common.antiGem,
                                         modifier = Modifier.matchParentSize()
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "AntiGem",
+                                    text = L.common.antiGem,
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -151,7 +160,7 @@ fun TerminalLauncherOnboardingDialog(
                                 Text(
                                     text = L.onboarding.terminalLauncherOnboarding.chatIde,
                                     fontSize = 9.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    color = mutedPreviewText
                                 )
                             }
 
@@ -160,7 +169,8 @@ fun TerminalLauncherOnboardingDialog(
                                 text = "+",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                color = mutedPreviewText,
+                                modifier = Modifier.clearAndSetSemantics {}
                             )
 
                             // Icon 2: Terminal App (Dynamic)
@@ -193,14 +203,14 @@ fun TerminalLauncherOnboardingDialog(
                                         )
                                     } else {
                                         ai.antigem.ui.components.AppIconImage(
-                                            contentDescription = "AntiTerm",
+                                            contentDescription = L.common.antiTerm,
                                             modifier = Modifier.matchParentSize()
                                         )
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = if (!isEnabled) L.onboarding.terminalLauncherOnboarding.hidden else if (selectedStyle == TerminalLauncherManager.STYLE_TERMUX) L.common.termux else "AntiTerm",
+                                    text = if (!isEnabled) L.onboarding.terminalLauncherOnboarding.hidden else if (selectedStyle == TerminalLauncherManager.STYLE_TERMUX) L.common.termux else L.common.antiTerm,
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (!isEnabled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
@@ -208,7 +218,7 @@ fun TerminalLauncherOnboardingDialog(
                                 Text(
                                     text = if (isEnabled) L.common.terminal else L.onboarding.terminalLauncherOnboarding.inAppOnly,
                                     fontSize = 9.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    color = mutedPreviewText
                                 )
                             }
                         }
@@ -227,7 +237,7 @@ fun TerminalLauncherOnboardingDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { isEnabled = !isEnabled }
+                            .accessibleToggleRow(checked = isEnabled, role = Role.Switch) { isEnabled = !isEnabled }
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -243,15 +253,15 @@ fun TerminalLauncherOnboardingDialog(
                             Text(
                                 text = L.onboarding.terminalLauncherOnboarding.placesADedicatedIconInYour,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = mutedToggleDesc
                             )
                         }
 
                         Switch(
                             checked = isEnabled,
-                            onCheckedChange = { isEnabled = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                 checkedTrackColor = ClaudeTerracotta
                             )
                         )
@@ -269,27 +279,31 @@ fun TerminalLauncherOnboardingDialog(
                             .fillMaxWidth()
                             .padding(top = 12.dp)
                             .animateContentSize()
+                            .selectableGroup()
                     ) {
                         Text(
                             text = L.onboarding.terminalLauncherOnboarding.selectIconAppName,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            color = accessibleMutedColor(alpha = 0.8f),
                             modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
                         )
 
                         // Option 1: AntiTerm (Branded)
                         val isAntiTermSelected = selectedStyle == TerminalLauncherManager.STYLE_ANTITERM
+                        val antiTermBg = if (isAntiTermSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isAntiTermSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                            color = antiTermBg,
                             border = BorderStroke(
                                 1.5.dp,
                                 if (isAntiTermSelected) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedStyle = TerminalLauncherManager.STYLE_ANTITERM }
+                                .accessibleSelectionRow(selected = isAntiTermSelected, role = Role.RadioButton) {
+                                    selectedStyle = TerminalLauncherManager.STYLE_ANTITERM
+                                }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -304,7 +318,7 @@ fun TerminalLauncherOnboardingDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     ai.antigem.ui.components.AppIconImage(
-                                        contentDescription = "AntiTerm",
+                                        contentDescription = L.common.antiTerm,
                                         modifier = Modifier.matchParentSize()
                                     )
                                 }
@@ -313,7 +327,7 @@ fun TerminalLauncherOnboardingDialog(
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "AntiTerm",
+                                        text = L.common.antiTerm,
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -321,13 +335,13 @@ fun TerminalLauncherOnboardingDialog(
                                     Text(
                                         text = L.onboarding.terminalLauncherOnboarding.modernUnifiedIconMatchingAntigem,
                                         fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        color = accessibleMutedColor(alpha = 0.72f, background = antiTermBg)
                                     )
                                 }
 
                                 RadioButton(
                                     selected = isAntiTermSelected,
-                                    onClick = { selectedStyle = TerminalLauncherManager.STYLE_ANTITERM },
+                                    onClick = null,
                                     colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                 )
                             }
@@ -337,16 +351,19 @@ fun TerminalLauncherOnboardingDialog(
 
                         // Option 2: Termux (Classic)
                         val isTermuxSelected = selectedStyle == TerminalLauncherManager.STYLE_TERMUX
+                        val termuxBg = if (isTermuxSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isTermuxSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                            color = termuxBg,
                             border = BorderStroke(
                                 1.5.dp,
                                 if (isTermuxSelected) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { selectedStyle = TerminalLauncherManager.STYLE_TERMUX }
+                                .accessibleSelectionRow(selected = isTermuxSelected, role = Role.RadioButton) {
+                                    selectedStyle = TerminalLauncherManager.STYLE_TERMUX
+                                }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -381,13 +398,13 @@ fun TerminalLauncherOnboardingDialog(
                                     Text(
                                         text = L.onboarding.terminalLauncherOnboarding.classicTerminalPromptIconFamiliarName,
                                         fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        color = accessibleMutedColor(alpha = 0.72f, background = termuxBg)
                                     )
                                 }
 
                                 RadioButton(
                                     selected = isTermuxSelected,
-                                    onClick = { selectedStyle = TerminalLauncherManager.STYLE_TERMUX },
+                                    onClick = null,
                                     colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                 )
                             }

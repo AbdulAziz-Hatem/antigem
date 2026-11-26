@@ -23,6 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -192,14 +197,16 @@ fun GitCloneDialog(
                             }
                             isRunning -> Icon(Icons.Default.Terminal, contentDescription = null, tint = GeminiBlue, modifier = Modifier.size(22.dp))
                             exitCode == 0 -> Icon(Icons.Default.CheckCircle, contentDescription = null, tint = QuotaGreen, modifier = Modifier.size(22.dp))
-                            else -> Icon(Icons.Default.Error, contentDescription = null, tint = Color.Red, modifier = Modifier.size(22.dp))
+                            else -> Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(22.dp))
                         }
+                        val surface = MaterialTheme.colorScheme.surface
                         Column {
                             Text(
                                 text = L.components.gitClone.cloneGitRepository,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = when {
@@ -211,16 +218,17 @@ fun GitCloneDialog(
                                 },
                                 fontSize = 11.5.sp,
                                 color = when {
-                                    !started -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    isRunning -> GeminiBlue
-                                    exitCode == 0 -> QuotaGreen
-                                    else -> Color.Red
-                                }
+                                    !started -> accessibleMutedColor(alpha = 0.72f)
+                                    isRunning -> ensureAccessibleContrast(GeminiBlue, surface, minRatio = 4.5f)
+                                    exitCode == 0 -> ensureAccessibleContrast(QuotaGreen, surface, minRatio = 4.5f)
+                                    else -> MaterialTheme.colorScheme.error
+                                },
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                     }
                     if (!isRunning) {
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(Icons.Default.Close, contentDescription = L.common.close, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -244,10 +252,14 @@ fun GitCloneDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (githubSignedIn) {
-                        TextButton(onClick = {
-                            showRepoPicker = !showRepoPicker
-                            if (showRepoPicker && !github.reposLoaded) ai.antigem.data.github.GitHubManager.loadRepos()
-                        }, contentPadding = PaddingValues(horizontal = 4.dp)) {
+                        TextButton(
+                            onClick = {
+                                showRepoPicker = !showRepoPicker
+                                if (showRepoPicker && !github.reposLoaded) ai.antigem.data.github.GitHubManager.loadRepos()
+                            },
+                            modifier = Modifier.minTouchTarget(48.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp)
+                        ) {
                             Text(if (showRepoPicker) L.components.gitClone.hideMyGithubRepositories else L.components.gitClone.chooseFromMyGithubRepositories, fontSize = 12.5.sp)
                         }
                         if (showRepoPicker) {
@@ -276,24 +288,26 @@ fun GitCloneDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(14.dp))
+                    val cloneFg = ensureAccessibleContrast(Color.White, ClaudeTerracotta, minRatio = 4.5f, surfaceFallback = ClaudeTerracotta)
                     Button(
                         onClick = { startClone() },
                         enabled = urlValid && nameValid,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(46.dp),
+                            .minTouchTarget(48.dp),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
+                        colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = cloneFg)
                     ) {
-                        Icon(Icons.Outlined.CloudDownload, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.CloudDownload, contentDescription = null, tint = cloneFg, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(L.components.gitClone.clone, fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
                     }
                 } else {
                     // Terminal output container
+                    val termBg = ai.antigem.theme.AppColors.terminalBg
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = ai.antigem.theme.AppColors.terminalBg,
+                        color = termBg,
                         border = BorderStroke(1.dp, ai.antigem.theme.AppColors.editorBorder),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -307,13 +321,14 @@ fun GitCloneDialog(
                         ) {
                             items(logs) { line ->
                                 val cleanLine = line.replace(Regex("\u001B\\[[;\\d]*m"), "")
-                                val lineColor = when {
+                                val rawColor = when {
                                     cleanLine.startsWith("❌") || cleanLine.startsWith("fatal:") || cleanLine.startsWith("error:") -> ai.antigem.theme.AppColors.danger
                                     cleanLine.startsWith("✅") -> ai.antigem.theme.AppColors.success
                                     cleanLine.startsWith("⚠️") || cleanLine.startsWith("warning:") -> ai.antigem.theme.AppColors.warning
                                     cleanLine.startsWith("=") || cleanLine.startsWith("[") -> ai.antigem.theme.AppColors.info
                                     else -> ai.antigem.theme.AppColors.editorText
                                 }
+                                val lineColor = ensureAccessibleContrast(rawColor, termBg, minRatio = 4.5f, surfaceFallback = termBg)
                                 Text(
                                     text = cleanLine,
                                     fontSize = 11.sp,
@@ -332,6 +347,7 @@ fun GitCloneDialog(
                         horizontalArrangement = Arrangement.End
                     ) {
                         if (isRunning) {
+                            val stopFg = ensureAccessibleContrast(Color.White, ai.antigem.theme.AppColors.danger, minRatio = 4.5f, surfaceFallback = ai.antigem.theme.AppColors.danger)
                             Button(
                                 onClick = {
                                     executionJob?.cancel()
@@ -339,8 +355,9 @@ fun GitCloneDialog(
                                     exitCode = 130
                                     logs.add(L.components.gitClone.cloneCancelledByUser)
                                 },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = ai.antigem.theme.AppColors.danger)
+                                colors = ButtonDefaults.buttonColors(containerColor = ai.antigem.theme.AppColors.danger, contentColor = stopFg)
                             ) {
                                 Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -349,6 +366,7 @@ fun GitCloneDialog(
                         } else if (exitCode != 0) {
                             OutlinedButton(
                                 onClick = { started = false },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text(L.common.back, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -356,6 +374,7 @@ fun GitCloneDialog(
                             Spacer(modifier = Modifier.width(8.dp))
                             Button(
                                 onClick = onDismiss,
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                             ) {
@@ -384,14 +403,26 @@ private fun GitHubRepoPicker(github: ai.antigem.data.github.GitHubManager.State,
             shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()
         )
         when {
-            github.reposLoading && github.repos.isEmpty() -> Row(verticalAlignment = Alignment.CenterVertically) {
+            github.reposLoading && github.repos.isEmpty() -> Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            ) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(L.components.gitClone.loadingYourRepositories, fontSize = 12.sp)
             }
             github.reposError != null && github.repos.isEmpty() ->
-                Text(github.reposError, fontSize = 12.sp, color = ai.antigem.theme.AppColors.danger)
-            matches.isEmpty() -> Text(if (q.isEmpty()) L.components.gitClone.noRepositories else L.components.gitClone.noRepositoryMatchesQ(q), fontSize = 12.sp)
+                Text(
+                    github.reposError,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
+            matches.isEmpty() -> Text(
+                if (q.isEmpty()) L.components.gitClone.noRepositories else L.components.gitClone.noRepositoryMatchesQ(q),
+                fontSize = 12.sp,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
         }
         if (matches.isNotEmpty()) {
             Surface(
@@ -402,16 +433,23 @@ private fun GitHubRepoPicker(github: ai.antigem.data.github.GitHubManager.State,
                 LazyColumn {
                     items(matches, key = { it.fullName }) { repo ->
                         Column(
-                            Modifier.fillMaxWidth()
-                                .clickable { onPick(repo.cloneUrl) }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                            Modifier
+                                .fillMaxWidth()
+                                .minTouchTarget(48.dp)
+                                .clickable(role = Role.Button) { onPick(repo.cloneUrl) }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(repo.fullName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                 if (repo.isPrivate) {
                                     Spacer(Modifier.width(6.dp))
-                                    Text(L.common.private, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = ai.antigem.theme.AppColors.warning)
+                                    Text(
+                                        L.common.private,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
+                                    )
                                 }
                             }
                             repo.description?.let {

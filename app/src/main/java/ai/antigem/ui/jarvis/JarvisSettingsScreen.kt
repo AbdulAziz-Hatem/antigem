@@ -9,6 +9,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,6 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,6 +40,10 @@ import ai.antigem.data.jarvis.JarvisVoice
 import ai.antigem.data.remote.AndroidLocalBridgeServer
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.domain.model.McpServerSpec
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -90,7 +102,12 @@ fun JarvisSettingsScreen(cardBg: Color, cardBorder: BorderStroke, onOpen: (Jarvi
             }
         }
         if (!JarvisController.isAttached) {
-            Text(L.jarvis.settings.jarvisIsStarting, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(
+                L.jarvis.settings.jarvisIsStarting,
+                fontSize = 12.sp,
+                color = accessibleMutedColor(alpha = 0.72f),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
             return@Column
         }
         val c = ai.antigem.theme.AppColors
@@ -159,10 +176,16 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         if (!JarvisController.isAttached) {
-            Text(L.jarvis.settings.jarvisIsStarting, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(
+                L.jarvis.settings.jarvisIsStarting,
+                fontSize = 12.sp,
+                color = accessibleMutedColor(alpha = 0.72f),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
             return@Column
         }
         val vm = JarvisController.vm
+        val warningFg = ensureAccessibleContrast(Color(0xFFF59E0B), MaterialTheme.colorScheme.surface, minRatio = 4.5f)
         when (page) {
             JarvisSettingsPage.AGENT -> {
                 JCard(cardBg, cardBorder, "") {
@@ -172,9 +195,9 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                         agentName
                     ) { P.agent.set(it); P.modelId.set("") }
                     if (agent == null) {
-                        Text(L.jarvis.settings.pickTheAgentJarvisTalksTo, fontSize = 12.5.sp, color = Color(0xFFF59E0B))
+                        Text(L.jarvis.settings.pickTheAgentJarvisTalksTo, fontSize = 12.5.sp, color = warningFg)
                     } else if (agent !in enabledAgents) {
-                        Text(L.jarvis.settings.agenttitleIsTurnedOffInSettings(agentTitle), fontSize = 12.5.sp, color = Color(0xFFF59E0B))
+                        Text(L.jarvis.settings.agenttitleIsTurnedOffInSettings(agentTitle), fontSize = 12.5.sp, color = warningFg)
                     }
                     val models by (when (agent) {
                         AgentKind.CLAUDE -> vm.claudeBackend.availableModels
@@ -185,7 +208,7 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                     val modelId by P.modelId.state.collectAsState()
                     var menu by remember { mutableStateOf(false) }
                     Box {
-                        OutlinedButton(onClick = { menu = true }) {
+                        OutlinedButton(onClick = { menu = true }, modifier = Modifier.minTouchTarget(48.dp)) {
                             val label = models.firstOrNull { it.id == modelId }?.let { it.displayName.ifBlank { it.id } } ?: L.jarvis.settings.defaultModel
                             Text(L.jarvis.settings.modelLabel(label))
                         }
@@ -230,7 +253,8 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                         if (mcpProblem) {
                             Text(
                                 L.jarvis.settings.jarvisReportedThatItsAppTools(agentTitle),
-                                fontSize = 12.5.sp, color = Color(0xFFF59E0B)
+                                fontSize = 12.5.sp, color = warningFg,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
 
@@ -355,7 +379,7 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                         if (!ai.antigem.data.jarvis.JarvisLauncher.pinShortcut(context)) {
                             Toast.makeText(context, L.jarvis.settings.thisLauncherCantAddShortcutsLong, Toast.LENGTH_LONG).show()
                         }
-                    }) { Text(L.common.addToHomeScreen) }
+                    }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.addToHomeScreen) }
                 }
             }
             JarvisSettingsPage.LISTEN -> {
@@ -478,7 +502,7 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                         var menu by remember { mutableStateOf(false) }
                         LaunchedEffect(Unit) { voices = runCatching { JarvisVoice.deviceVoices() }.getOrDefault(emptyList()) }
                         Box {
-                            OutlinedButton(onClick = { menu = true }) { Text(L.jarvis.settings.voiceValue((voices.firstOrNull { it.first == voice }?.second ?: L.jarvis.settings.systemDefault))) }
+                            OutlinedButton(onClick = { menu = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.jarvis.settings.voiceValue((voices.firstOrNull { it.first == voice }?.second ?: L.jarvis.settings.systemDefault))) }
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { Text(L.jarvis.settings.systemDefault) }, onClick = { P.ttsVoice.set(""); menu = false })
                                 voices.take(80).forEach { (id, label) ->
@@ -507,8 +531,8 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                     val pitch by P.ttsPitch.state.collectAsState()
                     JSlider(L.jarvis.settings.pitch, pitch, 0.5f..2f, "%.1f".format(pitch)) { P.ttsPitch.set(it) }
                     val err by JarvisVoice.lastError.collectAsState()
-                    err?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
-                    OutlinedButton(onClick = { scope.launch { JarvisVoice.speak(L.jarvis.settings.helloImJarvisThisIsHow, wait = false) } }) { Text(L.jarvis.settings.testVoice) }
+                    err?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                    OutlinedButton(onClick = { scope.launch { JarvisVoice.speak(L.jarvis.settings.helloImJarvisThisIsHow, wait = false) } }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.jarvis.settings.testVoice) }
                     val progress by P.speakProgress.state.collectAsState()
                     JSwitch(L.jarvis.settings.speakProgressUpdates, L.jarvis.settings.jarvisSaysAShortLineWhile, progress) { P.speakProgress.set(it) }
                     JHint(L.jarvis.settings.youCanAlsoSaySpeakSlower)
@@ -586,10 +610,10 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                     if (confirmAll) {
                         AlertDialog(
                             onDismissRequest = { confirmAll = false },
-                            title = { Text(L.jarvis.settings.approveEverythingAutomatically) },
+                            title = { Text(L.jarvis.settings.approveEverythingAutomatically, modifier = Modifier.semantics { heading() }) },
                             text = { Text(L.jarvis.settings.agentsWillRunCommandsEditFiles) },
-                            confirmButton = { TextButton(onClick = { P.permissionPolicy.set("auto_all"); confirmAll = false }) { Text(L.jarvis.settings.yesApproveEverything) } },
-                            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text(L.common.cancel) } }
+                            confirmButton = { TextButton(onClick = { P.permissionPolicy.set("auto_all"); confirmAll = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.jarvis.settings.yesApproveEverything) } },
+                            dismissButton = { TextButton(onClick = { confirmAll = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
                         )
                     }
                     val allow by P.allowSettingChanges.state.collectAsState()
@@ -643,7 +667,7 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                     }
                     if (floating && !canDraw) {
                         JHint(L.jarvis.settings.needsDisplayOverOtherAppsFor)
-                        OutlinedButton(onClick = openOverlaySettings) { Text(L.common.allow) }
+                        OutlinedButton(onClick = openOverlaySettings, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.allow) }
                     }
                     val haptics by P.haptics.state.collectAsState()
                     JSwitch(L.jarvis.settings.vibrateWhenListeningStarts, null, haptics) { P.haptics.set(it) }
@@ -667,8 +691,11 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
                     val carry by P.carryOver.state.collectAsState()
                     JSwitch(L.jarvis.settings.carryTheConversationOver, L.jarvis.settings.aNewChatStartsWithThe, carry) { P.carryOver.set(it) }
                     val count by P.currentChatMessages.state.collectAsState()
-                    Text(L.jarvis.settings.currentChatCountMessageValue(count, if (count == 1) "" else "s"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    OutlinedButton(onClick = { JarvisController.newSession(carry = carry); Toast.makeText(context, L.jarvis.settings.theNextMessageStartsANew, Toast.LENGTH_SHORT).show() }) {
+                    Text(L.jarvis.settings.currentChatCountMessageValue(count, if (count == 1) "" else "s"), fontSize = 12.sp, color = accessibleMutedColor(alpha = 0.72f))
+                    OutlinedButton(
+                        onClick = { JarvisController.newSession(carry = carry); Toast.makeText(context, L.jarvis.settings.theNextMessageStartsANew, Toast.LENGTH_SHORT).show() },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Text(L.jarvis.settings.startAFreshChatNow)
                     }
                     val memory by P.memory.state.collectAsState()
@@ -691,12 +718,18 @@ fun JarvisSettingsSectionPage(page: JarvisSettingsPage, cardBg: Color, cardBorde
 @Composable
 private fun FoldedPhrases(title: String, count: Int, editor: @Composable () -> Unit) {
     var open by remember { mutableStateOf(false) }
+    val toggleLabel = if (open) L.common.done else L.common.edit
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { open = !open }.padding(vertical = 4.dp),
+        Modifier
+            .fillMaxWidth()
+            .minTouchTarget(48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(role = Role.Button, onClickLabel = toggleLabel) { open = !open }
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("$title · $count", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), modifier = Modifier.weight(1f))
-        Text(if (open) L.common.done else L.common.edit, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+        Text("$title · $count", fontSize = 13.sp, color = accessibleMutedColor(alpha = 0.78f), modifier = Modifier.weight(1f))
+        Text(toggleLabel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.surface, minRatio = 4.5f))
     }
     if (open) editor()
 }
@@ -732,23 +765,23 @@ private fun PhraseEditor(phrases: List<String>, other: List<String>, otherName: 
         // as Material InputChips they made opening Jarvis' settings stall for about half a second
         val chipShape = RoundedCornerShape(8.dp)
         val chipBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-        val xColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        val xColor = accessibleMutedColor(alpha = 0.72f)
         phrases.forEach { p ->
             Row(
                 Modifier
-                    .heightIn(min = 32.dp)
+                    .minTouchTarget(48.dp)
                     .clip(chipShape)
                     .border(1.dp, chipBorder, chipShape)
-                    .clickable { onChange(phrases - p) }
-                    .padding(start = 12.dp, end = 10.dp),
+                    .clickable(role = Role.Button, onClickLabel = L.common.remove) { onChange(phrases - p) }
+                    .padding(start = 12.dp, end = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(p, fontSize = 12.sp)
                 Spacer(Modifier.width(6.dp))
-                Text("×", fontSize = 14.sp, color = xColor)
+                Text("×", fontSize = 14.sp, color = xColor, modifier = Modifier.clearAndSetSemantics {})
             }
         }
-        if (phrases.isEmpty()) Text(L.jarvis.settings.noPhrasesYet, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+        if (phrases.isEmpty()) Text(L.jarvis.settings.noPhrasesYet, fontSize = 12.sp, color = accessibleMutedColor(alpha = 0.72f))
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
@@ -759,14 +792,21 @@ private fun PhraseEditor(phrases: List<String>, other: List<String>, otherName: 
             keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { add() })
         )
         Spacer(Modifier.width(8.dp))
-        OutlinedButton(onClick = { add() }, enabled = input.isNotBlank()) { Text(L.common.add, fontSize = 12.sp) }
+        OutlinedButton(onClick = { add() }, enabled = input.isNotBlank(), modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.add, fontSize = 12.sp) }
     }
-    note?.let { Text(it, fontSize = 12.sp, color = Color(0xFFF59E0B)) }
+    note?.let {
+        Text(
+            it,
+            fontSize = 12.sp,
+            color = ensureAccessibleContrast(Color(0xFFF59E0B), MaterialTheme.colorScheme.surface, minRatio = 4.5f),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+    }
     // nothing is active until added: suggestions are offered, never applied by themselves
     val missing = defaults.map { J.normalize(it) }.filter { it !in phrases && it !in other }
     Row {
-        if (missing.isNotEmpty()) TextButton(onClick = { onChange(phrases + missing); note = null }) { Text("Add suggestions (${missing.size})", fontSize = 12.sp) }
-        if (phrases.isNotEmpty()) TextButton(onClick = { onChange(emptyList()); note = null }) { Text(L.jarvis.settings.removeAll, fontSize = 12.sp) }
+        if (missing.isNotEmpty()) TextButton(onClick = { onChange(phrases + missing); note = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text("Add suggestions (${missing.size})", fontSize = 12.sp) }
+        if (phrases.isNotEmpty()) TextButton(onClick = { onChange(emptyList()); note = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.jarvis.settings.removeAll, fontSize = 12.sp) }
     }
 }
 
@@ -779,7 +819,10 @@ private fun JCard(bg: Color, border: BorderStroke, title: String, content: @Comp
         border = border
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (title.isNotBlank()) Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = JarvisCyan)
+            if (title.isNotBlank()) {
+                val titleColor = ensureAccessibleContrast(JarvisCyan, bg, minRatio = 4.5f, surfaceFallback = MaterialTheme.colorScheme.surface)
+                Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = titleColor, modifier = Modifier.semantics { heading() })
+            }
             content()
         }
     }
@@ -787,21 +830,38 @@ private fun JCard(bg: Color, border: BorderStroke, title: String, content: @Comp
 
 @Composable
 private fun JSwitch(title: String, subtitle: String?, checked: Boolean, enabledSwitch: Boolean = true, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    val rowModifier = if (enabledSwitch) {
+        Modifier.fillMaxWidth().accessibleToggleRow(checked = checked) { onChange(!checked) }
+    } else {
+        Modifier.fillMaxWidth().minTouchTarget(48.dp)
+    }
+    Row(rowModifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            if (subtitle != null) Text(subtitle, fontSize = 12.sp, color = accessibleMutedColor(alpha = 0.72f))
         }
         Spacer(Modifier.width(8.dp))
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabledSwitch)
+        Switch(
+            checked = checked,
+            onCheckedChange = if (enabledSwitch) null else onChange,
+            enabled = enabledSwitch
+        )
     }
 }
 
 @Composable
 private fun JChips(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         options.forEach { (value, label) ->
-            FilterChip(selected = selected == value, onClick = { onSelect(value) }, label = { Text(label, fontSize = 12.sp) })
+            FilterChip(
+                selected = selected == value,
+                onClick = { onSelect(value) },
+                label = { Text(label, fontSize = 12.sp) },
+                modifier = Modifier.minTouchTarget(48.dp)
+            )
         }
     }
 }
@@ -820,7 +880,7 @@ private fun JSlider(label: String, value: Float, range: ClosedFloatingPointRange
     Column {
         Row {
             Text(label, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Text(shown, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(shown, fontSize = 13.sp, color = accessibleMutedColor(alpha = 0.72f))
         }
         Slider(value = value.coerceIn(range), onValueChange = onChange, valueRange = range)
     }
@@ -828,18 +888,22 @@ private fun JSlider(label: String, value: Float, range: ClosedFloatingPointRange
 
 @Composable
 private fun JHint(text: String) {
-    Text(text, fontSize = 11.5.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+    Text(text, fontSize = 11.5.sp, lineHeight = 16.sp, color = accessibleMutedColor(alpha = 0.72f))
 }
 
 @Composable
 private fun JStep(title: String, subtitle: String, done: Boolean, button: String, onClick: () -> Unit) {
+    val doneColor = ensureAccessibleContrast(Color(0xFF22C55E), MaterialTheme.colorScheme.surface, minRatio = 4.5f)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(subtitle, fontSize = 12.sp, color = if (done) Color(0xFF22C55E) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Text(subtitle, fontSize = 12.sp, color = if (done) doneColor else accessibleMutedColor(alpha = 0.72f))
         }
         Spacer(Modifier.width(8.dp))
-        if (done && button == L.common.allow) Text("✓", color = Color(0xFF22C55E), fontSize = 18.sp)
-        else OutlinedButton(onClick = onClick) { Text(button, fontSize = 12.sp) }
+        if (done && button == L.common.allow) {
+            Text("✓", color = doneColor, fontSize = 18.sp, modifier = Modifier.semantics { contentDescription = L.common.done })
+        } else {
+            OutlinedButton(onClick = onClick, modifier = Modifier.minTouchTarget(48.dp)) { Text(button, fontSize = 12.sp) }
+        }
     }
 }

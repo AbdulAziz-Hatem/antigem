@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,6 +31,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,6 +49,9 @@ import ai.antigem.data.local.LocalInstallerState
 import ai.antigem.data.local.RootfsMirror
 import ai.antigem.data.preferences.AuthPreferences
 import ai.antigem.theme.*
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** First-launch setup of the local Linux environment (bootstrap / rootfs): pick a source, then watch it install. */
@@ -155,7 +165,11 @@ fun FullScreenLocalToolsInstaller(
                 horizontalArrangement = Arrangement.End
             ) {
                 if (canSkipTop) {
-                    TextButton(onClick = onSkip, colors = ButtonDefaults.textButtonColors(contentColor = AppColors.textSecondary)) {
+                    TextButton(
+                        onClick = onSkip,
+                        modifier = Modifier.minTouchTarget(48.dp),
+                        colors = ButtonDefaults.textButtonColors(contentColor = ensureAccessibleContrast(AppColors.textSecondary, AppColors.background, 4.5f))
+                    ) {
                         Text(L.common.skip, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -187,7 +201,7 @@ fun FullScreenLocalToolsInstaller(
                             onOpenChroot = { showChrootSetup = true }
                         )
 
-                        is LocalInstallerState.Discovering -> InstallerCard {
+                        is LocalInstallerState.Discovering -> InstallerCard(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(color = ClaudeTerracotta, strokeWidth = 2.5.dp, modifier = Modifier.size(22.dp))
                                 Spacer(modifier = Modifier.width(14.dp))
@@ -197,10 +211,10 @@ fun FullScreenLocalToolsInstaller(
 
                         is LocalInstallerState.AwaitingConfirmation -> {
                             val info = state.packageInfo
-                            InstallerCard {
+                            InstallerCard(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                                 DetailRow(L.settings.fullScreenLocalToolsInstaller.release, info.releaseTag)
-                                DetailRow(L.settings.fullScreenLocalToolsInstaller.architecture, info.arch, ClaudeTerracotta)
-                                DetailRow(L.settings.fullScreenLocalToolsInstaller.downloadSize, info.sizeFormatted, QuotaGreen)
+                                DetailRow(L.settings.fullScreenLocalToolsInstaller.architecture, info.arch, ensureAccessibleContrast(ClaudeTerracotta, AppColors.card, 4.5f, AppColors.background))
+                                DetailRow(L.settings.fullScreenLocalToolsInstaller.downloadSize, info.sizeFormatted, ensureAccessibleContrast(QuotaGreen, AppColors.card, 4.5f, AppColors.background))
                                 HorizontalDivider(
                                     modifier = Modifier.padding(vertical = 10.dp),
                                     color = AppColors.border.copy(alpha = 0.5f)
@@ -209,7 +223,7 @@ fun FullScreenLocalToolsInstaller(
                                     text = info.url,
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = AppColors.textSecondary,
+                                    color = ensureAccessibleContrast(AppColors.textSecondary, AppColors.card, 4.5f, AppColors.background),
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -221,7 +235,7 @@ fun FullScreenLocalToolsInstaller(
                         is LocalInstallerState.Configuring,
                         is LocalInstallerState.Verifying -> InstallSteps(state)
 
-                        is LocalInstallerState.Success -> InstallerCard(tint = QuotaGreen) {
+                        is LocalInstallerState.Success -> InstallerCard(tint = QuotaGreen, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                             Text(
                                 text = L.settings.fullScreenLocalToolsInstaller.theTerminalTheIdeBackendAnd,
                                 fontSize = 13.5.sp,
@@ -230,7 +244,7 @@ fun FullScreenLocalToolsInstaller(
                             )
                         }
 
-                        is LocalInstallerState.Error -> InstallerCard(tint = AppColors.danger) {
+                        is LocalInstallerState.Error -> InstallerCard(tint = AppColors.danger, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                             Text(
                                 text = state.errorMessage,
                                 fontSize = 13.sp,
@@ -344,7 +358,8 @@ private fun UnsupportedDeviceScreen(onContinue: () -> Unit) {
                     modifier = Modifier
                         .size(76.dp)
                         .clip(RoundedCornerShape(24.dp))
-                        .background(Brush.linearGradient(listOf(AppColors.warning, AppColors.warning.copy(alpha = 0.65f)))),
+                        .background(Brush.linearGradient(listOf(AppColors.warning, AppColors.warning.copy(alpha = 0.65f))))
+                        .clearAndSetSemantics {},
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(Icons.Outlined.Memory, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
@@ -355,20 +370,22 @@ private fun UnsupportedDeviceScreen(onContinue: () -> Unit) {
                     fontSize = 25.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppColors.onBackground,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                val accessibleSecondary = ensureAccessibleContrast(AppColors.textSecondary, AppColors.background, 4.5f)
                 Text(
                     text = L.settings.fullScreenLocalToolsInstaller.yourPhoneHasA32Bit,
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
-                    color = AppColors.textSecondary,
+                    color = accessibleSecondary,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 Spacer(modifier = Modifier.height(28.dp))
                 InstallerCard {
-                    Text(L.settings.fullScreenLocalToolsInstaller.youCanStillUseAntigem, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground)
+                    Text(L.settings.fullScreenLocalToolsInstaller.youCanStillUseAntigem, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground, modifier = Modifier.semantics { heading() })
                     Spacer(modifier = Modifier.height(10.dp))
                     listOf(
                         Icons.Outlined.Dns to L.settings.fullScreenLocalToolsInstaller.serverModeRunTheAgentsOn,
@@ -377,7 +394,7 @@ private fun UnsupportedDeviceScreen(onContinue: () -> Unit) {
                         Row(modifier = Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
                             Icon(icon, contentDescription = null, tint = ClaudeTerracotta, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(text, fontSize = 13.5.sp, lineHeight = 19.sp, color = AppColors.textSecondary)
+                            Text(text, fontSize = 13.5.sp, lineHeight = 19.sp, color = ensureAccessibleContrast(AppColors.textSecondary, AppColors.card, 4.5f, AppColors.background))
                         }
                     }
                 }
@@ -386,7 +403,7 @@ private fun UnsupportedDeviceScreen(onContinue: () -> Unit) {
                     text = abis,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
-                    color = AppColors.textSecondary.copy(alpha = 0.7f),
+                    color = accessibleSecondary,
                     textAlign = TextAlign.Center
                 )
                 Spacer(modifier = Modifier.height(24.dp))
@@ -410,7 +427,8 @@ private fun InstallerHero(state: LocalInstallerState, mirrorChoice: Boolean = fa
         modifier = Modifier
             .size(76.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(Brush.linearGradient(listOf(animatedTint, animatedTint.copy(alpha = 0.65f)))),
+            .background(Brush.linearGradient(listOf(animatedTint, animatedTint.copy(alpha = 0.65f))))
+            .clearAndSetSemantics {},
         contentAlignment = Alignment.Center
     ) {
         Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
@@ -431,7 +449,8 @@ private fun InstallerHero(state: LocalInstallerState, mirrorChoice: Boolean = fa
         fontSize = 25.sp,
         fontWeight = FontWeight.Bold,
         color = AppColors.onBackground,
-        textAlign = TextAlign.Center
+        textAlign = TextAlign.Center,
+        modifier = Modifier.semantics { heading(); liveRegion = LiveRegionMode.Polite }
     )
     Spacer(modifier = Modifier.height(8.dp))
     Text(
@@ -452,7 +471,7 @@ private fun InstallerHero(state: LocalInstallerState, mirrorChoice: Boolean = fa
         },
         fontSize = 14.sp,
         lineHeight = 20.sp,
-        color = AppColors.textSecondary,
+        color = ensureAccessibleContrast(AppColors.textSecondary, AppColors.background, 4.5f),
         textAlign = TextAlign.Center,
         modifier = Modifier.padding(horizontal = 8.dp)
     )
@@ -468,7 +487,7 @@ private fun SourcePicker(
     onPickZip: () -> Unit,
     onOpenChroot: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.selectableGroup()) {
         SourceOption(
             icon = Icons.Outlined.CloudDownload,
             title = L.settings.fullScreenLocalToolsInstaller.fullEnvironment,
@@ -497,6 +516,7 @@ private fun SourcePicker(
             tag = "Rooted phones · Magisk / KernelSU / APatch",
             description = L.settings.fullScreenLocalToolsInstaller.aRealUbuntuInsteadOfAntigems,
             selected = false,
+            isRadio = false,
             onClick = onOpenChroot
         )
         SourceOption(
@@ -512,7 +532,7 @@ private fun SourcePicker(
                     OutlinedButton(
                         onClick = onPickZip,
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                     ) {
                         Text(if (selectedFileName != null) L.settings.fullScreenLocalToolsInstaller.chooseAnotherFile else L.settings.fullScreenLocalToolsInstaller.chooseFile, fontSize = 13.5.sp)
                     }
@@ -521,7 +541,7 @@ private fun SourcePicker(
                             text = selectedFileName,
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = QuotaGreen,
+                            color = ensureAccessibleContrast(QuotaGreen, AppColors.card, 4.5f, AppColors.background),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(top = 8.dp)
@@ -540,34 +560,43 @@ private fun SourcePicker(
 @Composable
 private fun MirrorChooser(selected: RootfsMirror, onSelect: (RootfsMirror) -> Unit) {
     val uriHandler = LocalUriHandler.current
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().selectableGroup()) {
         LocalEnvironmentManager.ROOTFS_MIRRORS.forEach { mirror ->
             val isSelected = mirror == selected
+            val mirrorBg = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else AppColors.card
+            val accessibleSelectedText = ensureAccessibleContrast(ClaudeTerracotta, mirrorBg, 4.5f, AppColors.background)
+            val accessibleSecondary = ensureAccessibleContrast(AppColors.textSecondary, mirrorBg, 4.5f, AppColors.background)
             Surface(
-                onClick = { onSelect(mirror) },
                 shape = RoundedCornerShape(12.dp),
-                color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else AppColors.card,
+                color = mirrorBg,
                 border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else AppColors.border.copy(alpha = 0.6f)),
                 modifier = Modifier.weight(1f)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp)) {
-                    Text(
-                        text = mirror.label,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                        color = if (isSelected) ClaudeTerracotta else AppColors.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { onSelect(mirror) }
+                            .padding(start = 12.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            text = mirror.label,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (isSelected) accessibleSelectedText else AppColors.onBackground,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     IconButton(
                         onClick = { runCatching { uriHandler.openUri(LocalEnvironmentManager.rootfsPage(mirror)) } },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.OpenInNew,
                             contentDescription = L.settings.fullScreenLocalToolsInstaller.openTheLabelDownloadPage(mirror.label),
-                            tint = if (isSelected) ClaudeTerracotta else AppColors.textSecondary,
+                            tint = if (isSelected) accessibleSelectedText else accessibleSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -584,6 +613,7 @@ private fun SourceOption(
     tag: String?,
     description: String,
     selected: Boolean,
+    isRadio: Boolean = true,
     onClick: () -> Unit,
     extra: @Composable ColumnScope.() -> Unit = {}
 ) {
@@ -591,26 +621,38 @@ private fun SourceOption(
         if (selected) ClaudeTerracotta else AppColors.border.copy(alpha = 0.6f),
         label = "optionBorder"
     )
+    val cardBg = if (selected) ClaudeTerracotta.copy(alpha = 0.06f) else AppColors.card
+    val accessibleTag = ensureAccessibleContrast(ClaudeTerracotta, cardBg, 4.5f, AppColors.background)
+    val accessibleSecondary = ensureAccessibleContrast(AppColors.textSecondary, cardBg, 4.5f, AppColors.background)
     Surface(
-        onClick = onClick,
         shape = RoundedCornerShape(18.dp),
-        color = if (selected) ClaudeTerracotta.copy(alpha = 0.06f) else AppColors.card,
+        color = cardBg,
         border = BorderStroke(if (selected) 1.5.dp else 1.dp, borderColor),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .then(
+                        if (isRadio) Modifier.accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onClick)
+                        else Modifier.minTouchTarget(48.dp).clickable(role = Role.Button, onClick = onClick).semantics(mergeDescendants = true) {}
+                    )
+            ) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background((if (selected) ClaudeTerracotta else AppColors.textSecondary).copy(alpha = 0.12f)),
+                        .background((if (selected) ClaudeTerracotta else AppColors.textSecondary).copy(alpha = 0.12f))
+                        .clearAndSetSemantics {},
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = if (selected) ClaudeTerracotta else AppColors.textSecondary,
+                        tint = if (selected) accessibleTag else accessibleSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -618,25 +660,28 @@ private fun SourceOption(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AppColors.onBackground)
                     if (tag != null) {
-                        Text(tag, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (selected) ClaudeTerracotta else AppColors.textSecondary)
+                        Text(tag, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (selected) accessibleTag else accessibleSecondary)
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(description, fontSize = 12.5.sp, lineHeight = 17.sp, color = AppColors.textSecondary)
+                    Text(description, fontSize = 12.5.sp, lineHeight = 17.sp, color = accessibleSecondary)
                 }
                 Spacer(modifier = Modifier.width(10.dp))
-                // selection mark
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .then(
-                            if (selected) Modifier.background(ClaudeTerracotta)
-                            else Modifier.border(1.5.dp, AppColors.border, CircleShape)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (selected) {
-                        Icon(Icons.Default.Check, contentDescription = L.common.selected, tint = Color.White, modifier = Modifier.size(14.dp))
+                // selection mark (decorative when part of RadioButton row)
+                if (isRadio) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .then(
+                                if (selected) Modifier.background(ClaudeTerracotta)
+                                else Modifier.border(1.5.dp, AppColors.border, CircleShape)
+                            )
+                            .clearAndSetSemantics {},
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (selected) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
             }
@@ -656,7 +701,7 @@ private fun InstallSteps(state: LocalInstallerState) {
         else -> 4
     }
     val titles = listOf(L.common.download, L.settings.fullScreenLocalToolsInstaller.unpackFiles, L.settings.fullScreenLocalToolsInstaller.configureShell, L.settings.fullScreenLocalToolsInstaller.verify)
-    InstallerCard {
+    InstallerCard(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         titles.forEachIndexed { i, title ->
             StepRow(index = i, title = title, done = i < active, current = i == active, last = i == titles.lastIndex) {
                 when (state) {
@@ -780,12 +825,12 @@ private fun StepDetail(text: String, mono: Boolean = false) {
 }
 
 @Composable
-private fun InstallerCard(tint: Color? = null, content: @Composable ColumnScope.() -> Unit) {
+private fun InstallerCard(tint: Color? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = tint?.copy(alpha = 0.08f) ?: AppColors.card,
         border = BorderStroke(1.dp, tint?.copy(alpha = 0.35f) ?: AppColors.border.copy(alpha = 0.6f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(18.dp), content = content)
     }
@@ -828,6 +873,7 @@ private fun DeviceInfoLine() {
                     .size(6.dp)
                     .clip(CircleShape)
                     .background(color)
+                    .clearAndSetSemantics {}
             )
             Spacer(modifier = Modifier.width(5.dp))
             Text(label, fontSize = 12.sp, color = AppColors.textSecondary)
@@ -845,7 +891,8 @@ private fun InstallerLog(lines: List<String>, expanded: Boolean, onToggle: () ->
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
-                .clickable(onClick = onToggle)
+                .minTouchTarget(48.dp)
+                .clickable(role = Role.Button, onClick = onToggle)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -908,7 +955,7 @@ private fun PrimaryButton(text: String, icon: ImageVector?, onClick: () -> Unit)
 private fun SecondaryButton(text: String, modifier: Modifier = Modifier.fillMaxWidth(), onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
+        modifier = modifier.minTouchTarget(48.dp).height(48.dp),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, AppColors.border),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = AppColors.onBackground)

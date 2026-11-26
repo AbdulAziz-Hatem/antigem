@@ -2,10 +2,12 @@ package ai.antigem.ui.components
 
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,8 +24,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,6 +51,7 @@ fun LocalServerOutputDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val screenAccessible = LocalScreenAccessible.current
     val status by LocalServerManager.status.collectAsState()
     val serverSession by LocalServerManager.serverSession.collectAsState()
     val isDark = isAppInDarkTheme() || isSystemInDarkTheme()
@@ -118,7 +126,8 @@ fun LocalServerOutputDialog(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         // Static Status Dot (no animation/blinking)
                         val dotColor = when (status) {
@@ -138,11 +147,15 @@ fun LocalServerOutputDialog(
                         )
 
                         Column {
+                            val titleText = if (AuthPreferences.currentRemoteMode) L.components.localServerOutput.serverLogsSsh else L.components.localServerOutput.localServerLogs
                             Text(
-                                text = if (AuthPreferences.currentRemoteMode) L.components.localServerOutput.serverLogsSsh else L.components.localServerOutput.localServerLogs,
+                                text = titleText,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = textPrimary
+                                color = textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { heading() }
                             )
 
                             val statusText = when (val s = status) {
@@ -157,15 +170,17 @@ fun LocalServerOutputDialog(
                             Text(
                                 text = statusText,
                                 fontSize = 11.sp,
-                                color = dotColor,
-                                fontWeight = FontWeight.Medium
+                                color = ensureAccessibleContrast(dotColor, dialogBg, 4.5f),
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                     }
 
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         // Copy Button: copies the whole log shown below
                         IconButton(
@@ -184,7 +199,7 @@ fun LocalServerOutputDialog(
                                     AppToastHelper.showToast(L.components.localServerOutput.logCopied, ChatToastType.SUCCESS)
                                 }
                             },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.ContentCopy,
@@ -199,12 +214,12 @@ fun LocalServerOutputDialog(
                             IconButton(
                                 onClick = { LocalServerManager.restartServer(context) },
                                 enabled = status !is LocalServerStatus.Stopping,
-                                modifier = Modifier.size(34.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = L.components.localServerOutput.startServer,
-                                    tint = if (status is LocalServerStatus.Stopping) Color.Gray else ClaudeTerracotta,
+                                    tint = if (status is LocalServerStatus.Stopping) ensureAccessibleContrast(Color.Gray, dialogBg, 3.0f) else ClaudeTerracotta,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -214,12 +229,12 @@ fun LocalServerOutputDialog(
                         if (status is LocalServerStatus.Running || status is LocalServerStatus.Starting) {
                             IconButton(
                                 onClick = { LocalServerManager.stopServer() },
-                                modifier = Modifier.size(34.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Stop,
                                     contentDescription = L.components.localServerOutput.stopServer,
-                                    tint = ai.antigem.theme.AppColors.danger,
+                                    tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, dialogBg, 3.0f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -228,7 +243,7 @@ fun LocalServerOutputDialog(
                         // Close Dialog Button
                         IconButton(
                             onClick = onDismiss,
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
@@ -253,12 +268,19 @@ fun LocalServerOutputDialog(
                 ) {
                     val currentSession = serverSession
                     if (currentSession != null) {
+                        val consoleLabel = if (AuthPreferences.currentRemoteMode) L.components.localServerOutput.serverLogsSsh else L.components.localServerOutput.localServerLogs
                         AndroidView(
                             factory = { ctx ->
                                 TerminalView(ctx, null).apply {
                                     setTextSize(terminalTextSize)
                                     isFocusable = false
                                     isFocusableInTouchMode = false
+                                    contentDescription = consoleLabel
+                                    importantForAccessibility = if (screenAccessible) {
+                                        View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                                    } else {
+                                        View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                    }
                                     setTerminalViewClient(object : TerminalViewClient {
                                         override fun onScale(scale: Float): Float {
                                             if (scale < 0.9f || scale > 1.1f) {
@@ -313,6 +335,12 @@ fun LocalServerOutputDialog(
                             },
                             update = { tv ->
                                 currentTerminalView = tv
+                                tv.contentDescription = consoleLabel
+                                tv.importantForAccessibility = if (screenAccessible) {
+                                    View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                                } else {
+                                    View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                }
                                 tv.setTextSize(terminalTextSize)
                                 tv.setTerminalSizeListener { cols, rows, widthPx, heightPx ->
                                     currentSession.updateSize(cols, rows, widthPx, heightPx)
@@ -368,7 +396,7 @@ fun LocalServerOutputDialog(
                                 text = L.components.localServerOutput.noBridgeProcessRunningTapRestart,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 12.sp,
-                                color = ai.antigem.theme.AppColors.editorMuted,
+                                color = ensureAccessibleContrast(ai.antigem.theme.AppColors.editorMuted, consoleBg, 4.5f),
                                 lineHeight = 18.sp
                             )
                         }

@@ -15,13 +15,14 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -67,6 +70,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -83,6 +99,12 @@ import androidx.core.view.WindowCompat
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.LocalScreenAccessible
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleScreenVisibility
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.formatCountForSpeech
+import ai.antigem.ui.components.minTouchTarget
 import java.net.URLEncoder
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
@@ -142,6 +164,7 @@ fun BrowserScreen(
     val footerOverlapDp = with(density) { (footerHeightPx - navBarBottomPx).coerceAtLeast(0f).toDp() }
 
     val context = LocalContext.current
+    val screenAccessible = LocalScreenAccessible.current
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -336,6 +359,7 @@ fun BrowserScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
+                        .semantics { isTraversalGroup = true }
                 ) {
                     val isHttps = activeTab?.url?.startsWith("https://", ignoreCase = true) == true
                     val isLocal = activeTab?.url?.contains("localhost") == true || activeTab?.url?.contains("127.0.0.1") == true
@@ -350,7 +374,7 @@ fun BrowserScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 8.dp)
-                            .height(44.dp)
+                            .minTouchTarget(48.dp)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null
@@ -360,7 +384,7 @@ fun BrowserScreen(
                                     focusRequester.requestFocus()
                                 }
                             },
-                        shape = RoundedCornerShape(22.dp),
+                        shape = RoundedCornerShape(24.dp),
                         color = ai.antigem.theme.AppColors.fill,
                         border = BorderStroke(1.5.dp, pillBorderColor)
                     ) {
@@ -459,7 +483,11 @@ fun BrowserScreen(
                                         if (textFieldValue.text.isEmpty() && !isAddressFocused) {
                                             Text(
                                                 text = L.browser.screen.searchOrTypeUrl,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                color = accessibleMutedColor(
+                                                    alpha = 0.72f,
+                                                    background = ai.antigem.theme.AppColors.fill,
+                                                    surfaceFallback = barBackgroundColor
+                                                ),
                                                 fontSize = 14.5.sp,
                                                 maxLines = 1
                                             )
@@ -491,9 +519,14 @@ fun BrowserScreen(
                                             textFieldValue = TextFieldValue("")
                                             focusRequester.requestFocus()
                                         },
-                                        size = 36.dp,
+                                        size = 48.dp,
                                         iconSize = 18.dp,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        tint = ensureAccessibleContrast(
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                            ai.antigem.theme.AppColors.fill,
+                                            4.5f,
+                                            barBackgroundColor
+                                        )
                                     )
                                 }
                             } else if (hasActivePage) {
@@ -508,7 +541,7 @@ fun BrowserScreen(
                                             sessionManager.reloadTab(activeTab.id)
                                         }
                                     },
-                                    size = 36.dp,
+                                    size = 48.dp,
                                     iconSize = 20.dp,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -538,7 +571,8 @@ fun BrowserScreen(
                             .fillMaxWidth()
                             .navigationBarsPadding()
                             .height(56.dp)
-                            .padding(horizontal = 10.dp),
+                            .padding(horizontal = 10.dp)
+                            .semantics { isTraversalGroup = true },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -580,17 +614,21 @@ fun BrowserScreen(
                         )
 
                         // Tab switcher: rounded counter square
+                        val tabCount = tabs.size.coerceAtLeast(1)
                         Box(
                             modifier = Modifier
+                                .minTouchTarget(48.dp)
                                 .size(48.dp)
                                 .clip(CircleShape)
-                                .clickable {
+                                .clickable(role = Role.Button) {
                                     activeTab?.capturePreview()
                                     showTabOverview = true
+                                }
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = "${L.browser.screen.browserTabs}: ${formatCountForSpeech(tabCount)}"
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            val tabCount = tabs.size.coerceAtLeast(1)
                             Box(
                                 modifier = Modifier
                                     .size(23.dp)
@@ -604,7 +642,8 @@ fun BrowserScreen(
                                     text = if (tabCount > 99) ":)" else "$tabCount",
                                     fontSize = if (tabCount > 9) 10.sp else 11.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                                    modifier = Modifier.clearAndSetSemantics {}
                                 )
                             }
                         }
@@ -632,6 +671,12 @@ fun BrowserScreen(
                 key(tab.id) {
                     val isActive = tab.id == activeTabId
                     val tabOnScreen = isActive && isVisible && !isHomePage
+                    val webViewAccessible = tabOnScreen && screenAccessible
+                    val webViewImportance = if (webViewAccessible) {
+                        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                    } else {
+                        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                    }
                     SideEffect {
                         tab.isOnScreen = tabOnScreen
                     }
@@ -647,6 +692,7 @@ fun BrowserScreen(
                                 alpha = if (isActive && !isHomePage) 1f else 0f
                                 translationX = if (isActive && !isHomePage) 0f else -20000f
                             }
+                            .accessibleScreenVisibility(tabOnScreen)
                     ) {
                         AndroidView(
                             factory = { ctx ->
@@ -656,12 +702,21 @@ fun BrowserScreen(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
                                 )
+                                wv.contentDescription = L.browser.screen.webPageContent
+                                wv.isFocusable = webViewAccessible
+                                wv.isFocusableInTouchMode = webViewAccessible
+                                wv.importantForAccessibility = webViewImportance
                                 // a plain container (no swipe-to-refresh) the tab's WebView is moved into
                                 android.widget.FrameLayout(ctx).apply {
                                     layoutParams = ViewGroup.LayoutParams(
                                         ViewGroup.LayoutParams.MATCH_PARENT,
                                         ViewGroup.LayoutParams.MATCH_PARENT
                                     )
+                                    importantForAccessibility = if (webViewAccessible) {
+                                        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                                    } else {
+                                        android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                    }
                                     addView(wv)
                                 }
                             },
@@ -673,6 +728,18 @@ fun BrowserScreen(
                                     container.addView(wv)
                                 }
                                 tab.webView = wv
+                                wv.contentDescription = L.browser.screen.webPageContent
+                                wv.isFocusable = webViewAccessible
+                                wv.isFocusableInTouchMode = webViewAccessible
+                                wv.importantForAccessibility = webViewImportance
+                                container.importantForAccessibility = if (webViewAccessible) {
+                                    android.view.View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+                                } else {
+                                    android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                                }
+                                if (!webViewAccessible && wv.hasFocus()) {
+                                    wv.clearFocus()
+                                }
                                 wv.setBackgroundColor(android.graphics.Color.WHITE)
                                 @Suppress("DEPRECATION")
                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -734,7 +801,9 @@ fun BrowserScreen(
                 ) {
                     LinearProgressIndicator(
                         progress = { animatedProgress },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .semantics { contentDescription = L.browser.screen.pageLoadingProgress },
                         color = ClaudeTerracotta,
                         trackColor = Color.Transparent
                     )
@@ -902,15 +971,16 @@ private fun BrowserBarIconButton(
     val baseTint = tint ?: MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
     Box(
         modifier = Modifier
-            .size(size)
+            .minTouchTarget(48.dp)
+            .size(maxOf(size, 48.dp))
             .clip(CircleShape)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = if (enabled) baseTint else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f),
+            tint = if (enabled) baseTint else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
             modifier = Modifier.size(iconSize)
         )
     }
@@ -956,6 +1026,7 @@ private fun BrowserMenuSheet(
                     .size(width = 36.dp, height = 4.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
+                    .clearAndSetSemantics {}
             )
         }
     ) {
@@ -1127,19 +1198,20 @@ private fun BrowserMenuTile(
         label = "tileBg"
     )
     val contentColor = when {
-        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-        active -> ClaudeTerracotta
-        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        active -> ensureAccessibleContrast(ClaudeTerracotta, container, 4.5f, MaterialTheme.colorScheme.background)
+        else -> ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), container, 4.5f, MaterialTheme.colorScheme.background)
     }
     Column(
         modifier = modifier
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(container)
             .border(
                 BorderStroke(1.dp, if (active) ClaudeTerracotta.copy(alpha = 0.35f) else Color.Transparent),
                 RoundedCornerShape(18.dp)
             )
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1172,7 +1244,8 @@ private fun BrowserMenuRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 13.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1224,6 +1297,8 @@ private fun SearchHistoryOverlay(
         }
     }
 
+    val cardBg = ai.antigem.theme.AppColors.card
+    val mutedText = accessibleMutedColor(alpha = 0.72f, background = cardBg)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -1239,7 +1314,7 @@ private fun SearchHistoryOverlay(
                     indication = null
                 ) {}, // consume clicks inside card to prevent dismiss
             shape = RoundedCornerShape(16.dp),
-            color = ai.antigem.theme.AppColors.card,
+            color = cardBg,
             shadowElevation = 8.dp,
             border = BorderStroke(1.dp, ai.antigem.theme.AppColors.border)
         ) {
@@ -1253,6 +1328,7 @@ private fun SearchHistoryOverlay(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .minTouchTarget(48.dp)
                             .clickable { onSelectHistory(trimmed) }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -1277,7 +1353,7 @@ private fun SearchHistoryOverlay(
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = L.browser.screen.go,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            tint = mutedText,
                             modifier = Modifier
                                 .size(16.dp)
                                 .graphicsLayer { rotationZ = 135f } // North-East Arrow
@@ -1297,7 +1373,7 @@ private fun SearchHistoryOverlay(
                             Text(
                                 text = L.browser.screen.noRecentSearchHistory,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                color = mutedText
                             )
                         }
                     }
@@ -1313,19 +1389,25 @@ private fun SearchHistoryOverlay(
                             text = if (trimmed.isBlank()) L.browser.screen.recentSearches else L.browser.screen.historySuggestions,
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f), cardBg),
+                            modifier = Modifier.semantics { heading() }
                         )
                         if (trimmed.isBlank() && historyItems.isNotEmpty()) {
-                            Text(
-                                text = L.browser.screen.clearAll2,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.error,
+                            Box(
                                 modifier = Modifier
+                                    .minTouchTarget(48.dp)
                                     .clip(RoundedCornerShape(4.dp))
-                                    .clickable { onClearAllHistory() }
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                                    .clickable(role = Role.Button) { onClearAllHistory() }
+                                    .padding(horizontal = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = L.browser.screen.clearAll2,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ensureAccessibleContrast(MaterialTheme.colorScheme.error, cardBg)
+                                )
+                            }
                         }
                     }
 
@@ -1338,14 +1420,15 @@ private fun SearchHistoryOverlay(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .minTouchTarget(48.dp)
                                     .clickable { onSelectHistory(item.url) }
-                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                    .padding(start = 14.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.History,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    tint = mutedText,
                                     modifier = Modifier.size(18.dp)
                                 )
 
@@ -1364,7 +1447,7 @@ private fun SearchHistoryOverlay(
                                         Text(
                                             text = item.url,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            color = mutedText,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -1374,30 +1457,28 @@ private fun SearchHistoryOverlay(
                                 // Copy into input button
                                 IconButton(
                                     onClick = { onInsertHistory(item.query) },
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
                                         contentDescription = L.browser.screen.insert,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        tint = mutedText,
                                         modifier = Modifier
-                                            .size(14.dp)
+                                            .size(16.dp)
                                             .graphicsLayer { rotationZ = 45f } // North-West Arrow
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.width(4.dp))
-
                                 // Remove individual item
                                 IconButton(
                                     onClick = { onRemoveHistory(item.id) },
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Close,
                                         contentDescription = L.common.delete,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                        modifier = Modifier.size(14.dp)
+                                        tint = mutedText,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             }
@@ -1545,6 +1626,7 @@ private fun SpeedDialHomeView(
 /**
  * Individual Speed Dial Circular Shortcut Item (with padded circle and clean typography)
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ShortcutItemView(
     shortcut: BrowserSessionManager.SpeedDialShortcut,
@@ -1561,10 +1643,18 @@ private fun ShortcutItemView(
     Column(
         modifier = Modifier
             .width(62.dp)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onClick() },
-                    onLongPress = { onLongClick() }
+            .minTouchTarget(48.dp)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                customActions = listOf(
+                    CustomAccessibilityAction(L.browser.screen.removeShortcut) {
+                        onLongClick()
+                        true
+                    }
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally
@@ -1584,7 +1674,8 @@ private fun ShortcutItemView(
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF4285F4),
-                        fontFamily = FontFamily.SansSerif
+                        fontFamily = FontFamily.SansSerif,
+                        modifier = Modifier.clearAndSetSemantics {}
                     )
                 }
                 isYouTube -> {
@@ -1592,7 +1683,8 @@ private fun ShortcutItemView(
                         text = "▶",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFF0000)
+                        color = Color(0xFFFF0000),
+                        modifier = Modifier.clearAndSetSemantics {}
                     )
                 }
                 else -> {
@@ -1600,7 +1692,8 @@ private fun ShortcutItemView(
                         text = shortcut.title.take(1).uppercase(),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.clearAndSetSemantics {}
                     )
                 }
             }
@@ -1613,7 +1706,7 @@ private fun ShortcutItemView(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Normal,
             fontSize = 11.5.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+            color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), MaterialTheme.colorScheme.background),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -1635,7 +1728,9 @@ private fun AddShortcutItemView(
     Column(
         modifier = Modifier
             .width(62.dp)
-            .clickable { onClick() },
+            .minTouchTarget(48.dp)
+            .clickable(role = Role.Button) { onClick() }
+            .semantics(mergeDescendants = true) {},
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
@@ -1649,7 +1744,7 @@ private fun AddShortcutItemView(
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = L.browser.screen.addShortcut2,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                tint = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f), circleBg, 3f, MaterialTheme.colorScheme.background),
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -1661,7 +1756,7 @@ private fun AddShortcutItemView(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Normal,
             fontSize = 11.5.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+            color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f), MaterialTheme.colorScheme.background),
             maxLines = 1,
             textAlign = TextAlign.Center
         )
@@ -1722,7 +1817,7 @@ private fun TabOverviewScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = onCloseOverview) {
+                    IconButton(onClick = onCloseOverview, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = L.common.back,
@@ -1735,7 +1830,7 @@ private fun TabOverviewScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Surface(
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(26.dp).clearAndSetSemantics {},
                             shape = RoundedCornerShape(6.dp),
                             color = Color.Transparent,
                             border = BorderStroke(1.8.dp, MaterialTheme.colorScheme.onSurface)
@@ -1754,12 +1849,13 @@ private fun TabOverviewScreen(
                             text = "Tabs (${tabs.size})",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                     }
 
-                    TextButton(onClick = onCloseOverview) {
-                        Text(L.common.done, fontWeight = FontWeight.Bold, color = ClaudeTerracotta)
+                    TextButton(onClick = onCloseOverview, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Text(L.common.done, fontWeight = FontWeight.Bold, color = ensureAccessibleContrast(ClaudeTerracotta, ai.antigem.theme.AppColors.card))
                     }
                 }
             }
@@ -1785,7 +1881,8 @@ private fun TabOverviewScreen(
                         onClick = { showDeleteAllConfirm = true },
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
-                        )
+                        ),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -1800,7 +1897,8 @@ private fun TabOverviewScreen(
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(20.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -1819,7 +1917,10 @@ private fun TabOverviewScreen(
         ) {
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectableGroup()
+                    .semantics { contentDescription = L.browser.screen.browserTabs },
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.Bottom)
             ) {
@@ -1848,12 +1949,13 @@ private fun TabOverviewScreen(
                     shape = RoundedCornerShape(12.dp),
                     color = ai.antigem.theme.AppColors.inverseSurface,
                     shadowElevation = 8.dp,
-                    border = BorderStroke(1.dp, ai.antigem.theme.AppColors.border)
+                    border = BorderStroke(1.dp, ai.antigem.theme.AppColors.border),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             text = L.browser.screen.tabClosed,
@@ -1861,14 +1963,11 @@ private fun TabOverviewScreen(
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Medium
                         )
-                        Text(
-                            text = L.common.undo,
-                            color = ClaudeTerracotta,
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
+                        Box(
                             modifier = Modifier
+                                .minTouchTarget(48.dp)
                                 .clip(RoundedCornerShape(4.dp))
-                                .clickable {
+                                .clickable(role = Role.Button) {
                                     val toRestore = recentlyClosedTab
                                     if (toRestore != null) {
                                         BrowserSessionManager.instance.addNewTab(
@@ -1881,8 +1980,16 @@ private fun TabOverviewScreen(
                                     showUndoSnackbar = false
                                     recentlyClosedTab = null
                                 }
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
+                                .padding(horizontal = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = L.common.undo,
+                                color = ensureAccessibleContrast(ClaudeTerracotta, ai.antigem.theme.AppColors.inverseSurface),
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -1952,7 +2059,19 @@ private fun TabCardView(
                     }
                 )
             }
-            .clickable { onClick() },
+            .semantics(mergeDescendants = true) {
+                customActions = listOf(
+                    CustomAccessibilityAction(L.browser.screen.closeTab) {
+                        onClose()
+                        true
+                    }
+                )
+            }
+            .selectable(
+                selected = isSelected,
+                role = Role.Tab,
+                onClick = onClick
+            ),
         shape = RoundedCornerShape(14.dp),
         color = ai.antigem.theme.AppColors.card,
         border = BorderStroke(
@@ -1966,9 +2085,9 @@ private fun TabCardView(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp)
+                    .heightIn(min = 48.dp)
                     .background(ai.antigem.theme.AppColors.fill)
-                    .padding(horizontal = 8.dp),
+                    .padding(start = 8.dp, end = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -2016,13 +2135,15 @@ private fun TabCardView(
 
                 IconButton(
                     onClick = onClose,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier
+                        .minTouchTarget(48.dp)
+                        .clearAndSetSemantics {}
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = L.browser.screen.closeTab,
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -2052,14 +2173,14 @@ private fun TabCardView(
                         Icon(
                             imageVector = if (tab.url.isBlank() || tab.url == "about:blank") Icons.Outlined.Home else Icons.Outlined.Language,
                             contentDescription = null,
-                            tint = ClaudeTerracotta.copy(alpha = 0.5f),
+                            tint = ClaudeTerracotta.copy(alpha = 0.72f),
                             modifier = Modifier.size(36.dp)
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = if (tab.url.isBlank() || tab.url == "about:blank") L.common.home else tab.url.substringAfter("://").substringBefore("/"),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            color = accessibleMutedColor(alpha = 0.72f, background = ai.antigem.theme.AppColors.background),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2120,6 +2241,10 @@ fun BrowserDiagnosticOverlay(
                 .fillMaxWidth()
                 .widthIn(max = 480.dp)
                 .verticalScroll(rememberScrollState())
+                .semantics {
+                    liveRegion = LiveRegionMode.Polite
+                    paneTitle = title
+                }
         ) {
             Column(
                 modifier = Modifier.padding(22.dp),
@@ -2148,7 +2273,8 @@ fun BrowserDiagnosticOverlay(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = ai.antigem.theme.AppColors.onBackground,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -2195,11 +2321,12 @@ fun BrowserDiagnosticOverlay(
                     tab.consoleLogs.toList().takeLast(5)
                 }
                 if (recentLogs.isNotEmpty()) {
+                    val logsTint = ensureAccessibleContrast(ClaudeTerracotta, ai.antigem.theme.AppColors.card)
                     Surface(
                         onClick = { showDetails = !showDetails },
                         shape = RoundedCornerShape(8.dp),
                         color = Color.Transparent,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                     ) {
                         Row(
                             modifier = Modifier.padding(vertical = 4.dp),
@@ -2210,12 +2337,12 @@ fun BrowserDiagnosticOverlay(
                                 text = if (showDetails) L.browser.screen.hideDiagnosticLogs else "Show Diagnostic Logs (${recentLogs.size})",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = ClaudeTerracotta
+                                color = logsTint
                             )
                             Icon(
                                 imageVector = if (showDetails) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                 contentDescription = null,
-                                tint = ClaudeTerracotta,
+                                tint = logsTint,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -2263,7 +2390,7 @@ fun BrowserDiagnosticOverlay(
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f).height(42.dp)
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp)
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -2273,7 +2400,7 @@ fun BrowserDiagnosticOverlay(
                     OutlinedButton(
                         onClick = onSearchGoogle,
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f).height(42.dp),
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -2286,7 +2413,7 @@ fun BrowserDiagnosticOverlay(
 
                 TextButton(
                     onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                 ) {
                     Text(L.common.dismiss, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -2308,6 +2435,8 @@ private fun BrowserAiLockOverlay(busy: Boolean, onUnlock: () -> Unit) {
         keyboardController?.hide()
         focusManager.clearFocus(force = true)
     }
+    val pillBg = Color(0xD91B1C1E)
+    val unlockColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, Color(0xFF1B1C1E), 4.5f)
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -2322,8 +2451,10 @@ private fun BrowserAiLockOverlay(busy: Boolean, onUnlock: () -> Unit) {
     ) {
         Surface(
             shape = RoundedCornerShape(50),
-            color = Color.Black.copy(alpha = 0.40f),
-            modifier = Modifier.padding(top = 10.dp)
+            color = pillBg,
+            modifier = Modifier
+                .padding(top = 10.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite }
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -2349,9 +2480,9 @@ private fun BrowserAiLockOverlay(busy: Boolean, onUnlock: () -> Unit) {
                     TextButton(
                         onClick = onUnlock,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        modifier = Modifier.height(28.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
-                        Text(L.browser.screen.unlock, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ai.antigem.theme.AppColors.warning)
+                        Text(L.browser.screen.unlock, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = unlockColor)
                     }
                 }
             }

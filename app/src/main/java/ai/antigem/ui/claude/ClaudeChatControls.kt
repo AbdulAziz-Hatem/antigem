@@ -61,6 +61,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,6 +88,10 @@ import ai.antigem.ui.agents.AgentSheetHeader
 import ai.antigem.ui.agents.SegmentedSelector
 import ai.antigem.ui.agents.SheetSectionLabel
 import ai.antigem.ui.components.ClaudeAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import ai.antigem.i18n.L
 
@@ -143,6 +155,11 @@ fun ClaudeControlsStrip(
         }
     }
 
+    val bg = MaterialTheme.colorScheme.background
+    val chipMuted = accessibleMutedColor(alpha = 0.75f, background = bg)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, bg, 4.5f)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, bg, 4.5f)
+
     Row(
         modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -152,8 +169,9 @@ fun ClaudeControlsStrip(
         ControlChip(
             text = permissionModeLabel(mode),
             icon = permissionModeIcon(mode),
-            color = permissionModeColor(mode),
+            color = ensureAccessibleContrast(permissionModeColor(mode), bg, 4.5f),
             highlighted = mode != "default",
+            modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.Button },
             onClick = { modeMenu = true }
         )
 
@@ -164,8 +182,9 @@ fun ClaudeControlsStrip(
                 // "Default" shows the level the process really runs when the CLI reported it
                 text = "Effort · ${effortLabel(effort)}" + if (effort == null && appliedEffort != null) " (${effortLabel(appliedEffort)})" else "",
                 icon = Icons.Outlined.Speed,
-                color = if (effort != null) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                color = if (effort != null) accessibleAccent else chipMuted,
                 highlighted = effort != null,
+                modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.Button },
                 onClick = { effortMenu = true }
             )
         }
@@ -177,8 +196,9 @@ fun ClaudeControlsStrip(
         ControlChip(
             text = if (thinking) L.common.thinking else L.claude.chatControls.noThinking,
             icon = Icons.Outlined.Lightbulb,
-            color = if (thinking) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            color = if (thinking) accessibleAccent else chipMuted,
             highlighted = thinking,
+            modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.Button },
             onClick = { backend.setThinking(!thinking) }
         )
 
@@ -189,7 +209,8 @@ fun ClaudeControlsStrip(
             ControlChip(
                 text = if (warm) L.claude.chatControls.cacheValueM(((left + 59_999) / 60_000)) else L.claude.chatControls.cacheCold,
                 icon = Icons.Outlined.Timer,
-                color = if (warm) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                color = if (warm) accessibleGreen else chipMuted,
+                modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.Button },
                 onClick = { showCache = true }
             )
         }
@@ -201,14 +222,20 @@ fun ClaudeControlsStrip(
             ControlChip(
                 text = "Context ${pct.toInt()}%",
                 icon = Icons.Outlined.DataUsage,
-                color = usageColor(pct / 100.0),
+                color = ensureAccessibleContrast(usageColor(pct / 100.0), bg, 4.5f),
+                modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.Button },
                 onClick = { showContext = true }
             )
         }
 
         // plan usage (live), only for Claude's own models
         limits["five_hour"]?.takeIf { !custom }?.let { w ->
-            ControlChip(text = "5h ${(w.utilization * 100).toInt()}%", icon = Icons.Outlined.Bolt, color = usageColor(w.utilization))
+            ControlChip(
+                text = "5h ${(w.utilization * 100).toInt()}%",
+                icon = Icons.Outlined.Bolt,
+                color = ensureAccessibleContrast(usageColor(w.utilization), bg, 4.5f),
+                modifier = Modifier.minTouchTarget(48.dp)
+            )
         }
     }
 
@@ -254,7 +281,7 @@ fun ClaudeControlsStrip(
                     fontSize = 13.5.sp
                 )
             },
-            confirmButton = { TextButton(onClick = { showCache = false }) { Text(L.common.ok) } }
+            confirmButton = { TextButton(onClick = { showCache = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.ok) } }
         )
     }
 }
@@ -336,11 +363,16 @@ fun ClaudeModelSheet(
                     { ai.antigem.ui.models.EditGroupsAction(editingGroups, ClaudeAccent) { editingGroups = !editingGroups } }
                 } else null
             )
+            val sheetBg = MaterialTheme.colorScheme.background
+            val mutedBg = accessibleMutedColor(alpha = 0.72f, background = sheetBg)
+            val mutedCard = accessibleMutedColor(alpha = 0.72f, background = cardColor, surfaceFallback = sheetBg)
+            val accessibleCardAmber = ensureAccessibleContrast(QuotaAmber, cardColor, 4.5f, sheetBg)
+            val accessibleAccentBg = ensureAccessibleContrast(ClaudeAccent, sheetBg, 4.5f)
             active?.let {
                 Text(
                     L.claude.chatControls.thisChatIsRunningValue(it),
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    color = mutedBg,
                     modifier = Modifier.padding(start = 48.dp)
                 )
             }
@@ -372,7 +404,12 @@ fun ClaudeModelSheet(
                     shape = RoundedCornerShape(14.dp),
                     color = cardColor,
                     border = BorderStroke(if (isSel) 1.5.dp else 1.dp, if (isSel) accent.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).semantics {
+                        if (groupControl == null) {
+                            role = Role.Button
+                            this.selected = isSel
+                        }
+                    }
                 ) {
                     Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -381,7 +418,7 @@ fun ClaudeModelSheet(
                                 if (desc.isNotBlank()) {
                                     Text(
                                         desc, fontSize = 12.sp, lineHeight = 16.sp,
-                                        color = if (warnDesc) ai.antigem.theme.QuotaAmber else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        color = if (warnDesc) accessibleCardAmber else mutedCard
                                     )
                                 }
                             }
@@ -405,26 +442,26 @@ fun ClaudeModelSheet(
                 Text(
                     L.claude.chatControls.signInToClaudeCodeSettings,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = mutedBg,
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )
             } else if (rows.isEmpty()) {
-                Surface(shape = RoundedCornerShape(14.dp), color = cardColor, modifier = Modifier.fillMaxWidth()) {
+                Surface(shape = RoundedCornerShape(14.dp), color = cardColor, modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                     Column(Modifier.padding(18.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         if (refreshing) {
                             androidx.compose.material3.CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = ClaudeAccent)
                             Spacer(Modifier.height(10.dp))
                             Text(L.claude.chatControls.loadingClaudesModels, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(L.claude.chatControls.claudeCodeIsStartingToList, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(L.claude.chatControls.claudeCodeIsStartingToList, fontSize = 12.sp, color = mutedCard)
                         } else {
                             Text(L.claude.chatControls.noModelsLoaded2, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text(
                                 modelsError ?: L.claude.chatControls.claudeCodeHasNotListedIts,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = mutedCard
                             )
                             Spacer(Modifier.height(10.dp))
-                            TextButton(onClick = { backend.refreshInfo(force = true) }) { Text(L.common.tryAgain, color = ClaudeAccent) }
+                            TextButton(onClick = { backend.refreshInfo(force = true) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.tryAgain, color = accessibleAccentBg) }
                         }
                     }
                 }
@@ -495,23 +532,29 @@ fun ClaudeModelSheet(
             SheetSectionLabel(L.common.reasoning)
             Surface(shape = RoundedCornerShape(14.dp), color = cardColor, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Lightbulb, null, tint = if (thinking) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .accessibleToggleRow(checked = thinking, role = Role.Switch) { backend.setThinking(!thinking) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Outlined.Lightbulb, null, tint = if (thinking) ensureAccessibleContrast(ClaudeAccent, cardColor, 3.0f, sheetBg) else mutedCard, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                             Text(L.common.thinking, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(L.claude.chatControls.reasonBeforeAnsweringShownAsA, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                            Text(L.claude.chatControls.reasonBeforeAnsweringShownAsA, fontSize = 11.5.sp, color = mutedCard)
                         }
-                        Switch(checked = thinking, onCheckedChange = { backend.setThinking(it) }, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
+                        Switch(checked = thinking, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
                     }
                     if (info?.supportsFastMode == true) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                         Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.Bolt, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Outlined.Bolt, null, tint = mutedCard, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(L.claude.chatControls.fastModeValue(fast.replaceFirstChar { it.uppercase() }), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                Text(L.claude.chatControls.sendFastInTheChatTo, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                                Text(L.claude.chatControls.sendFastInTheChatTo, fontSize = 11.5.sp, color = mutedCard)
                             }
                         }
                     }
@@ -526,6 +569,7 @@ fun ClaudeModelSheet(
 fun ClaudeContextDialog(backend: ClaudeChatBackend, onDismiss: () -> Unit) {
     val ctx by backend.contextUsage.collectAsState()
     LaunchedEffect(Unit) { backend.refreshContextUsage() }
+    val muted = accessibleMutedColor(alpha = 0.72f)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(L.claude.chatControls.contextWindow, fontWeight = FontWeight.Bold) },
@@ -541,20 +585,20 @@ fun ClaudeContextDialog(backend: ClaudeChatBackend, onDismiss: () -> Unit) {
                     c.categories.forEach { cat ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(cat.name, fontSize = 12.5.sp)
-                            Text(compactTokens(cat.tokens), fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(compactTokens(cat.tokens), fontSize = 12.5.sp, color = muted)
                         }
                     }
                     Text(
                         L.claude.chatControls.sendCompactToSummarizeTheConversation,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        color = muted,
                         modifier = Modifier.padding(top = 6.dp)
                     )
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { backend.refreshContextUsage() }) { Text(L.common.refresh) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.close) } }
+        confirmButton = { TextButton(onClick = { backend.refreshContextUsage() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.refresh) } },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) } }
     )
 }
 
@@ -577,7 +621,7 @@ fun ClaudeUsageDialog(account: ClaudeAccountManager, backend: ClaudeChatBackend,
                     fontSize = 13.sp
                 )
             },
-            confirmButton = { TextButton(onClick = onDismiss) { Text(L.common.close) } }
+            confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) } }
         )
         return
     }
@@ -587,6 +631,8 @@ fun ClaudeUsageDialog(account: ClaudeAccountManager, backend: ClaudeChatBackend,
         delay(1_500)
         loading = false
     }
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -596,7 +642,7 @@ fun ClaudeUsageDialog(account: ClaudeAccountManager, backend: ClaudeChatBackend,
                 Text(
                     listOfNotNull(L.common.claudeCode, plan?.let { "$it plan" }).joinToString(" · "),
                     fontSize = 12.sp,
-                    color = ClaudeAccent
+                    color = accessibleAccent
                 )
             }
         },
@@ -615,7 +661,7 @@ fun ClaudeUsageDialog(account: ClaudeAccountManager, backend: ClaudeChatBackend,
                         // a model's own weekly share (Fable on Max), on top of the all-models limit
                         ClaudeQuotaGroups.scopedLimits(rl).forEach { UsageBar("This week (${it.name})", it.used, formatReset(it.resetsAt)) }
                     }
-                    loading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    loading -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                         androidx.compose.material3.CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = ClaudeAccent)
                         Spacer(Modifier.width(10.dp))
                         Text(L.claude.chatControls.loadingPlanUsage, fontSize = 13.sp)
@@ -626,18 +672,18 @@ fun ClaudeUsageDialog(account: ClaudeAccountManager, backend: ClaudeChatBackend,
                 }
                 HorizontalDivider()
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(L.claude.chatControls.thisChat, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f))
+                    Text(L.claude.chatControls.thisChat, fontSize = 13.sp, color = accessibleMutedColor(alpha = 0.75f))
                     Text(if (cost > 0) String.format(java.util.Locale.US, "$%.2f", cost) else "–", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
                 Text(
                     L.claude.chatControls.costIsWhatThisChatWould,
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    color = muted
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { account.refreshUsage(force = true) }) { Text(L.common.refresh) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.close) } }
+        confirmButton = { TextButton(onClick = { account.refreshUsage(force = true) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.refresh) } },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) } }
     )
 }
 
@@ -657,7 +703,8 @@ fun ClaudeProviderSwitchDialog(backend: ClaudeChatBackend) {
             wait--
         }
     }
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
     AlertDialog(
         onDismissRequest = { backend.cancelProviderSwitch() },
         title = { Text(L.claude.chatControls.switchProviderInThisChat, fontWeight = FontWeight.Bold) },
@@ -667,7 +714,7 @@ fun ClaudeProviderSwitchDialog(backend: ClaudeChatBackend) {
                 Text(L.claude.chatControls.claudeCodeIsStoppedAndStarted, fontSize = 13.sp, color = muted)
                 Text(
                     L.claude.chatControls.theWholeConversationValueIsSent((pending.resendTokens?.let { L.claude.chatControls.aboutCompacttokensTokens(compactTokens(it)) } ?: "")),
-                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = QuotaRed
+                    fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = accessibleRed
                 )
                 Text(L.claude.chatControls.thinkingEffortAndAutoModeMay, fontSize = 13.sp, color = muted)
                 Text(L.claude.chatControls.startingANewChatIsUsually, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
@@ -677,13 +724,14 @@ fun ClaudeProviderSwitchDialog(backend: ClaudeChatBackend) {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Button(
                     onClick = { backend.startNewChatWithPendingModel() },
+                    modifier = Modifier.minTouchTarget(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)
                 ) { Text(L.claude.chatControls.startANewChatWithIt) }
-                TextButton(onClick = { backend.cancelProviderSwitch() }) { Text(L.common.cancel) }
-                TextButton(onClick = { backend.confirmProviderSwitch() }, enabled = wait == 0) {
+                TextButton(onClick = { backend.cancelProviderSwitch() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
+                TextButton(onClick = { backend.confirmProviderSwitch() }, enabled = wait == 0, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(
                         (if (running) L.claude.chatControls.switchAfterThisReply else L.claude.chatControls.switchAnyway) + if (wait > 0) " ($wait)" else "",
-                        color = if (wait == 0) QuotaRed else QuotaRed.copy(alpha = 0.4f),
+                        color = if (wait == 0) accessibleRed else muted,
                         fontSize = 12.5.sp
                     )
                 }
@@ -696,10 +744,11 @@ fun ClaudeProviderSwitchDialog(backend: ClaudeChatBackend) {
 /** In place of the input in a subagent's chat: it can be read, not continued. */
 @Composable
 fun ReadOnlySubagentNote(agentType: String?, modifier: Modifier = Modifier) {
+    val noteBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     Surface(
         modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        color = noteBg
     ) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.AccountTree, null, tint = ClaudeAccent, modifier = Modifier.size(16.dp))
@@ -707,7 +756,7 @@ fun ReadOnlySubagentNote(agentType: String?, modifier: Modifier = Modifier) {
             Text(
                 text = L.claude.chatControls.valueReadOnlyItWorkedFor((agentType?.takeIf { it.isNotBlank() }?.let { "$it subagent" } ?: L.claude.chatControls.subagent)),
                 fontSize = 12.5.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                color = accessibleMutedColor(alpha = 0.75f, background = noteBg)
             )
         }
     }
@@ -722,13 +771,18 @@ fun ReadOnlySubagentNote(agentType: String?, modifier: Modifier = Modifier) {
 private fun SubagentsChip(subagents: List<ai.antigem.domain.model.Conversation>, onOpen: (String) -> Unit) {
     val running = subagents.count { it.isRunning }
     val green = ai.antigem.theme.AppColors.success
-    val color = if (running > 0) green else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+    val chipBg = if (running > 0) green.copy(alpha = 0.14f) else MaterialTheme.colorScheme.background
+    val color = if (running > 0) ensureAccessibleContrast(green, chipBg, 4.5f, MaterialTheme.colorScheme.background) else accessibleMutedColor(alpha = 0.75f, background = chipBg)
     var open by remember { mutableStateOf(false) }
     Box {
         Surface(
-            modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { open = true },
+            modifier = Modifier
+                .minTouchTarget(48.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(role = Role.Button) { open = true }
+                .semantics(mergeDescendants = true) {},
             shape = RoundedCornerShape(14.dp),
-            color = if (running > 0) green.copy(alpha = 0.14f) else MaterialTheme.colorScheme.background,
+            color = chipBg,
             border = BorderStroke(1.dp, if (running > 0) green.copy(alpha = 0.45f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
         ) {
             Row(Modifier.padding(horizontal = 9.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -736,6 +790,7 @@ private fun SubagentsChip(subagents: List<ai.antigem.domain.model.Conversation>,
                     Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape)
                         .background(if (running > 0) green else Color.White)
                         .border(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), androidx.compose.foundation.shape.CircleShape)
+                        .clearAndSetSemantics {}
                 )
                 Spacer(Modifier.width(5.dp))
                 Text(if (running == 1) "1 agent" else L.claude.chatControls.runningAgents(running), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = color, maxLines = 1)
@@ -788,27 +843,28 @@ private fun SubagentsMenuHeader(total: Int, running: Int) {
     Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 12.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.AutoMirrored.Filled.CallSplit, null, tint = ClaudeAccent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(8.dp))
-        Text(L.claude.chatControls.subagents, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text(L.claude.chatControls.subagents, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.width(6.dp))
         Text(
             "$total", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(muted.copy(alpha = 0.08f)).padding(horizontal = 7.dp, vertical = 1.dp)
         )
         Spacer(Modifier.weight(1f))
+        val statusBg = if (running > 0) green.copy(alpha = 0.14f) else muted.copy(alpha = 0.06f)
         Row(
             Modifier.clip(RoundedCornerShape(10.dp))
-                .background(if (running > 0) green.copy(alpha = 0.14f) else muted.copy(alpha = 0.06f))
+                .background(statusBg)
                 .padding(horizontal = 9.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (running > 0) {
-                Box(Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(green))
+                Box(Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(green).clearAndSetSemantics {})
                 Spacer(Modifier.width(5.dp))
             }
             Text(
                 if (running > 0) L.claude.chatControls.runningRunning(running) else L.claude.chatControls.allDone,
                 fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                color = if (running > 0) green else MaterialTheme.colorScheme.onSurfaceVariant
+                color = if (running > 0) ensureAccessibleContrast(green, statusBg, 4.5f, MaterialTheme.colorScheme.surfaceContainerHigh) else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -820,13 +876,17 @@ private fun SubagentTreeRow(row: SubagentTreeItem, onClick: () -> Unit) {
     val green = ai.antigem.theme.AppColors.success
     val nested = row.depth > 0
     val guide = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
+    val menuBg = MaterialTheme.colorScheme.surfaceContainerHigh
+    val accessibleGreen = ensureAccessibleContrast(green, menuBg, 4.5f)
+    val accessibleMuted = accessibleMutedColor(alpha = 0.72f, background = menuBg)
     val name = a.subagentRole?.takeIf { it.isNotBlank() } ?: a.title.ifBlank { L.claude.chatControls.subagent }
     Row(
         Modifier
             .fillMaxWidth()
+            .minTouchTarget(48.dp)
             .padding(horizontal = 6.dp)
             .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             // the tree's guide lines: one per level above this row
             .drawBehind {
                 for (i in 0 until row.depth) {
@@ -837,7 +897,7 @@ private fun SubagentTreeRow(row: SubagentTreeItem, onClick: () -> Unit) {
             .padding(start = (10 + row.depth * 18).dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box {
+        Box(Modifier.clearAndSetSemantics {}) {
             Box(
                 Modifier.size(28.dp).clip(RoundedCornerShape(8.dp))
                     .background(if (nested) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f) else ClaudeAccent.copy(alpha = 0.13f)),
@@ -863,18 +923,19 @@ private fun SubagentTreeRow(row: SubagentTreeItem, onClick: () -> Unit) {
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 a.subagentTypeName?.takeIf { it.isNotBlank() }?.let { type ->
+                    val typeBg = ClaudeAccent.copy(alpha = 0.12f)
                     Text(
-                        type, fontSize = 10.5.sp, color = ClaudeAccent, maxLines = 1,
+                        type, fontSize = 10.5.sp, color = ensureAccessibleContrast(ClaudeAccent, typeBg, 4.5f, menuBg), maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                         modifier = Modifier.widthIn(max = 120.dp).clip(RoundedCornerShape(6.dp))
-                            .background(ClaudeAccent.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 1.dp)
+                            .background(typeBg).padding(horizontal = 6.dp, vertical = 1.dp)
                     )
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(
                     if (a.isRunning) L.claude.chatControls.running else L.claude.chatControls.done, fontSize = 11.sp,
                     fontWeight = if (a.isRunning) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (a.isRunning) green else MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (a.isRunning) accessibleGreen else MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (row.children > 0) {
                     Spacer(Modifier.width(6.dp))
@@ -884,8 +945,8 @@ private fun SubagentTreeRow(row: SubagentTreeItem, onClick: () -> Unit) {
             }
         }
         Spacer(Modifier.width(8.dp))
-        Text(subagentAge(a.updatedAt), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
-        Icon(Icons.Outlined.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+        Text(subagentAge(a.updatedAt), fontSize = 11.sp, color = accessibleMuted)
+        Icon(Icons.Outlined.ChevronRight, null, tint = accessibleMuted, modifier = Modifier.size(18.dp))
     }
 }
 

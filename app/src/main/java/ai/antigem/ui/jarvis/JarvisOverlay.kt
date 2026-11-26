@@ -28,8 +28,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -59,6 +61,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +82,8 @@ import ai.antigem.data.jarvis.JarvisController
 import ai.antigem.data.jarvis.JarvisController.Phase
 import ai.antigem.data.jarvis.JarvisPreferences
 import ai.antigem.data.jarvis.JarvisTasks
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
@@ -271,7 +284,14 @@ private fun OrbLayer(
             } else {
                 Box(
                     Modifier
+                        .minTouchTarget(48.dp)
                         .size(orbDp)
+                        .semantics(mergeDescendants = true) {
+                            role = Role.Button
+                            contentDescription = L.common.jarvis
+                            onClick(label = L.jarvis.panel.talk) { onTap(); true }
+                            onLongClick(label = L.common.open) { JarvisController.panelOpen.value = true; true }
+                        }
                         .pointerInput(orbPx) {
                             detectDragGestures(
                                 onDragEnd = { snap() },
@@ -391,7 +411,7 @@ private fun SendMeter(progress: Float, holding: Boolean, auto: Boolean) {
             }
             Spacer(Modifier.height(4.dp))
         }
-        Text(hint, color = Color.White.copy(alpha = 0.5f), fontSize = 10.5.sp)
+        Text(hint, color = ensureAccessibleContrast(Color.White.copy(alpha = 0.72f), GlassBottom, 4.5f), fontSize = 10.5.sp)
     }
 }
 
@@ -403,24 +423,30 @@ internal fun StatusPill(phase: Phase, steps: List<JarvisController.Step>) {
     Row(
         Modifier
             .widthIn(max = 300.dp)
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(50))
             .background(Brush.horizontalGradient(listOf(GlassTop, GlassBottom)))
             .border(1.dp, accent.copy(alpha = 0.45f), RoundedCornerShape(50))
-            .clickable { JarvisController.panelOpen.value = true }
-            .padding(start = 12.dp, end = if (phase == Phase.THINKING) 6.dp else 14.dp, top = 6.dp, bottom = 6.dp),
+            .clickable(role = Role.Button) { JarvisController.panelOpen.value = true }
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+            .padding(start = 12.dp, end = if (phase == Phase.THINKING) 2.dp else 14.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         PulseDot(accent, working = phase == Phase.THINKING)
         Spacer(Modifier.width(8.dp))
-        Crossfade(targetState = text, animationSpec = tween(220), label = "pill") { t ->
+        Crossfade(targetState = text, animationSpec = tween(220), label = "pill", modifier = Modifier.weight(1f, fill = false)) { t ->
             Text(t, color = Color.White, fontSize = 12.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (phase == Phase.THINKING) {
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
             Box(
-                Modifier.size(24.dp).clip(CircleShape).background(Danger.copy(alpha = 0.16f)).clickable { JarvisController.stopEverything() },
+                Modifier.minTouchTarget(48.dp).clip(CircleShape).clickable(role = Role.Button) { JarvisController.stopEverything() },
                 contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.Stop, L.common.stop, tint = Danger, modifier = Modifier.size(14.dp)) }
+            ) {
+                Box(Modifier.size(24.dp).clip(CircleShape).background(Danger.copy(alpha = 0.16f)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Stop, L.common.stop, tint = Danger, modifier = Modifier.size(14.dp))
+                }
+            }
         }
     }
 }
@@ -431,22 +457,29 @@ internal fun NoticeChip(n: JarvisController.Notice, onAction: (String) -> Unit, 
     Row(
         modifier
             .widthIn(max = 320.dp)
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(16.dp))
             .background(Color(0xF0101827))
             .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-            .clickable { JarvisController.clearNotice() }
+            .clickable(role = Role.Button) { JarvisController.clearNotice() }
+            .semantics { liveRegion = LiveRegionMode.Polite }
             .padding(start = 12.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(color))
+        Box(Modifier.size(8.dp).clip(CircleShape).background(color).clearAndSetSemantics {})
         Spacer(Modifier.width(8.dp))
         Text(n.text, color = Color.White, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         n.action?.let { a ->
             Spacer(Modifier.width(8.dp))
-            Text(
-                when { a == "mic" -> L.common.allow; a.startsWith("chat:") -> L.common.open; else -> L.common.setUp }, color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clip(RoundedCornerShape(50)).background(color).clickable { onAction(a) }.padding(horizontal = 10.dp, vertical = 5.dp)
-            )
+            Box(
+                Modifier.minTouchTarget(48.dp).clip(RoundedCornerShape(50)).clickable(role = Role.Button) { onAction(a) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    when { a == "mic" -> L.common.allow; a.startsWith("chat:") -> L.common.open; else -> L.common.setUp }, color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(color).padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+            }
         }
     }
 }
@@ -456,14 +489,15 @@ internal fun TaskChip(t: JarvisTasks.Task) {
     val c = taskColor(t.state)
     Row(
         Modifier
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(50))
             .background(c.copy(alpha = 0.12f))
             .border(1.dp, c.copy(alpha = 0.35f), RoundedCornerShape(50))
-            .clickable { JarvisController.panelOpen.value = true }
+            .clickable(role = Role.Button) { JarvisController.panelOpen.value = true }
             .padding(horizontal = 8.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(6.dp).clip(CircleShape).background(c))
+        Box(Modifier.size(6.dp).clip(CircleShape).background(c).clearAndSetSemantics {})
         Spacer(Modifier.width(5.dp))
         Text(t.title.take(16), color = Color.White.copy(alpha = 0.85f), fontSize = 10.5.sp, maxLines = 1)
     }
@@ -482,7 +516,7 @@ internal fun taskColor(s: JarvisTasks.State): Color = when (s) {
 /** What the user can do right now: cancel / wait / send while listening, stop / reply while Jarvis speaks. */
 @Composable
 private fun ActionButtons(phase: Phase, holding: Boolean, auto: Boolean, quiet: Boolean, onTap: () -> Unit, big: Boolean) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         when (phase) {
             Phase.LISTENING -> {
                 PillButton(L.common.cancel, Icons.Filled.Close, Danger, big) { JarvisController.cancelCapture() }
@@ -501,12 +535,23 @@ private fun ActionButtons(phase: Phase, holding: Boolean, auto: Boolean, quiet: 
             // send mode, pause length, voice… without leaving the card
             Box(
                 Modifier
-                    .size(if (big) 42.dp else 32.dp)
+                    .minTouchTarget(48.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.06f))
-                    .clickable { JarvisController.quickSettingsOpen.value = true },
+                    .clickable(role = Role.Button) { JarvisController.quickSettingsOpen.value = true },
                 contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.Tune, L.common.quickSettings, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(if (big) 20.dp else 16.dp)) }
+            ) {
+                Box(
+                    Modifier.size(if (big) 42.dp else 32.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.06f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.Tune,
+                        L.common.quickSettings,
+                        tint = ensureAccessibleContrast(Color.White.copy(alpha = 0.8f), GlassBottom, 4.5f),
+                        modifier = Modifier.size(if (big) 20.dp else 16.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -515,14 +560,15 @@ private fun ActionButtons(phase: Phase, holding: Boolean, auto: Boolean, quiet: 
 internal fun PillButton(label: String, icon: ImageVector, color: Color, big: Boolean, filled: Boolean = false, onClick: () -> Unit) {
     Row(
         Modifier
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(50))
             .background(if (filled) color.copy(alpha = 0.22f) else Color.White.copy(alpha = 0.06f))
             .border(1.dp, color.copy(alpha = if (filled) 0.7f else 0.45f), RoundedCornerShape(50))
-            .clickable { onClick() }
+            .clickable(role = Role.Button) { onClick() }
             .padding(horizontal = if (big) 20.dp else 12.dp, vertical = if (big) 10.dp else 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(if (big) 20.dp else 15.dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(if (big) 20.dp else 15.dp))
         Spacer(Modifier.width(5.dp))
         Text(label, color = Color.White, fontSize = if (big) 14.sp else 12.sp, fontWeight = FontWeight.Medium)
     }
@@ -547,7 +593,10 @@ private fun StepsBlock(phase: Phase, steps: List<JarvisController.Step>, big: Bo
             PulseDot(accent, working = phase != Phase.IDLE)
             Spacer(Modifier.width(9.dp))
             Crossfade(targetState = text, animationSpec = tween(260), label = "step") { t ->
-                Text(t, color = Color.White, fontSize = if (big) 17.sp else 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    t, color = Color.White, fontSize = if (big) 17.sp else 14.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                )
             }
         }
         if (phase == Phase.THINKING) {
@@ -555,7 +604,7 @@ private fun StepsBlock(phase: Phase, steps: List<JarvisController.Step>, big: Bo
             previous.forEachIndexed { i, s ->
                 Text(
                     "✓  ${s.text}",
-                    color = Color.White.copy(alpha = (0.5f - i * 0.14f).coerceAtLeast(0.15f)),
+                    color = ensureAccessibleContrast(Color.White.copy(alpha = (0.72f - i * 0.08f).coerceAtLeast(0.56f)), GlassBottom, 4.5f),
                     fontSize = if (big) 13.sp else 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = 3.dp, start = if (big) 0.dp else 19.dp)
                 )
@@ -568,7 +617,7 @@ private fun StepsBlock(phase: Phase, steps: List<JarvisController.Step>, big: Bo
 internal fun PulseDot(color: Color, working: Boolean) {
     // nothing animates unless Jarvis is actually working (an infinite transition costs battery even when idle)
     if (!working) {
-        Canvas(Modifier.size(10.dp)) {
+        Canvas(Modifier.size(10.dp).clearAndSetSemantics {}) {
             drawCircle(color.copy(alpha = 0.6f), radius = size.minDimension / 3.2f, center = Offset(size.width / 2, size.height / 2))
         }
         return
@@ -576,7 +625,7 @@ internal fun PulseDot(color: Color, working: Boolean) {
     val t = rememberInfiniteTransition(label = "dot")
     val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "a")
     val s by t.animateFloat(0.85f, 1.25f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "s")
-    Canvas(Modifier.size(10.dp)) {
+    Canvas(Modifier.size(10.dp).clearAndSetSemantics {}) {
         val c = Offset(size.width / 2, size.height / 2)
         drawCircle(color.copy(alpha = 0.28f * a), radius = size.minDimension / 2 * s * 1.5f, center = c)
         drawCircle(color.copy(alpha = a), radius = size.minDimension / 3.2f, center = c)
@@ -626,7 +675,7 @@ private fun FullScreenJarvis(
 fun SiriWaves(phase: Phase, level: Float, modifier: Modifier = Modifier) {
     if (phase == Phase.IDLE || phase == Phase.OFF) {
         // idle: one still, faint line; no animation runs
-        Canvas(modifier) {
+        Canvas(modifier.clearAndSetSemantics {}) {
             val y = size.height / 2f
             drawLine(
                 Brush.horizontalGradient(listOf(Color.Transparent, Cyan.copy(alpha = 0.5f), Color.Transparent), 0f, size.width),
@@ -653,7 +702,7 @@ fun SiriWaves(phase: Phase, level: Float, modifier: Modifier = Modifier) {
         Phase.SPEAKING -> listOf(Green, Cyan, Blue)
         else -> listOf(Cyan, Blue, Violet)
     }
-    Canvas(modifier) {
+    Canvas(modifier.clearAndSetSemantics {}) {
         val w = size.width
         val h = size.height
         val mid = h / 2f
@@ -685,7 +734,7 @@ fun SiriWaves(phase: Phase, level: Float, modifier: Modifier = Modifier) {
  */
 @Composable
 fun IdleOrb(size: Dp, activeTasks: Int, attention: Boolean) {
-    Canvas(Modifier.size(size)) {
+    Canvas(Modifier.size(size).clearAndSetSemantics {}) {
         val c = Offset(this.size.width / 2, this.size.height / 2)
         val r = this.size.minDimension / 2
         drawCircle(Color.Black.copy(alpha = 0.28f), radius = r, center = c.copy(y = c.y + r * 0.08f))
@@ -711,7 +760,7 @@ fun IdleOrb(size: Dp, activeTasks: Int, attention: Boolean) {
 /** Small marker on the active orb: violet with the number of running tasks, amber when something needs the user. */
 @Composable
 internal fun TaskBadge(orb: Dp, count: Int, attention: Boolean) {
-    Box(Modifier.size(orb), contentAlignment = Alignment.TopEnd) {
+    Box(Modifier.size(orb).clearAndSetSemantics {}, contentAlignment = Alignment.TopEnd) {
         Box(
             Modifier.size(16.dp).clip(CircleShape).background(if (attention) Amber else Violet).border(1.5.dp, Color(0xFF0A0F1C), CircleShape),
             contentAlignment = Alignment.Center
@@ -735,7 +784,7 @@ fun JarvisOrb(phase: Phase, level: Float, size: Dp) {
     val glance by t.animateFloat(-1f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "glance")
     val smooth by animateFloatAsState(level, tween(90), label = "level")
     val color = accentOf(phase)
-    Canvas(Modifier.size(size)) {
+    Canvas(Modifier.size(size).clearAndSetSemantics {}) {
         val c = Offset(this.size.width / 2, this.size.height / 2)
         val r = this.size.minDimension / 2
         val grow = when (phase) {

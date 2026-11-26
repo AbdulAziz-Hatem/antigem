@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +25,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +42,10 @@ import ai.antigem.data.local.LocalEnvironmentManager
 import ai.antigem.data.local.LocalInstallerState
 import ai.antigem.data.preferences.AuthPreferences
 import ai.antigem.theme.*
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -134,7 +145,8 @@ fun LocalToolsInstallDialog(
                                 is LocalInstallerState.Error -> Color.Red.copy(alpha = 0.15f)
                                 else -> ClaudeTerracotta.copy(alpha = 0.15f)
                             }
-                        ),
+                        )
+                        .clearAndSetSemantics {},
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -165,7 +177,8 @@ fun LocalToolsInstallDialog(
                     },
                     fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 Text(
@@ -177,14 +190,20 @@ fun LocalToolsInstallDialog(
                     },
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 14.dp)
+                    modifier = Modifier.padding(top = 4.dp, bottom = 14.dp).semantics { liveRegion = LiveRegionMode.Polite }
                 )
 
                 // Device Hardware Capabilities Card
                 val hardwareInfo = remember { LocalEnvironmentManager.getDeviceHardwareInfo() }
+                val surfaceBg = MaterialTheme.colorScheme.surface
+                val hwCardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                val pillBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                val accessibleTerracotta = ensureAccessibleContrast(ClaudeTerracotta, pillBg, 4.5f, surfaceBg)
+                val accessibleGreen = ensureAccessibleContrast(QuotaGreen, surfaceBg, 4.5f, surfaceBg)
+                val accessibleRed = ensureAccessibleContrast(Color.Red, surfaceBg, 4.5f, surfaceBg)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    color = hwCardBg,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -202,14 +221,15 @@ fun LocalToolsInstallDialog(
                                 imageVector = Icons.Outlined.Memory,
                                 contentDescription = null,
                                 modifier = Modifier.size(15.dp),
-                                tint = ClaudeTerracotta
+                                tint = ensureAccessibleContrast(ClaudeTerracotta, hwCardBg, 3.0f, surfaceBg)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = L.settings.localToolsInstall.deviceHardwareCapabilities,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                         }
 
@@ -222,7 +242,7 @@ fun LocalToolsInstallDialog(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                    .background(pillBg)
                                     .padding(vertical = 5.dp, horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -234,23 +254,22 @@ fun LocalToolsInstallDialog(
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
-                                        color = ClaudeTerracotta
+                                        color = accessibleTerracotta
                                     )
                                 }
                             }
 
                             // Virtual Address Space Pill
+                            val vaBg = when (hardwareInfo.vaBits) {
+                                48 -> QuotaGreen.copy(alpha = 0.12f)
+                                39 -> ai.antigem.theme.AppColors.warning.copy(alpha = 0.12f)
+                                else -> pillBg
+                            }
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        when (hardwareInfo.vaBits) {
-                                            48 -> QuotaGreen.copy(alpha = 0.12f)
-                                            39 -> ai.antigem.theme.AppColors.warning.copy(alpha = 0.12f)
-                                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                        }
-                                    )
+                                    .background(vaBg)
                                     .padding(vertical = 5.dp, horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -266,8 +285,8 @@ fun LocalToolsInstallDialog(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = when (hardwareInfo.vaBits) {
-                                            48 -> QuotaGreen
-                                            39 -> ai.antigem.theme.AppColors.warning
+                                            48 -> ensureAccessibleContrast(QuotaGreen, vaBg, 4.5f, surfaceBg)
+                                            39 -> ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, vaBg, 4.5f, surfaceBg)
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                     )
@@ -275,17 +294,16 @@ fun LocalToolsInstallDialog(
                             }
 
                             // LSE Atomics Pill
+                            val atomicsBg = when (hardwareInfo.hasAtomics) {
+                                true -> QuotaGreen.copy(alpha = 0.12f)
+                                false -> ai.antigem.theme.AppColors.danger.copy(alpha = 0.12f)
+                                else -> pillBg
+                            }
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(
-                                        when (hardwareInfo.hasAtomics) {
-                                            true -> QuotaGreen.copy(alpha = 0.12f)
-                                            false -> ai.antigem.theme.AppColors.danger.copy(alpha = 0.12f)
-                                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                        }
-                                    )
+                                    .background(atomicsBg)
                                     .padding(vertical = 5.dp, horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -301,8 +319,8 @@ fun LocalToolsInstallDialog(
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = when (hardwareInfo.hasAtomics) {
-                                            true -> QuotaGreen
-                                            false -> ai.antigem.theme.AppColors.danger
+                                            true -> ensureAccessibleContrast(QuotaGreen, atomicsBg, 4.5f, surfaceBg)
+                                            false -> ensureAccessibleContrast(ai.antigem.theme.AppColors.danger, atomicsBg, 4.5f, surfaceBg)
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                     )
@@ -315,21 +333,22 @@ fun LocalToolsInstallDialog(
                 // Dynamic Step / Progress Content
                 when (val state = installerState) {
                     is LocalInstallerState.Idle -> {
+                        val optionBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().selectableGroup(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             // Option 1: Auto Download from GitHub (Recommended)
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                color = optionBg,
                                 border = BorderStroke(
                                     1.dp,
                                     if (selectedSourceType == 0) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedSourceType = 0 }
+                                    .accessibleSelectionRow(selected = selectedSourceType == 0, role = Role.RadioButton) { selectedSourceType = 0 }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
@@ -337,7 +356,7 @@ fun LocalToolsInstallDialog(
                                 ) {
                                     RadioButton(
                                         selected = selectedSourceType == 0,
-                                        onClick = { selectedSourceType = 0 },
+                                        onClick = null,
                                         colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -351,13 +370,14 @@ fun LocalToolsInstallDialog(
                                                 modifier = Modifier.weight(1f, fill = false)
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
+                                            val recBg = QuotaGreen.copy(alpha = 0.15f)
                                             Box(
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(4.dp))
-                                                    .background(QuotaGreen.copy(alpha = 0.15f))
+                                                    .background(recBg)
                                                     .padding(horizontal = 5.dp, vertical = 1.dp)
                                             ) {
-                                                Text(L.common.recommended, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = QuotaGreen)
+                                                Text(L.common.recommended, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = ensureAccessibleContrast(QuotaGreen, recBg, 4.5f, surfaceBg))
                                             }
                                         }
                                         Text(
@@ -372,17 +392,18 @@ fun LocalToolsInstallDialog(
                             // The rooted Ubuntu chroot: opens its own full-page setup
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                color = optionBg,
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showChrootSetup = true }
+                                    .minTouchTarget(48.dp)
+                                    .clickable(role = Role.Button) { showChrootSetup = true }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Outlined.Storage, contentDescription = null, tint = ClaudeTerracotta, modifier = Modifier.padding(horizontal = 12.dp).size(20.dp))
+                                    Icon(Icons.Outlined.Storage, contentDescription = null, tint = ensureAccessibleContrast(ClaudeTerracotta, optionBg, 3.0f, surfaceBg), modifier = Modifier.padding(horizontal = 12.dp).size(20.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = L.common.ubuntuChrootRoot,
@@ -403,20 +424,24 @@ fun LocalToolsInstallDialog(
                             // Option 2: Local ZIP File from Storage
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                color = optionBg,
                                 border = BorderStroke(
                                     1.dp,
                                     if (selectedSourceType == 2) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { selectedSourceType = 2 }
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .accessibleSelectionRow(selected = selectedSourceType == 2, role = Role.RadioButton) { selectedSourceType = 2 },
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         RadioButton(
                                             selected = selectedSourceType == 2,
-                                            onClick = { selectedSourceType = 2 },
+                                            onClick = null,
                                             colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
@@ -438,7 +463,7 @@ fun LocalToolsInstallDialog(
                                         Spacer(modifier = Modifier.height(8.dp))
                                         OutlinedButton(
                                             onClick = { zipPickerLauncher.launch("*/*") },
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp),
                                             shape = RoundedCornerShape(8.dp)
                                         ) {
                                             Icon(imageVector = Icons.Outlined.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -453,7 +478,7 @@ fun LocalToolsInstallDialog(
                                                 text = L.settings.localToolsInstall.selectedValue(selectedFileUri.toString().substringAfterLast("/")),
                                                 fontSize = 10.5.sp,
                                                 fontFamily = FontFamily.Monospace,
-                                                color = QuotaGreen,
+                                                color = ensureAccessibleContrast(QuotaGreen, optionBg, 4.5f, surfaceBg),
                                                 modifier = Modifier.padding(top = 4.dp)
                                             )
                                         }
@@ -464,14 +489,14 @@ fun LocalToolsInstallDialog(
                             // Option 3: Base Minimum Termux
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                color = optionBg,
                                 border = BorderStroke(
                                     1.dp,
                                     if (selectedSourceType == 1) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedSourceType = 1 }
+                                    .accessibleSelectionRow(selected = selectedSourceType == 1, role = Role.RadioButton) { selectedSourceType = 1 }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(12.dp),
@@ -479,7 +504,7 @@ fun LocalToolsInstallDialog(
                                 ) {
                                     RadioButton(
                                         selected = selectedSourceType == 1,
-                                        onClick = { selectedSourceType = 1 },
+                                        onClick = null,
                                         colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
@@ -493,13 +518,14 @@ fun LocalToolsInstallDialog(
                                                 modifier = Modifier.weight(1f, fill = false)
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
+                                            val minBg = ai.antigem.theme.AppColors.accentIndigo.copy(alpha = 0.15f)
                                             Box(
                                                 modifier = Modifier
                                                     .clip(RoundedCornerShape(4.dp))
-                                                    .background(ai.antigem.theme.AppColors.accentIndigo.copy(alpha = 0.15f))
+                                                    .background(minBg)
                                                     .padding(horizontal = 5.dp, vertical = 1.dp)
                                             ) {
-                                                Text(L.settings.localToolsInstall.minimal33mb, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = ai.antigem.theme.AppColors.accentIndigo)
+                                                Text(L.settings.localToolsInstall.minimal33mb, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = ensureAccessibleContrast(ai.antigem.theme.AppColors.accentIndigo, minBg, 4.5f, surfaceBg))
                                             }
                                         }
                                         Text(
@@ -517,7 +543,8 @@ fun LocalToolsInstallDialog(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 16.dp),
+                                .padding(vertical = 16.dp)
+                                .semantics { liveRegion = LiveRegionMode.Polite },
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             CircularProgressIndicator(
@@ -536,19 +563,21 @@ fun LocalToolsInstallDialog(
                     is LocalInstallerState.AwaitingConfirmation -> {
                         val info = state.packageInfo
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
                                 text = L.settings.localToolsInstall.foundTermuxBootstrapPackage,
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
 
+                            val pkgCardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                color = pkgCardBg,
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -568,14 +597,14 @@ fun LocalToolsInstallDialog(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(L.settings.localToolsInstall.architecture, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(info.arch, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = ClaudeTerracotta)
+                                        Text(info.arch, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = ensureAccessibleContrast(ClaudeTerracotta, pkgCardBg, 4.5f, surfaceBg))
                                     }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(L.settings.localToolsInstall.packageSize, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(info.sizeFormatted, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = QuotaGreen)
+                                        Text(info.sizeFormatted, fontSize = 11.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = ensureAccessibleContrast(QuotaGreen, pkgCardBg, 4.5f, surfaceBg))
                                     }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -605,7 +634,7 @@ fun LocalToolsInstallDialog(
                         val totalStr = LocalEnvironmentManager.formatFileSize(state.totalBytes)
                         val pct = (state.progressFraction * 100).toInt()
 
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -620,7 +649,7 @@ fun LocalToolsInstallDialog(
                                     text = "$pct%",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = ClaudeTerracotta
+                                    color = ensureAccessibleContrast(ClaudeTerracotta, surfaceBg, 4.5f, surfaceBg)
                                 )
                             }
 
@@ -666,7 +695,7 @@ fun LocalToolsInstallDialog(
 
                     is LocalInstallerState.Extracting -> {
                         val pct = (state.progressFraction * 100).toInt()
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -681,7 +710,7 @@ fun LocalToolsInstallDialog(
                                     text = "$pct%",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = ClaudeTerracotta
+                                    color = ensureAccessibleContrast(ClaudeTerracotta, surfaceBg, 4.5f, surfaceBg)
                                 )
                             }
 
@@ -716,7 +745,7 @@ fun LocalToolsInstallDialog(
                     }
 
                     is LocalInstallerState.Configuring -> {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
@@ -752,7 +781,7 @@ fun LocalToolsInstallDialog(
                     }
 
                     is LocalInstallerState.Verifying -> {
-                        Column(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                             Text(
                                 text = L.settings.localToolsInstall.step4VerifyingLocalEnvironment,
                                 fontSize = 13.sp,
@@ -772,17 +801,20 @@ fun LocalToolsInstallDialog(
                     }
 
                     is LocalInstallerState.Success -> {
+                        val successBg = QuotaGreen.copy(alpha = 0.12f)
+                        val successGreen = ensureAccessibleContrast(QuotaGreen, successBg, 4.5f, surfaceBg)
+                        val successMuted = accessibleMutedColor(alpha = 0.72f, background = successBg, surfaceFallback = surfaceBg)
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                             shape = RoundedCornerShape(12.dp),
-                            color = QuotaGreen.copy(alpha = 0.12f)
+                            color = successBg
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
                                         contentDescription = null,
-                                        tint = QuotaGreen,
+                                        tint = successGreen,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -790,7 +822,7 @@ fun LocalToolsInstallDialog(
                                         text = state.message,
                                         fontSize = 12.5.sp,
                                         fontWeight = FontWeight.SemiBold,
-                                        color = QuotaGreen
+                                        color = successGreen
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -798,29 +830,30 @@ fun LocalToolsInstallDialog(
                                     text = L.settings.localToolsInstall.installedAtPrefixpath(state.prefixPath),
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    color = successMuted
                                 )
                                 Text(
                                     text = L.settings.localToolsInstall.diskSpaceTotaldiskusageformatted(state.totalDiskUsageFormatted),
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    color = successMuted
                                 )
                             }
                         }
                     }
 
                     is LocalInstallerState.Error -> {
+                        val errBg = Color.Red.copy(alpha = 0.12f)
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                             shape = RoundedCornerShape(12.dp),
-                            color = Color.Red.copy(alpha = 0.12f)
+                            color = errBg
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Text(
                                     text = state.errorMessage,
                                     fontSize = 12.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = Color.Red
+                                    color = ensureAccessibleContrast(Color.Red, errBg, 4.5f, surfaceBg)
                                 )
                             }
                         }
@@ -850,7 +883,8 @@ fun LocalToolsInstallDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { showLogs = !showLogs },
+                                    .minTouchTarget(48.dp)
+                                    .clickable(role = Role.Button) { showLogs = !showLogs },
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -872,8 +906,8 @@ fun LocalToolsInstallDialog(
                                 }
                                 Icon(
                                     imageVector = if (showLogs) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                    contentDescription = null,
-                                    tint = Color.Gray,
+                                    contentDescription = if (showLogs) L.common.collapse else L.common.expand,
+                                    tint = ensureAccessibleContrast(Color.Gray, ai.antigem.theme.AppColors.terminalBg, 4.5f),
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -894,7 +928,7 @@ fun LocalToolsInstallDialog(
                                                 text = L.settings.localToolsInstall.logsWillAppearHereOnceInstallation,
                                                 fontSize = 10.sp,
                                                 fontFamily = FontFamily.Monospace,
-                                                color = Color.Gray
+                                                color = ensureAccessibleContrast(Color.Gray, ai.antigem.theme.AppColors.terminalBg, 4.5f)
                                             )
                                         }
                                     } else {
@@ -948,7 +982,7 @@ fun LocalToolsInstallDialog(
                                         }
                                     }
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
                             ) {
@@ -971,6 +1005,7 @@ fun LocalToolsInstallDialog(
 
                             OutlinedButton(
                                 onClick = onDismiss,
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(L.common.cancel)
@@ -991,7 +1026,7 @@ fun LocalToolsInstallDialog(
                                         BootstrapSource.DirectUrl(state.packageInfo.url)
                                     )
                                 },
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
                             ) {
@@ -1004,7 +1039,7 @@ fun LocalToolsInstallDialog(
                                 onClick = {
                                     LocalEnvironmentManager.resetState()
                                 },
-                                modifier = Modifier.weight(0.6f),
+                                modifier = Modifier.weight(0.6f).minTouchTarget(48.dp),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(L.common.change)
@@ -1015,7 +1050,7 @@ fun LocalToolsInstallDialog(
                     is LocalInstallerState.Discovering -> {
                         OutlinedButton(
                             onClick = { LocalEnvironmentManager.resetState() },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(L.settings.localToolsInstall.cancelSearch)
@@ -1025,7 +1060,7 @@ fun LocalToolsInstallDialog(
                     is LocalInstallerState.Success -> {
                         Button(
                             onClick = onDismiss,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp),
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
                         ) {
@@ -1052,7 +1087,7 @@ fun LocalToolsInstallDialog(
                                             }
                                         }
                                     },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp),
                                     shape = RoundedCornerShape(10.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
                                 ) {
@@ -1065,7 +1100,7 @@ fun LocalToolsInstallDialog(
                                     onClick = {
                                         LocalEnvironmentManager.resetState()
                                     },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
                                     Text(L.settings.localToolsInstall.changeSource, fontSize = 12.sp)
@@ -1085,19 +1120,19 @@ fun LocalToolsInstallDialog(
                                         }
                                         onDismiss()
                                     },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp),
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.5f)),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = accessibleRed)
                                 ) {
-                                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.Red)
+                                    Icon(imageVector = Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(15.dp), tint = accessibleRed)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text(L.settings.localToolsInstall.clearAll, fontSize = 12.sp, color = Color.Red)
+                                    Text(L.settings.localToolsInstall.clearAll, fontSize = 12.sp, color = accessibleRed)
                                 }
 
                                 OutlinedButton(
                                     onClick = onDismiss,
-                                    modifier = Modifier.weight(0.7f),
+                                    modifier = Modifier.weight(0.7f).minTouchTarget(48.dp),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {
                                     Text(L.common.close)
@@ -1109,7 +1144,7 @@ fun LocalToolsInstallDialog(
                     else -> {
                         OutlinedButton(
                             onClick = onDismiss,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(L.settings.localToolsInstall.runInBackground, color = MaterialTheme.colorScheme.onSurface)

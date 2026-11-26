@@ -65,9 +65,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import androidx.compose.ui.unit.sp
 import ai.antigem.data.preferences.AuthPreferences
 import ai.antigem.theme.ClaudeTerracotta
@@ -243,12 +250,15 @@ private fun ManageSpaceScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
+            val muted = accessibleMutedColor(alpha = 0.75f)
+            val surface = MaterialTheme.colorScheme.surface
+            val terracottaOnSurface = ensureAccessibleContrast(ClaudeTerracotta, surface, minRatio = 4.5f)
             // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = onBack, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.common.back)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -257,12 +267,13 @@ private fun ManageSpaceScreen(
                         text = L.settings.manageSpaceActivity.antigemSpaceManager,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Text(
                         text = L.settings.manageSpaceActivity.safeStorageAndDataLossProtection,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        color = accessibleMutedColor(alpha = 0.75f, background = MaterialTheme.colorScheme.background)
                     )
                 }
             }
@@ -285,16 +296,17 @@ private fun ManageSpaceScreen(
                                 .background(ClaudeTerracotta.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Storage, contentDescription = null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
+                            Icon(Icons.Default.Storage, contentDescription = null, tint = terracottaOnSurface, modifier = Modifier.size(22.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            Text(L.settings.manageSpaceActivity.totalAppFootprint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(L.settings.manageSpaceActivity.totalAppFootprint, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                             Text(
                                 if (isCalculating) L.settings.manageSpaceActivity.calculatingStorage else Formatter.formatFileSize(context, totalDataBytes),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = ClaudeTerracotta
+                                color = terracottaOnSurface,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                     }
@@ -303,7 +315,7 @@ private fun ManageSpaceScreen(
                     Text(
                         text = L.settings.manageSpaceActivity.thisIncludesYourTermuxLinuxPackages,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        color = muted,
                         lineHeight = 16.sp
                     )
                 }
@@ -323,11 +335,12 @@ private fun ManageSpaceScreen(
                         Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(L.settings.manageSpaceActivity.temporaryCache, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(L.settings.manageSpaceActivity.temporaryCache, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                             Text(
                                 text = L.settings.manageSpaceActivity.sizeFormatfilesize(Formatter.formatFileSize(context, cacheBytes)),
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = muted,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                     }
@@ -335,7 +348,7 @@ private fun ManageSpaceScreen(
                     Text(
                         text = L.settings.manageSpaceActivity.safeToClearRemovesTemporaryLogs,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = muted
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedButton(
@@ -349,7 +362,7 @@ private fun ManageSpaceScreen(
                             }
                         },
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                     ) {
                         Text(L.settings.manageSpaceActivity.clearTemporaryCache)
                     }
@@ -373,21 +386,22 @@ private fun ManageSpaceScreen(
                             text = L.settings.manageSpaceActivity.dangerZoneFactoryReset,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { heading() }
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = L.settings.manageSpaceActivity.performsACompleteWipeOfAll,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = muted
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = { showResetConfirmation = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                     ) {
                         Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -402,7 +416,7 @@ private fun ManageSpaceScreen(
         AlertDialog(
             onDismissRequest = { showResetConfirmation = false },
             icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text(L.settings.manageSpaceActivity.confirmFullReset, fontWeight = FontWeight.Bold) },
+            title = { Text(L.settings.manageSpaceActivity.confirmFullReset, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }) },
             text = { Text(L.settings.manageSpaceActivity.areYouSureYouWantTo) },
             confirmButton = {
                 Button(
@@ -411,13 +425,14 @@ private fun ManageSpaceScreen(
                         resetPasswordInput = ""
                         showResetPasswordDialog = true
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    modifier = Modifier.minTouchTarget(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)
                 ) {
                     Text(L.settings.manageSpaceActivity.proceedToConfirmation)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showResetConfirmation = false }) {
+                TextButton(onClick = { showResetConfirmation = false }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.common.cancel)
                 }
             }
@@ -426,6 +441,7 @@ private fun ManageSpaceScreen(
 
     if (showResetPasswordDialog) {
         val isMatch = resetPasswordInput.trim() == "iknowwhatiamdoing"  // i18n: keep (compared with what the user types)
+        val passcodeColor = ensureAccessibleContrast(ClaudeTerracotta, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
         AlertDialog(
             onDismissRequest = {
                 showResetPasswordDialog = false
@@ -444,7 +460,8 @@ private fun ManageSpaceScreen(
                     text = L.settings.manageSpaceActivity.confirmDestruction,
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
             },
             text = {
@@ -462,7 +479,7 @@ private fun ManageSpaceScreen(
                             text = "iknowwhatiamdoing", // typed back and compared: never translated  // i18n: keep (compared with what the user types)
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            color = ClaudeTerracotta,
+                            color = passcodeColor,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
@@ -487,13 +504,15 @@ private fun ManageSpaceScreen(
                         }
                     },
                     enabled = isMatch,
+                    modifier = Modifier.minTouchTarget(48.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
                         disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text(L.settings.manageSpaceActivity.deleteEverything, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(L.settings.manageSpaceActivity.deleteEverything, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -502,6 +521,7 @@ private fun ManageSpaceScreen(
                         showResetPasswordDialog = false
                         resetPasswordInput = ""
                     },
+                    modifier = Modifier.minTouchTarget(48.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(L.common.cancel)

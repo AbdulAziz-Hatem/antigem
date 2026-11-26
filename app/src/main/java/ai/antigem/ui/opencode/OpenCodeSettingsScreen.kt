@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +72,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -92,6 +98,11 @@ import ai.antigem.ui.claude.ClaudeCard
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
 import ai.antigem.ui.components.OpenCodeAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -215,6 +226,9 @@ fun OpenCodeSettingsScreen(
     // a finished install changes everything on this page
     LaunchedEffect(jobRunning) { if (!jobRunning && job != null) reload() }
 
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(OpenCodeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -225,19 +239,20 @@ fun OpenCodeSettingsScreen(
                 ai.antigem.ui.agents.AgentMark(ai.antigem.domain.model.AgentKind.OPENCODE, size = 40.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("OpenCode", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("OpenCode", fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.semantics { heading() })
                     Text(
                         listOfNotNull(state.label, status?.version, if (status?.running == true) L.opencode.settings.serverRunning else null).joinToString(" · "),
                         fontSize = 12.sp,
-                        color = if (state == OpenCodeState.READY) OpenCodeAccent else MaterialTheme.colorScheme.error
+                        color = if (state == OpenCodeState.READY) accessibleAccent else MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
                 if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else IconButton(onClick = { scope.launch { reload() } }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+                else IconButton(onClick = { scope.launch { reload() } }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
             }
             status?.binary?.let {
                 Spacer(Modifier.height(6.dp))
-                Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = muted)
             }
             if (state == OpenCodeState.NOT_INSTALLED) {
                 Spacer(Modifier.height(8.dp))
@@ -253,11 +268,12 @@ fun OpenCodeSettingsScreen(
                         Button(
                             onClick = { backend.startCliJob("install") },
                             enabled = !jobRunning,
+                            modifier = Modifier.minTouchTarget(48.dp),
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = OpenCodeAccent, contentColor = Color.White)
                         ) { Text(if (jobRunning) L.common.installing else L.opencode.settings.installOpencode) }
                     } else {
-                        OutlinedButton(onClick = { backend.startCliJob("update") }, enabled = !jobRunning, shape = RoundedCornerShape(12.dp)) {
+                        OutlinedButton(onClick = { backend.startCliJob("update") }, enabled = !jobRunning, modifier = Modifier.minTouchTarget(48.dp), shape = RoundedCornerShape(12.dp)) {
                             Text(if (jobRunning) L.common.checking else L.common.checkForUpdates)
                         }
                     }
@@ -275,7 +291,8 @@ fun OpenCodeSettingsScreen(
                             else -> "failed"
                         },
                         fontSize = 12.sp,
-                        color = if (!j.running && j.exit_code != 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = if (!j.running && j.exit_code != 0) MaterialTheme.colorScheme.error else muted,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     Text(
                         j.log.trim().lines().takeLast(14).joinToString("\n"),
@@ -288,13 +305,13 @@ fun OpenCodeSettingsScreen(
                     Text(
                         "Or in a terminal on the server: curl -fsSL https://opencode.ai/v2/install | bash",
                         fontSize = 11.sp, fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 6.dp)
+                        color = muted, modifier = Modifier.padding(top = 6.dp)
                     )
                 }
             }
             status?.error?.takeIf { state != OpenCodeState.READY || status?.running == false }?.let {
                 Spacer(Modifier.height(6.dp))
-                Text(it, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                Text(it, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
             if (state == OpenCodeState.READY) {
                 Spacer(Modifier.height(10.dp))
@@ -308,6 +325,7 @@ fun OpenCodeSettingsScreen(
                         }
                     },
                     enabled = !restarting,
+                    modifier = Modifier.minTouchTarget(48.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     if (restarting) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp) else Icon(Icons.Outlined.Refresh, null, Modifier.size(16.dp))
@@ -316,7 +334,7 @@ fun OpenCodeSettingsScreen(
                 }
                 Text(
                     L.opencode.settings.runningRepliesStopWhenOpencodeRestarts,
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 4.dp)
+                    fontSize = 11.sp, color = muted, modifier = Modifier.padding(top = 4.dp)
                 )
             }
         }
@@ -325,35 +343,37 @@ fun OpenCodeSettingsScreen(
         if (page == OpenCodeSettingsPage.DEFAULTS) {
         SectionTitle(L.common.approvals)
         ClaudeCard {
-            listOf(OpenCodePreferences.MODE_ASK, OpenCodePreferences.MODE_AUTO, OpenCodePreferences.MODE_DEFAULT).forEach { m ->
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { backend.setPermissionMode(m) }.padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = mode == m, onClick = { backend.setPermissionMode(m) })
-                    Column {
-                        Text(openCodeModeLabel(m), fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
-                        Text(openCodeModeDescription(m), fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Column(Modifier.selectableGroup()) {
+                listOf(OpenCodePreferences.MODE_ASK, OpenCodePreferences.MODE_AUTO, OpenCodePreferences.MODE_DEFAULT).forEach { m ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).accessibleSelectionRow(selected = mode == m, role = Role.RadioButton) { backend.setPermissionMode(m) }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = mode == m, onClick = null)
+                        Column {
+                            Text(openCodeModeLabel(m), fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
+                            Text(openCodeModeDescription(m), fontSize = 11.5.sp, color = muted)
+                        }
                     }
                 }
             }
             Text(
                 L.opencode.settings.appliesToNewChatsAndTo,
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(top = 4.dp)
+                fontSize = 11.sp, color = muted, modifier = Modifier.padding(top = 4.dp)
             )
         }
         SectionTitle(L.opencode.settings.agentForNewChats)
         ClaudeCard {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                 agents.ifEmpty {
                     listOf(ai.antigem.data.agent.opencode.OpenCodeAgent("build", "build", ""), ai.antigem.data.agent.opencode.OpenCodeAgent("plan", "plan", ""))
                 }.forEach { a ->
-                    FilterChip(selected = defaultAgent == a.id, onClick = { backend.prefs.setAgent(a.id) }, label = { Text(a.name.replaceFirstChar { it.uppercase() }) })
+                    FilterChip(selected = defaultAgent == a.id, onClick = { backend.prefs.setAgent(a.id) }, label = { Text(a.name.replaceFirstChar { it.uppercase() }) }, modifier = Modifier.minTouchTarget(48.dp))
                 }
             }
             Text(
                 L.opencode.settings.buildMakesChangesPlanOnlyReads,
-                fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(top = 6.dp)
+                fontSize = 11.5.sp, color = muted, modifier = Modifier.padding(top = 6.dp)
             )
         }
 
@@ -365,15 +385,15 @@ fun OpenCodeSettingsScreen(
         // ---- custom endpoints
         // ---- manual: any OpenAI- / Anthropic-compatible API by its address (on the same page as the providers)
         if (page == OpenCodeSettingsPage.PROVIDERS) ClaudeCard {
-            Text(L.common.manual, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(L.common.manual, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
             Text(
                 L.opencode.settings.anyOpenaiCompatibleApiOllamaLm,
-                fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                fontSize = 12.sp, lineHeight = 16.sp, color = muted
             )
             customs.forEach { p ->
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Cloud, null, tint = OpenCodeAccent, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Outlined.Cloud, null, tint = accessibleAccent, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text(p.name, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
@@ -381,12 +401,12 @@ fun OpenCodeSettingsScreen(
                             L.opencode.settings.kindCompatibleCountModels(p.models.size, if (p.kind == "anthropic") "Anthropic" else "OpenAI") +  // i18n: keep (brand)
                                 p.models.count { it.images }.let { if (it > 0) L.opencode.settings.valueWithImages(it) else "" } +
                                 (p.api_key_hint?.let { L.opencode.settings.keyHint(it) } ?: if (p.has_api_key) L.opencode.settings.keySet else ""),
-                            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                            fontSize = 11.sp, color = muted
                         )
-                        Text(p.base_url, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(p.base_url, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    IconButton(onClick = { editing = p }) { Icon(Icons.Outlined.Edit, L.common.edit) }
-                    IconButton(onClick = {
+                    IconButton(onClick = { editing = p }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Edit, L.common.edit) }
+                    IconButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                         scope.launch {
                             backend.client.deleteCustomProvider(p.id)
                                 .onSuccess { toast(L.opencode.settings.nameRemoved(p.name)); backend.refreshModels() }
@@ -397,7 +417,7 @@ fun OpenCodeSettingsScreen(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { editing = OpenCodeCustomProvider() }, shape = RoundedCornerShape(12.dp)) {
+            OutlinedButton(onClick = { editing = OpenCodeCustomProvider() }, modifier = Modifier.minTouchTarget(48.dp), shape = RoundedCornerShape(12.dp)) {
                 Icon(Icons.Outlined.Add, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(L.opencode.settings.addManually)
             }
         }
@@ -423,7 +443,7 @@ fun OpenCodeSettingsScreen(
 private fun SectionTitle(text: String) {
     Text(
         text.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+        color = accessibleMutedColor(alpha = 0.72f), modifier = Modifier.padding(start = 4.dp, top = 4.dp).semantics { heading() }
     )
 }
 
@@ -521,7 +541,7 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
         }
     }
 
-    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val dim = accessibleMutedColor(alpha = 0.72f)
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface,
@@ -530,27 +550,28 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
             Column(Modifier.fillMaxSize()) {
                 // title and Save stay put while the list scrolls
                 Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, L.common.close) }
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.close) }
                     Text(
                         if (isNew) L.opencode.settings.addACustomProvider else L.opencode.settings.editName(initial.name),
-                        fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                        fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).semantics { heading() }
                     )
                     Button(
                         onClick = { save() },
                         enabled = !saving && name.isNotBlank() && baseUrl.isNotBlank() && models.isNotEmpty(),
+                        modifier = Modifier.minTouchTarget(48.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = OpenCodeAccent)
                     ) { Text(if (saving) L.common.saving else L.common.save) }
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp).semantics { liveRegion = LiveRegionMode.Polite }) }
 
                 LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
                     item(key = "fields") {
                         Column {
                             OutlinedTextField(name, { name = it }, label = { Text(L.common.name) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = kind == "openai", onClick = { kind = "openai" }, label = { Text("OpenAI-compatible") })
-                                FilterChip(selected = kind == "anthropic", onClick = { kind = "anthropic" }, label = { Text(L.opencode.settings.anthropic) })
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
+                                FilterChip(selected = kind == "openai", onClick = { kind = "openai" }, label = { Text("OpenAI-compatible") }, modifier = Modifier.minTouchTarget(48.dp))
+                                FilterChip(selected = kind == "anthropic", onClick = { kind = "anthropic" }, label = { Text(L.opencode.settings.anthropic) }, modifier = Modifier.minTouchTarget(48.dp))
                             }
                             Spacer(Modifier.height(4.dp))
                             OutlinedTextField(
@@ -570,9 +591,9 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
                     item(key = "models-header") {
                         Column(Modifier.padding(top = 14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(L.common.models, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
+                                Text(L.common.models, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f).semantics { heading() })
                                 if (fetching) CircularProgressIndicator(Modifier.size(16.dp).padding(end = 2.dp), strokeWidth = 2.dp, color = OpenCodeAccent)
-                                TextButton(onClick = { fetch() }, enabled = baseUrl.isNotBlank() && !fetching) {
+                                TextButton(onClick = { fetch() }, enabled = baseUrl.isNotBlank() && !fetching, modifier = Modifier.minTouchTarget(48.dp)) {
                                     Icon(Icons.Outlined.Refresh, null, Modifier.size(16.dp))
                                     Spacer(Modifier.width(4.dp))
                                     Text(if (fetching) L.opencode.settings.fetching else L.opencode.settings.fetchFromEndpoint)
@@ -587,7 +608,7 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
                                     newModel, { newModel = it }, singleLine = true, modifier = Modifier.weight(1f),
                                     placeholder = { Text(L.opencode.settings.addAModelIdByHand, fontSize = 13.sp) }
                                 )
-                                IconButton(onClick = {
+                                IconButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                                     val id = newModel.trim()
                                     if (id.isNotBlank() && !models.containsKey(id)) models[id] = OpenCodeCustomModel(id)
                                     newModel = ""
@@ -605,7 +626,7 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
-                            Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(Modifier.horizontalScroll(rememberScrollState()).selectableGroup().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 ModelFilter.entries.forEach { f ->
                                     val n = when (f) {
                                         ModelFilter.ALL -> rows.size
@@ -613,7 +634,7 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
                                         ModelFilter.IMAGES -> rows.count { (models[it.id] ?: it).images }
                                         ModelFilter.REASONING -> rows.count { (models[it.id] ?: it).reasoning }
                                     }
-                                    FilterChip(selected = filter == f, onClick = { filter = f }, label = { Text("${f.label} · $n", fontSize = 12.sp) })
+                                    FilterChip(selected = filter == f, onClick = { filter = f }, label = { Text("${f.label} · $n", fontSize = 12.sp) }, modifier = Modifier.minTouchTarget(48.dp))
                                 }
                             }
                             val allShownAdded = shown.isNotEmpty() && shown.all { models.containsKey(it.id) }
@@ -622,7 +643,7 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
                                     L.opencode.settings.countAdded(models.size) + if (shown.size != rows.size) L.opencode.settings.countShown(shown.size) else "",
                                     fontSize = 11.5.sp, color = dim, modifier = Modifier.weight(1f)
                                 )
-                                TextButton(onClick = {
+                                TextButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                                     if (allShownAdded) shown.forEach { models.remove(it.id) }
                                     else shown.forEach { if (!models.containsKey(it.id)) models[it.id] = it }
                                 }, enabled = shown.isNotEmpty()) {
@@ -651,11 +672,18 @@ private fun CustomProviderDialog(backend: OpenCodeChatBackend, initial: OpenCode
 /** One model of a custom provider: ticked = added; an added one shows its capability chips. */
 @Composable
 private fun ProviderModelRow(model: OpenCodeCustomModel, added: OpenCodeCustomModel?, onToggle: () -> Unit, onChange: (OpenCodeCustomModel) -> Unit) {
-    val dim = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+    val dim = accessibleMutedColor(alpha = 0.72f)
     val cur = added ?: model
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onToggle)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = added != null, onCheckedChange = { onToggle() })
+    val isChecked = added != null
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .accessibleToggleRow(checked = isChecked, role = Role.Checkbox, onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(checked = isChecked, onCheckedChange = null)
             Column(Modifier.weight(1f)) {
                 val title = model.name?.takeIf { it.isNotBlank() && it != model.id }
                 Text(title ?: model.id, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -684,7 +712,7 @@ private fun ModelCapabilityChips(model: OpenCodeCustomModel, onChange: (OpenCode
         CapabilityChip(L.opencode.settings.tools, Icons.Outlined.Build, !model.no_tools) { onChange(model.copy(no_tools = !it)) }
         model.detected?.takeIf { it.isNotBlank() }?.let {
             Text(
-                L.opencode.settings.autoValue(it), fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                L.opencode.settings.autoValue(it), fontSize = 10.5.sp, color = accessibleMutedColor(alpha = 0.72f),
                 modifier = Modifier.align(Alignment.CenterVertically)
             )
         }
@@ -693,14 +721,17 @@ private fun ModelCapabilityChips(model: OpenCodeCustomModel, onChange: (OpenCode
 
 @Composable
 private fun CapabilityChip(label: String, icon: ImageVector, on: Boolean, onToggle: (Boolean) -> Unit) {
+    val selectedBg = OpenCodeAccent.copy(alpha = 0.16f)
+    val accessibleAccent = ensureAccessibleContrast(OpenCodeAccent, selectedBg, 4.5f, MaterialTheme.colorScheme.surface)
     FilterChip(
         selected = on,
         onClick = { onToggle(!on) },
+        modifier = Modifier.minTouchTarget(48.dp),
         label = { Text(label, fontSize = 11.5.sp) },
         leadingIcon = { Icon(icon, null, Modifier.size(14.dp)) },
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = OpenCodeAccent.copy(alpha = 0.16f),
-            selectedLeadingIconColor = OpenCodeAccent
+            selectedContainerColor = selectedBg,
+            selectedLeadingIconColor = accessibleAccent
         )
     )
 }

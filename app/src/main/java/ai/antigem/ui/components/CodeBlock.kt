@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.Toast
@@ -19,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +43,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -200,6 +206,11 @@ fun CodeBlock(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val screenAccessible = LocalScreenAccessible.current
+    val headerBg = CodeBlockBgDark.copy(alpha = 0.95f)
+    val mutedHeaderInk = ensureAccessibleContrast(AppColors.codeText.copy(alpha = 0.72f), CodeBlockBgDark, 4.5f)
+    val actionIconTint = ensureAccessibleContrast(AppColors.codeText.copy(alpha = 0.75f), CodeBlockBgDark, 4.5f)
+    val previewTitle = L.components.codeBlock.previewLanguage(language.ifEmpty { L.common.code }.uppercase())
     var isCopied by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableStateOf(0) } // 0 = Code, 1 = Preview
     var reloadKey by remember { mutableStateOf(0) }
@@ -252,179 +263,191 @@ fun CodeBlock(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(CodeBlockBgDark.copy(alpha = 0.95f))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .background(headerBg)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Language Badge + Line count
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(end = 6.dp)
             ) {
                 Text(
-                    text = language.ifEmpty { "code" }.uppercase(),
+                    text = language.ifEmpty { L.common.code }.uppercase(),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = ClaudeTerracotta,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1
                 )
                 if (lineCount > 1) {
                     Text(
                         text = "•  $lineCount lines",
                         fontSize = 10.5.sp,
-                        color = AppColors.codeText.copy(alpha = 0.5f)
+                        color = mutedHeaderInk,
+                        maxLines = 1
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Interactive Switcher: [Code | Preview] when previewable
-            if (isPreviewable) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(Color.White.copy(alpha = 0.08f))
-                        .padding(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Code Tab
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (selectedTab == 0) ClaudeTerracotta else Color.Transparent)
-                            .clickable { selectedTab = 0 }
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Outlined.Code,
-                                contentDescription = null,
-                                tint = if (selectedTab == 0) Color.White else AppColors.codeText.copy(alpha = 0.6f),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = L.common.code,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (selectedTab == 0) Color.White else AppColors.codeText.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
-
-                    // Preview Tab
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (selectedTab == 1) ClaudeTerracotta else Color.Transparent)
-                            .clickable { selectedTab = 1 }
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                tint = if (selectedTab == 1) Color.White else AppColors.codeText.copy(alpha = 0.6f),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = L.common.preview,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (selectedTab == 1) Color.White else AppColors.codeText.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(6.dp))
-
-                // In Preview Mode: Reload button
-                if (selectedTab == 1) {
-                    IconButton(
-                        onClick = { reloadKey++ },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = L.components.codeBlock.reloadPreview,
-                            tint = AppColors.codeText.copy(alpha = 0.7f),
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                }
-            }
-
-            // Fullscreen Button (always present for all code blocks and preview modes)
-            IconButton(
-                onClick = { isFullscreen = true },
-                modifier = Modifier.size(28.dp)
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.OpenInFull,
-                    contentDescription = L.components.codeBlock.fullscreen,
-                    tint = AppColors.codeText.copy(alpha = 0.7f),
-                    modifier = Modifier.size(14.dp)
-                )
-            }
+                // Interactive Switcher: [Code | Preview] when previewable
+                if (isPreviewable) {
+                    Row(
+                        modifier = Modifier
+                            .selectableGroup()
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .padding(2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Code Tab
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (selectedTab == 0) ClaudeTerracotta else Color.Transparent)
+                                .accessibleSelectionRow(selected = selectedTab == 0, role = Role.Tab) { selectedTab = 0 }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Code,
+                                    contentDescription = null,
+                                    tint = if (selectedTab == 0) Color.White else mutedHeaderInk,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = L.common.code,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selectedTab == 0) Color.White else mutedHeaderInk
+                                )
+                            }
+                        }
 
-            // Expand / Collapse toggle for long code
-            if (isLongCode && selectedTab == 0) {
+                        // Preview Tab
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (selectedTab == 1) ClaudeTerracotta else Color.Transparent)
+                                .accessibleSelectionRow(selected = selectedTab == 1, role = Role.Tab) { selectedTab = 1 }
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Filled.PlayArrow,
+                                    contentDescription = null,
+                                    tint = if (selectedTab == 1) Color.White else mutedHeaderInk,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = L.common.preview,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (selectedTab == 1) Color.White else mutedHeaderInk
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // In Preview Mode: Reload button
+                    if (selectedTab == 1) {
+                        IconButton(
+                            onClick = { reloadKey++ },
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = L.components.codeBlock.reloadPreview,
+                                tint = actionIconTint,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Fullscreen Button (always present for all code blocks and preview modes)
                 IconButton(
-                    onClick = { toggleExpand() },
-                    modifier = Modifier.size(28.dp)
+                    onClick = { isFullscreen = true },
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
-                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (isExpanded) L.components.codeBlock.collapseCodeBlock else L.components.codeBlock.expandFullHeight,
-                        tint = if (isExpanded) ClaudeTerracotta else AppColors.codeText.copy(alpha = 0.7f),
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-            }
-
-            // Copy Button
-            IconButton(
-                onClick = {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Copied Code", code)
-                    clipboard.setPrimaryClip(clip)
-                    isCopied = true
-                    Toast.makeText(context, L.components.codeBlock.codeCopiedToClipboard, Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.size(28.dp)
-            ) {
-                if (isCopied) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = L.common.copied,
-                        tint = QuotaGreen,
-                        modifier = Modifier.size(16.dp)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.ContentCopy,
-                        contentDescription = L.components.codeBlock.copyCode,
-                        tint = AppColors.codeText.copy(alpha = 0.7f),
+                        imageVector = Icons.Outlined.OpenInFull,
+                        contentDescription = L.components.codeBlock.fullscreen,
+                        tint = actionIconTint,
                         modifier = Modifier.size(15.dp)
                     )
                 }
-            }
 
-            // Run Button (shell code only): edit the command, then run it in a terminal over the chat
-            if (isShellCode) {
+                // Expand / Collapse toggle for long code
+                if (isLongCode && selectedTab == 0) {
+                    IconButton(
+                        onClick = { toggleExpand() },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) L.components.codeBlock.collapseCodeBlock else L.components.codeBlock.expandFullHeight,
+                            tint = if (isExpanded) ClaudeTerracotta else actionIconTint,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Copy Button
                 IconButton(
-                    onClick = { showRunDialog = true },
-                    modifier = Modifier.size(28.dp)
+                    onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("Copied Code", code)
+                        clipboard.setPrimaryClip(clip)
+                        isCopied = true
+                        Toast.makeText(context, L.components.codeBlock.codeCopiedToClipboard, Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = L.components.codeBlock.runInTerminal,
-                        tint = ClaudeTerracotta,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    if (isCopied) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = L.common.copied,
+                            tint = QuotaGreen,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = L.components.codeBlock.copyCode,
+                            tint = actionIconTint,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Run Button (shell code only): edit the command, then run it in a terminal over the chat
+                if (isShellCode) {
+                    IconButton(
+                        onClick = { showRunDialog = true },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = L.components.codeBlock.runInTerminal,
+                            tint = ClaudeTerracotta,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -458,9 +481,19 @@ fun CodeBlock(
                                 settings.useWideViewPort = true
                                 settings.builtInZoomControls = true
                                 settings.displayZoomControls = false
+                                contentDescription = previewTitle
+                                isFocusable = screenAccessible
+                                isFocusableInTouchMode = screenAccessible
+                                importantForAccessibility = if (screenAccessible) View.IMPORTANT_FOR_ACCESSIBILITY_YES else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                                 webViewClient = PreviewWebViewClient { previewLink = it }
                                 loadDataWithBaseURL("https://localhost", previewHtml, "text/html", "UTF-8", null)
                             }
+                        },
+                        update = { wv ->
+                            wv.contentDescription = previewTitle
+                            wv.isFocusable = screenAccessible
+                            wv.isFocusableInTouchMode = screenAccessible
+                            wv.importantForAccessibility = if (screenAccessible) View.IMPORTANT_FOR_ACCESSIBILITY_YES else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                         },
                         modifier = Modifier.fillMaxSize()
                     )
@@ -497,13 +530,14 @@ fun CodeBlock(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { toggleExpand() },
+                        .minTouchTarget(48.dp)
+                        .clickable(role = Role.Button) { toggleExpand() },
                     color = CodeBlockBgDark.copy(alpha = 0.7f)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 7.dp),
+                            .padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -552,23 +586,27 @@ fun CodeBlock(
                         title = {
                             Column {
                                 Text(
-                                    text = if (selectedTab == 1 && isPreviewable) L.components.codeBlock.previewLanguage(language.uppercase()) else language.ifEmpty { L.common.code }.uppercase(),
+                                    text = if (selectedTab == 1 && isPreviewable) previewTitle else language.ifEmpty { L.common.code }.uppercase(),
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.semantics { heading() }
                                 )
                                 Text(
                                     text = if (selectedTab == 1 && isPreviewable) L.components.codeBlock.interactiveArtifact else "$lineCount lines",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = accessibleMutedColor(alpha = 0.72f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         },
                         navigationIcon = {
-                            IconButton(onClick = { isFullscreen = false }) {
+                            IconButton(
+                                onClick = { isFullscreen = false },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) {
                                 Icon(Icons.Default.Close, contentDescription = L.common.close)
                             }
                         },
@@ -576,6 +614,7 @@ fun CodeBlock(
                             if (isPreviewable) {
                                 Row(
                                     modifier = Modifier
+                                        .selectableGroup()
                                         .clip(RoundedCornerShape(16.dp))
                                         .background(MaterialTheme.colorScheme.surfaceVariant)
                                         .padding(2.dp),
@@ -585,34 +624,39 @@ fun CodeBlock(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(if (selectedTab == 0) ClaudeTerracotta else Color.Transparent)
-                                            .clickable { selectedTab = 0 }
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            .accessibleSelectionRow(selected = selectedTab == 0, role = Role.Tab) { selectedTab = 0 }
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = L.common.code,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (selectedTab == 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (selectedTab == 0) Color.White else accessibleMutedColor(alpha = 0.78f, background = MaterialTheme.colorScheme.surfaceVariant)
                                         )
                                     }
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(14.dp))
                                             .background(if (selectedTab == 1) ClaudeTerracotta else Color.Transparent)
-                                            .clickable { selectedTab = 1 }
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            .accessibleSelectionRow(selected = selectedTab == 1, role = Role.Tab) { selectedTab = 1 }
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = L.common.preview,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (selectedTab == 1) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (selectedTab == 1) Color.White else accessibleMutedColor(alpha = 0.78f, background = MaterialTheme.colorScheme.surfaceVariant)
                                         )
                                     }
                                 }
 
                                 if (selectedTab == 1) {
-                                    IconButton(onClick = { reloadKey++ }) {
+                                    IconButton(
+                                        onClick = { reloadKey++ },
+                                        modifier = Modifier.minTouchTarget(48.dp)
+                                    ) {
                                         Icon(Icons.Default.Refresh, contentDescription = L.common.reload)
                                     }
                                 }
@@ -633,7 +677,8 @@ fun CodeBlock(
                                     clipboard.setPrimaryClip(clip)
                                     modalCopied = true
                                     Toast.makeText(context, L.components.codeBlock.codeCopiedToClipboard, Toast.LENGTH_SHORT).show()
-                                }
+                                },
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = if (modalCopied) Icons.Default.Check else Icons.Outlined.ContentCopy,
@@ -674,9 +719,19 @@ fun CodeBlock(
                                             settings.useWideViewPort = true
                                             settings.builtInZoomControls = true
                                             settings.displayZoomControls = false
+                                            contentDescription = previewTitle
+                                            isFocusable = screenAccessible
+                                            isFocusableInTouchMode = screenAccessible
+                                            importantForAccessibility = if (screenAccessible) View.IMPORTANT_FOR_ACCESSIBILITY_YES else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                                             webViewClient = PreviewWebViewClient { previewLink = it }
                                             loadDataWithBaseURL("https://localhost", previewHtml, "text/html", "UTF-8", null)
                                         }
+                                    },
+                                    update = { wv ->
+                                        wv.contentDescription = previewTitle
+                                        wv.isFocusable = screenAccessible
+                                        wv.isFocusableInTouchMode = screenAccessible
+                                        wv.importantForAccessibility = if (screenAccessible) View.IMPORTANT_FOR_ACCESSIBILITY_YES else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                                     },
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -706,6 +761,7 @@ fun CodeBlock(
                                 color = ai.antigem.theme.AppColors.editorMuted,
                                 textAlign = TextAlign.End,
                                 modifier = Modifier
+                                    .clearAndSetSemantics {}
                                     .padding(start = 12.dp, end = 10.dp, top = 14.dp, bottom = 14.dp)
                                     .widthIn(min = 28.dp)
                             )

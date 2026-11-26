@@ -25,6 +25,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +40,8 @@ import ai.antigem.data.updater.AppUpdateManager
 import ai.antigem.data.updater.DownloadState
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.theme.QuotaRed
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
@@ -114,7 +120,8 @@ fun AppUpdateDialog(
                             text = L.updater.appUpdate.newUpdateAvailable,
                             color = onSurfaceColor,
                             fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = if (updateInfo.isCritical) L.updater.appUpdate.criticalRelease else L.updater.appUpdate.releaseUpdate,
@@ -293,6 +300,7 @@ fun AppUpdateDialog(
                         Spacer(modifier = Modifier.height(10.dp))
                     }
                     is DownloadState.Completed -> {
+                        val successColor = ensureAccessibleContrast(QuotaGreen, QuotaGreen.copy(alpha = 0.12f), 4.5f, surfaceColor)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -300,24 +308,26 @@ fun AppUpdateDialog(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(QuotaGreen.copy(alpha = 0.12f))
                                 .border(1.dp, QuotaGreen.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                                .semantics { liveRegion = LiveRegionMode.Polite }
                                 .padding(8.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.CheckCircle,
                                 contentDescription = null,
-                                tint = QuotaGreen,
+                                tint = successColor,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = L.updater.appUpdate.downloadedLaunchingInstaller,
-                                color = QuotaGreen,
+                                color = successColor,
                                 fontSize = 12.sp
                             )
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                     }
                     is DownloadState.Error -> {
+                        val errorColor = ensureAccessibleContrast(QuotaRed, QuotaRed.copy(alpha = 0.12f), 4.5f, surfaceColor)
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -325,18 +335,19 @@ fun AppUpdateDialog(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(QuotaRed.copy(alpha = 0.12f))
                                 .border(1.dp, QuotaRed.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                                .semantics { liveRegion = LiveRegionMode.Polite }
                                 .padding(8.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.ErrorOutline,
                                 contentDescription = null,
-                                tint = QuotaRed,
+                                tint = errorColor,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = L.updater.appUpdate.downloadFailedMessage(state.message),
-                                color = QuotaRed,
+                                color = errorColor,
                                 fontSize = 11.5.sp,
                                 maxLines = 2
                             )
@@ -364,15 +375,16 @@ fun AppUpdateDialog(
                             context.startActivity(intent)
                         },
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = primaryColor)
+                        colors = ButtonDefaults.textButtonColors(contentColor = primaryColor),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
-                            contentDescription = "GitHub",
+                            contentDescription = null,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("GitHub", fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
+                        Text(L.common.gitHub, fontSize = 12.5.sp, fontWeight = FontWeight.Medium)
                     }
 
                     Row(
@@ -383,12 +395,14 @@ fun AppUpdateDialog(
                             TextButton(
                                 onClick = onDismiss,
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                colors = ButtonDefaults.textButtonColors(contentColor = onSurfaceVariantColor)
+                                colors = ButtonDefaults.textButtonColors(contentColor = onSurfaceVariantColor),
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Text(L.common.later, fontSize = 13.sp)
                             }
                         }
 
+                        val btnContentColor = ensureAccessibleContrast(MaterialTheme.colorScheme.onPrimary, primaryColor, 4.5f, surfaceColor)
                         Button(
                             onClick = {
                                 if (downloadState is DownloadState.Completed) {
@@ -413,10 +427,10 @@ fun AppUpdateDialog(
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = primaryColor,
-                                contentColor = Color.White
+                                contentColor = btnContentColor
                             ),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.height(38.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             val btnText = when (downloadState) {
                                 is DownloadState.Downloading -> L.updater.appUpdate.downloading

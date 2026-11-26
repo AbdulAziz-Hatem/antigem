@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,6 +41,19 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +66,8 @@ import ai.antigem.data.daemon.ProjectItem
 import ai.antigem.data.daemon.IdeDaemonManager
 import ai.antigem.data.files.*
 import ai.antigem.ui.components.MarkdownDocViewerModal
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -662,27 +678,36 @@ fun FileExplorer(
                                 }
                             }
                         )
-                        else -> Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { if (!goBack()) onClose() }) {
-                                Icon(if (inDialog && history.isEmpty()) Icons.Outlined.Close else Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.common.back)
+                        else -> Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                                .semantics { isTraversalGroup = true },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(onClick = { if (!goBack()) onClose() }, modifier = Modifier.minTouchTarget(48.dp)) {
+                                Icon(
+                                    if (inDialog && history.isEmpty()) Icons.Outlined.Close else Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = if (inDialog && history.isEmpty()) L.common.close else L.common.back
+                                )
                             }
                             Column(Modifier.weight(1f).padding(start = 2.dp)) {
                                 if (title != null) Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(folderName, fontSize = if (title != null) 18.sp else 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(folderName, fontSize = if (title != null) 18.sp else 20.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { heading() })
                             }
-                            IconButton(onClick = { searching = true }) { Icon(Icons.Outlined.Search, contentDescription = L.common.search) }
+                            IconButton(onClick = { searching = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Search, contentDescription = L.common.search) }
                             // phone-only mode: tabs on demand (server / PC mode always shows them)
                             if (multiTab && !phoneTab) {
-                                IconButton(onClick = { setTabsOn(!tabMode) }) {
+                                IconButton(onClick = { setTabsOn(!tabMode) }, modifier = Modifier.minTouchTarget(48.dp)) {
                                     Icon(Icons.Outlined.Tab, contentDescription = if (tabMode) L.files.fileExplorer.turnOffTabs else L.files.fileExplorer.openFoldersInTabs,
                                         tint = if (tabMode) MaterialTheme.colorScheme.primary else LocalContentColor.current)
                                 }
                             }
-                            IconButton(onClick = { ExplorerPrefs.update { it.copy(grid = !it.grid) } }) {
+                            IconButton(onClick = { ExplorerPrefs.update { it.copy(grid = !it.grid) } }, modifier = Modifier.minTouchTarget(48.dp)) {
                                 Icon(if (settings.grid) Icons.AutoMirrored.Outlined.ViewList else Icons.Outlined.GridView, contentDescription = if (settings.grid) L.files.fileExplorer.listView else L.files.fileExplorer.gridView)
                             }
                             Box {
-                                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = L.common.more) }
+                                IconButton(onClick = { menuOpen = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.MoreVert, contentDescription = L.common.more) }
                                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, shape = RoundedCornerShape(14.dp)) {
                                     DropdownMenuItem(text = { Text(L.files.fileExplorer.newFolder) }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) }, onClick = { menuOpen = false; newIsDir = true })
                                     DropdownMenuItem(text = { Text(L.files.fileExplorer.newFile) }, leadingIcon = { Icon(Icons.Outlined.NoteAdd, null) }, onClick = { menuOpen = false; newIsDir = false })
@@ -692,7 +717,11 @@ fun FileExplorer(
                                         text = { Text(L.files.fileExplorer.showHiddenFiles) },
                                         leadingIcon = { Icon(if (settings.showHidden) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff, null) },
                                         trailingIcon = { Checkbox(checked = settings.showHidden, onCheckedChange = null) },
-                                        onClick = { ExplorerPrefs.update { it.copy(showHidden = !it.showHidden) } }
+                                        onClick = { ExplorerPrefs.update { it.copy(showHidden = !it.showHidden) } },
+                                        modifier = Modifier.semantics {
+                                            role = Role.Checkbox
+                                            toggleableState = if (settings.showHidden) ToggleableState.On else ToggleableState.Off
+                                        }
                                     )
                                     DropdownMenuItem(text = { Text(L.files.fileExplorer.sortView) }, leadingIcon = { Icon(Icons.Outlined.Sort, null) }, onClick = { menuOpen = false; viewOptionsOpen = true })
                                     DropdownMenuItem(text = { Text(L.common.refresh) }, leadingIcon = { Icon(Icons.Outlined.Refresh, null) }, onClick = { menuOpen = false; reload(silent = false) })
@@ -742,8 +771,9 @@ fun FileExplorer(
                     }
                     if (busy != null || loading || deepLoading) {
                         val p = busyProgress
-                        if (p != null) LinearProgressIndicator(progress = { p }, modifier = Modifier.fillMaxWidth().height(2.dp))
-                        else LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+                        val progressMod = Modifier.fillMaxWidth().height(2.dp).semantics { contentDescription = L.common.loading }
+                        if (p != null) LinearProgressIndicator(progress = { p }, modifier = progressMod)
+                        else LinearProgressIndicator(progressMod)
                     } else {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     }
@@ -756,7 +786,10 @@ fun FileExplorer(
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = MaterialTheme.colorScheme.inverseSurface,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp).fillMaxWidth()
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .fillMaxWidth()
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                     ) {
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.inverseOnSurface)
@@ -1307,11 +1340,14 @@ private fun PickSelectionBar(
     onSelectAll: () -> Unit,
     onPick: () -> Unit
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onClear) { Icon(Icons.Outlined.Close, contentDescription = L.files.fileExplorer.clearSelection) }
-        Text(L.files.fileExplorer.countSelected(count), fontSize = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        IconButton(onClick = onSelectAll) { Icon(if (allSelected) Icons.Outlined.Deselect else Icons.Outlined.SelectAll, contentDescription = L.files.fileExplorer.selectAllFiles) }
-        Button(onClick = onPick, enabled = count > 0, modifier = Modifier.padding(end = 8.dp)) { Text("$label ($count)") }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp).semantics { isTraversalGroup = true },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onClear, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, contentDescription = L.files.fileExplorer.clearSelection) }
+        Text(L.files.fileExplorer.countSelected(count), fontSize = 19.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        IconButton(onClick = onSelectAll, modifier = Modifier.minTouchTarget(48.dp)) { Icon(if (allSelected) Icons.Outlined.Deselect else Icons.Outlined.SelectAll, contentDescription = L.files.fileExplorer.selectAllFiles) }
+        Button(onClick = onPick, enabled = count > 0, modifier = Modifier.padding(end = 8.dp).minTouchTarget(48.dp)) { Text("$label ($count)") }
     }
 }
 
@@ -1328,15 +1364,18 @@ private fun SelectionBar(
     onMenu: (Boolean) -> Unit,
     menu: @Composable ColumnScope.() -> Unit
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onClear) { Icon(Icons.Outlined.Close, contentDescription = L.files.fileExplorer.clearSelection) }
-        Text(L.files.fileExplorer.countSelected(count), fontSize = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        IconButton(onClick = onSelectAll) { Icon(if (allSelected) Icons.Outlined.Deselect else Icons.Outlined.SelectAll, contentDescription = L.common.selectAll) }
-        IconButton(onClick = onCopy) { Icon(Icons.Outlined.ContentCopy, contentDescription = L.common.copy) }
-        IconButton(onClick = onCut) { Icon(Icons.Outlined.ContentCut, contentDescription = L.files.fileExplorer.cut) }
-        IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, contentDescription = L.common.delete, tint = MaterialTheme.colorScheme.error) }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp).semantics { isTraversalGroup = true },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onClear, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, contentDescription = L.files.fileExplorer.clearSelection) }
+        Text(L.files.fileExplorer.countSelected(count), fontSize = 19.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        IconButton(onClick = onSelectAll, modifier = Modifier.minTouchTarget(48.dp)) { Icon(if (allSelected) Icons.Outlined.Deselect else Icons.Outlined.SelectAll, contentDescription = L.common.selectAll) }
+        IconButton(onClick = onCopy, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.ContentCopy, contentDescription = L.common.copy) }
+        IconButton(onClick = onCut, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.ContentCut, contentDescription = L.files.fileExplorer.cut) }
+        IconButton(onClick = onDelete, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Delete, contentDescription = L.common.delete, tint = MaterialTheme.colorScheme.error) }
         Box {
-            IconButton(onClick = { onMenu(true) }) { Icon(Icons.Outlined.MoreVert, contentDescription = L.common.more) }
+            IconButton(onClick = { onMenu(true) }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.MoreVert, contentDescription = L.common.more) }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { onMenu(false) }, shape = RoundedCornerShape(14.dp), content = menu)
         }
     }
@@ -1356,7 +1395,7 @@ private fun SearchBar(
     LaunchedEffect(Unit) { focus.requestFocus() }
     Column {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.files.fileExplorer.closeSearch) }
+            IconButton(onClick = onBack, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.files.fileExplorer.closeSearch) }
             TextField(
                 value = query,
                 onValueChange = onQuery,
@@ -1367,24 +1406,26 @@ private fun SearchBar(
                     focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                     unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
                 ),
-                trailingIcon = if (query.isNotEmpty()) ({ IconButton(onClick = { onQuery("") }) { Icon(Icons.Outlined.Close, L.common.clear) } }) else null,
+                trailingIcon = if (query.isNotEmpty()) ({ IconButton(onClick = { onQuery("") }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.clear) } }) else null,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onSubmit() }),
                 modifier = Modifier.weight(1f).padding(end = 8.dp).focusRequester(focus)
             )
         }
-        Row(Modifier.padding(start = 16.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !deep, onClick = { onDeep(false) }, label = { Text(L.files.fileExplorer.thisFolder) })
-            FilterChip(selected = deep, onClick = { onDeep(true) }, label = { Text(L.files.fileExplorer.allSubfolders) }, leadingIcon = { Icon(Icons.Outlined.AccountTree, null, Modifier.size(16.dp)) })
+        Row(Modifier.padding(start = 16.dp, bottom = 8.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = !deep, onClick = { onDeep(false) }, label = { Text(L.files.fileExplorer.thisFolder) }, modifier = Modifier.minTouchTarget(48.dp))
+            FilterChip(selected = deep, onClick = { onDeep(true) }, label = { Text(L.files.fileExplorer.allSubfolders) }, leadingIcon = { Icon(Icons.Outlined.AccountTree, null, Modifier.size(16.dp)) }, modifier = Modifier.minTouchTarget(48.dp))
         }
     }
 }
 
 @Composable
 private fun ClipboardBar(count: Int, firstName: String, move: Boolean, enabled: Boolean, fromLabel: String? = null, onPaste: () -> Unit, onCancel: () -> Unit) {
+    val containerColor = MaterialTheme.colorScheme.secondaryContainer
+    val subtitleColor = ensureAccessibleContrast(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f), containerColor)
     Surface(
         shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
+        color = containerColor,
         tonalElevation = 3.dp,
         shadowElevation = 4.dp,
         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp).fillMaxWidth()
@@ -1395,15 +1436,15 @@ private fun ClipboardBar(count: Int, firstName: String, move: Boolean, enabled: 
             Column(Modifier.weight(1f)) {
                 Text(
                     "${if (move) "Move" else "Copy"} ${if (count == 1) "\"$firstName\"" else "$count items"}",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.MiddleEllipsis
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 2, overflow = TextOverflow.MiddleEllipsis
                 )
                 Text(
                     if (fromLabel != null) L.files.fileExplorer.valueOpenTheDestinationThenPaste(fromLabel.replaceFirstChar { it.uppercase() }) else L.files.fileExplorer.openTheDestinationThenPaste,
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f), maxLines = 1, overflow = TextOverflow.Ellipsis
+                    fontSize = 12.sp, color = subtitleColor, maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
             }
-            TextButton(onClick = onCancel) { Text(L.common.cancel) }
-            Button(onClick = onPaste, enabled = enabled, shape = RoundedCornerShape(12.dp)) {
+            TextButton(onClick = onCancel, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
+            Button(onClick = onPaste, enabled = enabled, shape = RoundedCornerShape(12.dp), modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.ContentPaste, null, Modifier.size(17.dp)); Spacer(Modifier.width(6.dp)); Text(L.files.fileExplorer.paste)
             }
         }
@@ -1417,11 +1458,11 @@ private fun ConfirmFolderBar(folderName: String, path: String, label: String, en
             Icon(Icons.Outlined.Folder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(folderName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(path, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                Text(folderName, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(path, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.MiddleEllipsis)
             }
             Spacer(Modifier.width(10.dp))
-            Button(onClick = onConfirm, enabled = enabled, shape = RoundedCornerShape(12.dp)) {
+            Button(onClick = onConfirm, enabled = enabled, shape = RoundedCornerShape(12.dp), modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Check, null, Modifier.size(17.dp)); Spacer(Modifier.width(6.dp)); Text(label, maxLines = 1)
             }
         }
@@ -1432,7 +1473,7 @@ private fun ConfirmFolderBar(folderName: String, path: String, label: String, en
 private fun SaveBar(name: String, folderName: String, onName: (String) -> Unit, enabled: Boolean, onSave: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-            Text(L.files.fileExplorer.saveInFoldername(folderName), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(L.files.fileExplorer.saveInFoldername(folderName), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -1460,7 +1501,7 @@ private fun SummaryFooter(text: String) {
     Text(
         text,
         fontSize = 12.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+        color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.background),
         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
         textAlign = androidx.compose.ui.text.style.TextAlign.Center
     )
@@ -1469,23 +1510,29 @@ private fun SummaryFooter(text: String) {
 /** The two tabs while the bridge is on another machine: its files, and this phone's. */
 @Composable
 private fun SideTabs(side: ExplorerSide, bridgeName: String, enabled: Boolean, onSide: (ExplorerSide) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    val bg = MaterialTheme.colorScheme.background
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         @Composable
         fun Tab(s: ExplorerSide, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier) {
             val on = s == side
+            val tabBg = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHigh
+            val activeTint = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, tabBg, 4.5f, bg)
             Surface(
                 onClick = { onSide(s) },
                 enabled = enabled || on,
                 shape = RoundedCornerShape(12.dp),
-                color = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = tabBg,
                 border = androidx.compose.foundation.BorderStroke(1.dp, if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                modifier = modifier.height(38.dp)
+                modifier = modifier.minTouchTarget(48.dp).semantics {
+                    role = Role.Tab
+                    selected = on
+                }
             ) {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                    Icon(icon, null, tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
+                    Icon(icon, null, tint = if (on) activeTint else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(17.dp))
                     Spacer(Modifier.width(7.dp))
                     Text(label, fontSize = 13.5.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
+                        color = if (on) activeTint else MaterialTheme.colorScheme.onSurface)
                 }
             }
         }
@@ -1513,22 +1560,36 @@ private fun FolderTabs(
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     LaunchedEffect(active, tabs.size) { if (active in tabs.indices) listState.animateScrollToItem(active) }
     var addMenu by remember { mutableStateOf(false) }
+    val bg = MaterialTheme.colorScheme.background
     Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 2.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         androidx.compose.foundation.lazy.LazyRow(
             state = listState,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             contentPadding = PaddingValues(horizontal = 4.dp)
         ) {
             items(tabs.size, key = { tabs[it].id }) { i ->
                 val t = tabs[i]
                 val on = i == active
+                val tabBg = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHigh
+                val activeTint = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, tabBg, 4.5f, bg)
                 Surface(
                     onClick = { onOpen(i) },
                     shape = RoundedCornerShape(12.dp),
-                    color = if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    color = tabBg,
                     border = androidx.compose.foundation.BorderStroke(1.dp, if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-                    modifier = Modifier.height(36.dp)
+                    modifier = Modifier.minTouchTarget(48.dp).semantics {
+                        role = Role.Tab
+                        selected = on
+                        if (tabs.size > 1) {
+                            customActions = listOf(
+                                CustomAccessibilityAction(L.files.fileExplorer.closeTab) {
+                                    onClose(i)
+                                    true
+                                }
+                            )
+                        }
+                    }
                 ) {
                     Row(Modifier.padding(start = 10.dp, end = if (tabs.size > 1) 2.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -1538,17 +1599,17 @@ private fun FolderTabs(
                                 else -> Icons.Outlined.Folder
                             },
                             null,
-                            tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = if (on) activeTint else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(6.dp))
                         Text(
                             t.label, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium,
-                            color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            color = if (on) activeTint else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 140.dp)
                         )
                         if (tabs.size > 1) {
-                            IconButton(onClick = { onClose(i) }, modifier = Modifier.size(28.dp)) {
+                            IconButton(onClick = { onClose(i) }, modifier = Modifier.minTouchTarget(48.dp)) {
                                 Icon(Icons.Outlined.Close, contentDescription = L.files.fileExplorer.closeTab, modifier = Modifier.size(14.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -1558,7 +1619,7 @@ private fun FolderTabs(
             }
         }
         Box {
-            IconButton(onClick = { if (showSides) addMenu = true else onAdd(ExplorerSide.BRIDGE) }) {
+            IconButton(onClick = { if (showSides) addMenu = true else onAdd(ExplorerSide.BRIDGE) }, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Add, contentDescription = L.common.newTab)
             }
             DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }, shape = RoundedCornerShape(14.dp)) {

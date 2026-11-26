@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +36,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,7 +58,10 @@ import ai.antigem.data.checkpoint.ProjectCheckpoints
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.theme.AppColors
 import ai.antigem.ui.components.accent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -81,7 +95,7 @@ private sealed interface SheetState {
  * [agentBusy]: the agent is still working in this chat (restoring is blocked until it stops).
  * [otherRunningChats]: other chats in the same project still running (warned about).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CheckpointRestoreSheet(
     projectPath: String,
@@ -105,16 +119,31 @@ fun CheckpointRestoreSheet(
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val accent = MaterialTheme.colorScheme.primary
+    val sheetBg = MaterialTheme.colorScheme.background
+    val muted = accessibleMutedColor(alpha = 0.72f, background = sheetBg)
+    val dangerText = ensureAccessibleContrast(AppColors.danger, sheetBg, 4.5f, sheetBg)
+    val sheetTitle = if (checkpoint.isPreRestore) L.checkpoint.restore.undoThatRestore
+        else if (onRestoreChat != null) L.checkpoint.restore.goBackToBeforeThisMessage
+        else L.checkpoint.restore.restoreThisCheckpoint
     ModalBottomSheet(
         onDismissRequest = { if (state !is SheetState.Working) onDismiss() },
         sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = sheetBg,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Column(
-            Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp).padding(bottom = 22.dp)
-                .navigationBarsPadding().animateContentSize()
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 18.dp)
+                .padding(bottom = 22.dp)
+                .navigationBarsPadding()
+                .animateContentSize()
+                .semantics {
+                    paneTitle = sheetTitle
+                    isTraversalGroup = true
+                }
         ) {
             SheetHeader(checkpoint, onRestoreChat != null)
             Spacer(Modifier.height(14.dp))
@@ -125,9 +154,9 @@ fun CheckpointRestoreSheet(
                     Notice(Icons.Outlined.ErrorOutline, AppColors.danger, s.message)
                     Spacer(Modifier.height(12.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = onDismiss) { Text(L.common.close) }
+                        TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) }
                         Spacer(Modifier.width(6.dp))
-                        FilledTonalButton(onClick = { reload++ }) { Text(L.common.tryAgain) }
+                        FilledTonalButton(onClick = { reload++ }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.tryAgain) }
                     }
                 }
                 is SheetState.Ready -> {
@@ -143,36 +172,54 @@ fun CheckpointRestoreSheet(
                     }
                     if (onRestoreChat != null) {
                         Spacer(Modifier.height(16.dp))
-                        Text(L.checkpoint.restore.whatGoesBack, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            L.checkpoint.restore.whatGoesBack,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = muted,
+                            modifier = Modifier.semantics { heading() }
+                        )
                         Spacer(Modifier.height(8.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                             RestoreMode.entries.forEach { m ->
-                                ai.antigem.ui.claude.PickerOption(
-                                    title = m.title,
-                                    description = m.description,
-                                    color = accent,
-                                    selected = m == mode,
-                                    icon = when (m) {
-                                        RestoreMode.CHAT_AND_FILES -> Icons.Outlined.History
-                                        RestoreMode.FILES -> Icons.Outlined.FolderCopy
-                                        RestoreMode.CHAT -> Icons.Outlined.ChatBubbleOutline
-                                    },
-                                    onClick = { mode = m }
-                                )
+                                Box(
+                                    modifier = Modifier.semantics {
+                                        selected = (m == mode)
+                                        role = Role.RadioButton
+                                    }
+                                ) {
+                                    ai.antigem.ui.claude.PickerOption(
+                                        title = m.title,
+                                        description = m.description,
+                                        color = accent,
+                                        selected = m == mode,
+                                        icon = when (m) {
+                                            RestoreMode.CHAT_AND_FILES -> Icons.Outlined.History
+                                            RestoreMode.FILES -> Icons.Outlined.FolderCopy
+                                            RestoreMode.CHAT -> Icons.Outlined.ChatBubbleOutline
+                                        },
+                                        onClick = { mode = m }
+                                    )
+                                }
                             }
                         }
                     }
                     Spacer(Modifier.height(18.dp))
                     val nothingToRestore = !mode.chat && pv.files.isEmpty()
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    FlowRow(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         if (onDelete != null) {
-                            TextButton(onClick = onDelete) { Text(L.common.delete, color = AppColors.danger) }
+                            TextButton(onClick = onDelete, modifier = Modifier.minTouchTarget(48.dp)) {
+                                Text(L.common.delete, color = dangerText)
+                            }
                         }
-                        Spacer(Modifier.weight(1f))
-                        TextButton(onClick = onDismiss) { Text(L.common.cancel) }
-                        Spacer(Modifier.width(6.dp))
+                        TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
                         Button(
                             enabled = !agentBusy && !nothingToRestore,
+                            modifier = Modifier.minTouchTarget(48.dp),
                             onClick = {
                                 val chosen = mode
                                 if (!chosen.files) {
@@ -207,7 +254,7 @@ fun CheckpointRestoreSheet(
                     Notice(Icons.Outlined.CheckCircle, AppColors.success, L.checkpoint.restore.restoreUndoneTheFilesAreAs)
                     Spacer(Modifier.height(14.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = onDismiss) { Text(L.common.done) }
+                        Button(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.done) }
                     }
                 }
             }
@@ -218,20 +265,26 @@ fun CheckpointRestoreSheet(
 @Composable
 private fun SheetHeader(cp: CheckpointSummary, fromChat: Boolean) {
     val agent = agentOf(cp.agent)
-    val color = agent?.accent() ?: MaterialTheme.colorScheme.primary
+    val sheetBg = MaterialTheme.colorScheme.background
+    val muted = accessibleMutedColor(alpha = 0.72f, background = sheetBg)
+    val quoteColor = accessibleMutedColor(alpha = 0.78f, background = sheetBg)
+    val rawColor = agent?.accent() ?: MaterialTheme.colorScheme.primary
+    val color = ensureAccessibleContrast(rawColor, sheetBg, 3.0f, sheetBg)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(color.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(rawColor.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
             Icon(Icons.Outlined.History, null, tint = color, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
                 if (cp.isPreRestore) L.checkpoint.restore.undoThatRestore else if (fromChat) L.checkpoint.restore.goBackToBeforeThisMessage else L.checkpoint.restore.restoreThisCheckpoint,
-                fontSize = 17.sp, fontWeight = FontWeight.Bold
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics { heading() }
             )
             Text(
                 listOfNotNull(agent?.label(), formatCheckpointTime(cp.time)).joinToString(" · "),
-                fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                fontSize = 12.5.sp, color = muted
             )
         }
     }
@@ -239,35 +292,48 @@ private fun SheetHeader(cp: CheckpointSummary, fromChat: Boolean) {
         Spacer(Modifier.height(8.dp))
         Text(
             "“$it”", fontSize = 13.sp, lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+            color = quoteColor
         )
     }
 }
 
 @Composable
 private fun Busy(text: String) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 26.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+    val muted = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.background)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 26.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         Spacer(Modifier.width(12.dp))
-        Text(text, fontSize = 13.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text, fontSize = 13.5.sp, color = muted)
     }
 }
 
 @Composable
 internal fun Notice(icon: ImageVector, color: Color, text: String) {
+    val bg = color.copy(alpha = 0.10f)
+    val fallback = MaterialTheme.colorScheme.background
+    val iconTint = ensureAccessibleContrast(color, bg, 3.0f, fallback)
+    val textColor = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), bg, 4.5f, fallback)
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.10f)).padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(bg).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top
     ) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(17.dp).padding(top = 1.dp))
+        Icon(icon, null, tint = iconTint, modifier = Modifier.size(17.dp).padding(top = 1.dp))
         Spacer(Modifier.width(9.dp))
-        Text(text, fontSize = 12.5.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f))
+        Text(text, fontSize = 12.5.sp, lineHeight = 17.sp, color = textColor)
     }
 }
 
 @Composable
 private fun PreviewBody(projectPath: String, cp: CheckpointSummary, pv: CheckpointPreview, files: Boolean) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val sheetBg = MaterialTheme.colorScheme.background
+    val muted = accessibleMutedColor(alpha = 0.72f, background = sheetBg)
     if (!files) {
         Notice(Icons.Outlined.Info, AppColors.info,
             if (pv.files.isNotEmpty()) L.checkpoint.restore.filesStayAsTheyAreNow(pv.files.size) else L.checkpoint.restore.filesStayAsTheyAreNow2)
@@ -276,7 +342,10 @@ private fun PreviewBody(projectPath: String, cp: CheckpointSummary, pv: Checkpoi
     if (pv.files.isEmpty()) {
         Notice(Icons.Outlined.CheckCircle, AppColors.success, L.checkpoint.restore.noFileChangesTheProjectsFiles)
     } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             if (pv.modified > 0) CountChip(Icons.Outlined.Edit, AppColors.warning, L.checkpoint.restore.countChanged(pv.modified))
             if (pv.recreated > 0) CountChip(Icons.Outlined.AddCircleOutline, AppColors.success, L.checkpoint.restore.recreatedComeBack(pv.recreated))
             if (pv.deleted > 0) CountChip(Icons.Outlined.RemoveCircleOutline, AppColors.danger, L.checkpoint.restore.countRemoved(pv.deleted))
@@ -325,13 +394,15 @@ private fun PreviewBody(projectPath: String, cp: CheckpointSummary, pv: Checkpoi
 
 @Composable
 private fun CountChip(icon: ImageVector, color: Color, text: String) {
+    val bg = color.copy(alpha = 0.12f)
+    val fg = ensureAccessibleContrast(color, bg, 4.5f, MaterialTheme.colorScheme.background)
     Row(
-        Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp),
+        Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
+        Icon(icon, null, tint = fg, modifier = Modifier.size(14.dp))
         Spacer(Modifier.width(5.dp))
-        Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = color)
+        Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = fg)
     }
 }
 
@@ -340,11 +411,17 @@ private fun FileRow(projectPath: String, checkpointId: String, f: CheckpointFile
     var open by remember { mutableStateOf(false) }
     var diff by remember { mutableStateOf<String?>(null) }
     var diffError by remember { mutableStateOf<String?>(null) }
-    val (icon, color, label) = when (f.change) {
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val fallbackBg = MaterialTheme.colorScheme.background
+    val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = fallbackBg)
+    val (icon, rawColor, label) = when (f.change) {
         "deleted" -> Triple(Icons.Outlined.RemoveCircleOutline, AppColors.danger, "removed")
         "recreated" -> Triple(Icons.Outlined.AddCircleOutline, AppColors.success, L.checkpoint.restore.comesBack)
         else -> Triple(Icons.Outlined.Edit, AppColors.warning, "changed")
     }
+    val color = ensureAccessibleContrast(rawColor, cardBg, 3.0f, fallbackBg)
+    val addedColor = ensureAccessibleContrast(AppColors.success, cardBg, 4.5f, fallbackBg)
+    val removedColor = ensureAccessibleContrast(AppColors.danger, cardBg, 4.5f, fallbackBg)
     LaunchedEffect(open) {
         if (open && diff == null && !f.binary) {
             ProjectCheckpoints.diff(projectPath, checkpointId, f.path).fold({ diff = it }, { diffError = it.message })
@@ -354,31 +431,39 @@ private fun FileRow(projectPath: String, checkpointId: String, f: CheckpointFile
     val dir = f.path.substringBeforeLast('/', "")
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 12.dp, vertical = 9.dp),
+            Modifier
+                .fillMaxWidth()
+                .minTouchTarget(48.dp)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (open) L.common.collapse else L.common.expand
+                ) { open = !open }
+                .semantics(mergeDescendants = true) { stateDescription = label }
+                .padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(icon, label, tint = color, modifier = Modifier.size(17.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (dir.isNotEmpty()) Text(dir, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (dir.isNotEmpty()) Text(dir, fontSize = 11.sp, color = cardMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.width(8.dp))
             if (f.binary) {
-                Text(L.checkpoint.restore.binary, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(L.checkpoint.restore.binary, fontSize = 11.sp, color = cardMuted)
             } else {
-                if (f.added > 0) Text("+${f.added}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppColors.success, fontFamily = FontFamily.Monospace)
+                if (f.added > 0) Text("+${f.added}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = addedColor, fontFamily = FontFamily.Monospace)
                 if (f.added > 0 && f.removed > 0) Spacer(Modifier.width(5.dp))
-                if (f.removed > 0) Text("−${f.removed}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AppColors.danger, fontFamily = FontFamily.Monospace)
+                if (f.removed > 0) Text("−${f.removed}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = removedColor, fontFamily = FontFamily.Monospace)
             }
             Spacer(Modifier.width(6.dp))
-            Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Icon(if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null, tint = cardMuted, modifier = Modifier.size(18.dp))
         }
         AnimatedVisibility(visible = open, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
             Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp)) {
                 when {
-                    f.binary -> Text(L.checkpoint.restore.aBinaryFileItIsPut, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    diffError != null -> Text(diffError!!, fontSize = 12.sp, color = AppColors.danger)
+                    f.binary -> Text(L.checkpoint.restore.aBinaryFileItIsPut, fontSize = 12.sp, color = cardMuted)
+                    diffError != null -> Text(diffError!!, fontSize = 12.sp, color = removedColor)
                     diff == null -> LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
                     else -> DiffBlock(diff!!)
                 }
@@ -394,16 +479,23 @@ private fun DiffBlock(diff: String) {
         diff.lines().dropWhile { !it.startsWith("@@") }.let { if (it.isEmpty()) diff.lines() else it }
     }
     val maxLines = 500
+    val codeBg = AppColors.codeBg
+    val addedBg = AppColors.success.copy(alpha = 0.14f)
+    val addedFg = ensureAccessibleContrast(AppColors.success, addedBg, 4.5f, codeBg)
+    val removedBg = AppColors.danger.copy(alpha = 0.14f)
+    val removedFg = ensureAccessibleContrast(AppColors.danger, removedBg, 4.5f, codeBg)
+    val hunkFg = ensureAccessibleContrast(AppColors.info, codeBg, 4.5f, codeBg)
+    val metaFg = ensureAccessibleContrast(AppColors.codeText.copy(alpha = 0.72f), codeBg, 4.5f, codeBg)
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AppColors.codeBg)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(codeBg)
             .horizontalScroll(rememberScrollState()).padding(vertical = 6.dp)
     ) {
         lines.take(maxLines).forEach { line ->
             val (bg, fg) = when {
-                line.startsWith("+") -> AppColors.success.copy(alpha = 0.14f) to AppColors.success
-                line.startsWith("-") -> AppColors.danger.copy(alpha = 0.14f) to AppColors.danger
-                line.startsWith("@@") -> Color.Transparent to AppColors.info
-                line.startsWith("\\") -> Color.Transparent to MaterialTheme.colorScheme.onSurfaceVariant
+                line.startsWith("+") -> addedBg to addedFg
+                line.startsWith("-") -> removedBg to removedFg
+                line.startsWith("@@") -> Color.Transparent to hunkFg
+                line.startsWith("\\") -> Color.Transparent to metaFg
                 else -> Color.Transparent to AppColors.codeText
             }
             Text(
@@ -413,7 +505,7 @@ private fun DiffBlock(diff: String) {
             )
         }
         if (lines.size > maxLines) {
-            Text(L.checkpoint.restore.valueMoreLines(lines.size - maxLines), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+            Text(L.checkpoint.restore.valueMoreLines(lines.size - maxLines), fontSize = 11.sp, color = metaFg, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
         }
     }
 }
@@ -425,24 +517,32 @@ private fun DoneBody(
 ) {
     val scope = rememberCoroutineScope()
     val r = s.result
+    val sheetBg = MaterialTheme.colorScheme.background
+    val muted = accessibleMutedColor(alpha = 0.72f, background = sheetBg)
+    val successIcon = ensureAccessibleContrast(AppColors.success, AppColors.success.copy(alpha = 0.14f), 3.0f, sheetBg)
     val parts = listOfNotNull(
         r.modified.takeIf { it > 0 }?.let { L.checkpoint.restore.valueChangedBack(it) },
         r.recreated.takeIf { it > 0 }?.let { L.checkpoint.restore.valueBroughtBack(it) },
         r.deleted.takeIf { it > 0 }?.let { "$it removed" }
     )
-    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(56.dp).clip(CircleShape).background(AppColors.success.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.CheckCircle, null, tint = AppColors.success, modifier = Modifier.size(32.dp))
+            Icon(Icons.Outlined.CheckCircle, null, tint = successIcon, modifier = Modifier.size(32.dp))
         }
         Spacer(Modifier.height(10.dp))
-        Text(if (r.errors.isEmpty()) L.checkpoint.restore.filesRestored else L.checkpoint.restore.filesRestoredWithProblems, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(
+            if (r.errors.isEmpty()) L.checkpoint.restore.filesRestored else L.checkpoint.restore.filesRestoredWithProblems,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.semantics { heading() }
+        )
         Text(
             if (parts.isEmpty()) L.checkpoint.restore.nothingHadToChange else parts.joinToString(" · "),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            fontSize = 13.sp, color = muted
         )
         if (s.mode.chat) {
             Spacer(Modifier.height(4.dp))
-            Text(L.checkpoint.restore.theChatWentBackTooThe, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(L.checkpoint.restore.theChatWentBackTooThe, fontSize = 12.5.sp, color = muted)
         }
     }
     if (r.errors.isNotEmpty()) {
@@ -453,23 +553,26 @@ private fun DoneBody(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         val undo = r.undoId
         if (undo != null) {
-            OutlinedButton(onClick = {
-                onUndoing()
-                scope.launch {
-                    ProjectCheckpoints.restore(projectPath, undo).fold({ onUndone() }, { onUndoFailed(it.message ?: L.checkpoint.restore.couldNotUndo) })
-                }
-            }) {
+            OutlinedButton(
+                onClick = {
+                    onUndoing()
+                    scope.launch {
+                        ProjectCheckpoints.restore(projectPath, undo).fold({ onUndone() }, { onUndoFailed(it.message ?: L.checkpoint.restore.couldNotUndo) })
+                    }
+                },
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.AutoMirrored.Outlined.Undo, null, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(if (s.mode.chat) L.checkpoint.restore.undoFiles else L.checkpoint.restore.undoRestore)
             }
         }
         Spacer(Modifier.weight(1f))
-        Button(onClick = onDismiss) { Text(L.common.done) }
+        Button(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.done) }
     }
     if (s.mode.chat && r.undoId != null) {
         Spacer(Modifier.height(6.dp))
-        Text(L.checkpoint.restore.undoBringsTheFilesBackThe, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(L.checkpoint.restore.undoBringsTheFilesBackThe, fontSize = 11.5.sp, color = muted)
     }
 }
 

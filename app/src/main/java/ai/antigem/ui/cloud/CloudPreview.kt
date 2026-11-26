@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -45,6 +46,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -56,6 +62,9 @@ import androidx.compose.ui.window.DialogProperties
 import ai.antigem.data.agent.agy.AgyCloud
 import ai.antigem.domain.model.ChatMessage
 import ai.antigem.theme.GeminiBlue
+import ai.antigem.ui.components.LocalScreenAccessible
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.runBlocking
 import ai.antigem.i18n.L
 
@@ -105,29 +114,35 @@ fun CloudPreviewChooser(
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue) },
-        title = { Text(L.cloud.preview.previewTheCloudVm) },
+        title = { Text(L.cloud.preview.previewTheCloudVm, modifier = Modifier.semantics { heading() }) },
         text = {
             Column {
                 Text(
                     if (suggestedPorts.isNotEmpty()) L.cloud.preview.portsFromTheAgentsCommandsAre
                     else L.cloud.preview.pickThePortYourServerListens,
-                    fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    fontSize = 12.5.sp, color = accessibleMutedColor(alpha = 0.72f)
                 )
                 Spacer(Modifier.height(10.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(ports) { p ->
                         val on = p == port
                         Surface(
                             onClick = { portText = p.toString() },
                             shape = RoundedCornerShape(50),
-                            color = if (on) GeminiBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            color = if (on) GeminiBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                            modifier = Modifier.minTouchTarget(48.dp).semantics {
+                                role = Role.RadioButton
+                                selected = on
+                            }
                         ) {
-                            Text(
-                                ":$p" + if (p in suggestedPorts) " ·" else "",
-                                fontSize = 12.5.sp, fontFamily = FontFamily.Monospace,
-                                color = if (on) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    ":$p" + if (p in suggestedPorts) " ·" else "",
+                                    fontSize = 12.5.sp, fontFamily = FontFamily.Monospace,
+                                    color = if (on) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -143,15 +158,15 @@ fun CloudPreviewChooser(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     "In the browser it opens as http://127.0.0.1:… on this phone. Live reload does not work: reload to see changes.",
-                    fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    fontSize = 11.sp, color = accessibleMutedColor(alpha = 0.72f)
                 )
             }
         },
         confirmButton = {
-            androidx.compose.material3.TextButton(enabled = port != null, onClick = { port?.let(onOpenInApp) }) { Text(L.cloud.preview.openInApp) }
+            androidx.compose.material3.TextButton(enabled = port != null, onClick = { port?.let(onOpenInApp) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.cloud.preview.openInApp) }
         },
         dismissButton = {
-            androidx.compose.material3.TextButton(enabled = port != null, onClick = { port?.let(onOpenInBrowser) }) { Text(L.cloud.preview.openInBrowser) }
+            androidx.compose.material3.TextButton(enabled = port != null, onClick = { port?.let(onOpenInBrowser) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.cloud.preview.openInBrowser) }
         }
     )
 }
@@ -160,6 +175,7 @@ fun CloudPreviewChooser(
 @Composable
 fun CloudPreviewDialog(conversationId: String, suggestedPorts: List<Int>, initialPort: Int? = null, onDismiss: () -> Unit) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val screenAccessible = LocalScreenAccessible.current
     val ports = remember(suggestedPorts, initialPort) { (listOfNotNull(initialPort) + suggestedPorts + DEFAULT_PORTS).distinct().take(8) }
     var port by remember { mutableIntStateOf(ports.first()) }
     var portText by remember { mutableStateOf(port.toString()) }
@@ -179,16 +195,19 @@ fun CloudPreviewDialog(conversationId: String, suggestedPorts: List<Int>, initia
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.systemBarsPadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, L.common.close) }
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.close) }
                     Icon(Icons.Outlined.Cloud, null, tint = GeminiBlue, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text(L.common.preview, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    Text(L.common.preview, fontSize = 16.sp, modifier = Modifier.weight(1f).semantics { heading() })
                     // the same page in the system browser (served on this phone through the hub)
-                    IconButton(onClick = {
-                        val p = path.trim().ifBlank { "/" }
-                        uriHandler.openUri(ai.antigem.data.agent.agy.CloudPreviewServer.urlFor(conversationId, port, p))
-                    }) { Icon(Icons.Outlined.OpenInBrowser, L.cloud.preview.openInBrowser) }
-                    IconButton(onClick = { reloadKey++; open() }) { Icon(Icons.Outlined.Refresh, L.common.reload) }
+                    IconButton(
+                        onClick = {
+                            val p = path.trim().ifBlank { "/" }
+                            uriHandler.openUri(ai.antigem.data.agent.agy.CloudPreviewServer.urlFor(conversationId, port, p))
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Icon(Icons.Outlined.OpenInBrowser, L.cloud.preview.openInBrowser) }
+                    IconButton(onClick = { reloadKey++; open() }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.reload) }
                 }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -211,20 +230,26 @@ fun CloudPreviewDialog(conversationId: String, suggestedPorts: List<Int>, initia
                         modifier = Modifier.weight(1f)
                     )
                 }
-                LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyRow(Modifier.padding(horizontal = 12.dp, vertical = 6.dp).selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(ports) { p ->
                         val on = p == port
                         Surface(
                             onClick = { port = p; portText = p.toString(); client.port = p; open() },
                             shape = RoundedCornerShape(50),
-                            color = if (on) GeminiBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f)
+                            color = if (on) GeminiBlue else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                            modifier = Modifier.minTouchTarget(48.dp).semantics {
+                                role = Role.RadioButton
+                                selected = on
+                            }
                         ) {
-                            Text(
-                                ":$p" + if (p in suggestedPorts) " ·" else "",
-                                fontSize = 12.sp, fontFamily = FontFamily.Monospace,
-                                color = if (on) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    ":$p" + if (p in suggestedPorts) " ·" else "",
+                                    fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                                    color = if (on) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -233,6 +258,14 @@ fun CloudPreviewDialog(conversationId: String, suggestedPorts: List<Int>, initia
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
                         WebView(ctx).apply {
+                            contentDescription = L.common.preview
+                            isFocusable = screenAccessible
+                            isFocusableInTouchMode = screenAccessible
+                            importantForAccessibility = if (screenAccessible) {
+                                android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                            } else {
+                                android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                            }
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.loadWithOverviewMode = true
@@ -242,6 +275,16 @@ fun CloudPreviewDialog(conversationId: String, suggestedPorts: List<Int>, initia
                             webViewClient = client
                             webView = this
                             loadUrl("https://$PREVIEW_HOST/")
+                        }
+                    },
+                    update = { view ->
+                        view.contentDescription = L.common.preview
+                        view.isFocusable = screenAccessible
+                        view.isFocusableInTouchMode = screenAccessible
+                        view.importantForAccessibility = if (screenAccessible) {
+                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                        } else {
+                            android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
                         }
                     }
                 )

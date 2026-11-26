@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -19,6 +19,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -28,8 +35,13 @@ import androidx.compose.ui.window.DialogProperties
 import ai.antigem.data.memory.AgentMemory
 import ai.antigem.data.memory.MemoryBridgeClient
 import ai.antigem.domain.model.AgentKind
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -46,11 +58,11 @@ fun AgentMemoryEntryRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth().minTouchTarget(48.dp).semantics { role = Role.Button }
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).clearAndSetSemantics {},
                 contentAlignment = Alignment.Center
             ) { Icon(Icons.Outlined.Memory, null, tint = MaterialTheme.colorScheme.primary) }
             Spacer(Modifier.width(14.dp))
@@ -79,7 +91,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
     val listLimit by AgentMemory.listLimit.collectAsState()
     val saveHistory by AgentMemory.saveHistory.collectAsState()
     val changes by AgentMemory.changes.collectAsState()
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val muted = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.surfaceContainerLow)
 
     var reload by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
@@ -128,12 +140,18 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
         // ----- master switch -----
         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = enabled, role = Role.Switch) { AgentMemory.setEnabled(!enabled) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text(L.settings.agentMemory.agentMemory, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Text(L.settings.agentMemory.sharedByEveryAgent, fontSize = 12.sp, color = muted)
                     }
-                    Switch(checked = enabled, onCheckedChange = { AgentMemory.setEnabled(it) })
+                    Switch(checked = enabled, onCheckedChange = null)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -151,7 +169,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
         if (enabled) {
             // ----- per agent -----
             Spacer(Modifier.height(22.dp))
-            Text(L.settings.agentMemory.useWith, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(L.settings.agentMemory.useWith, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
             Text(
                 L.settings.agentMemory.aWeakModelMayNotFollow,
                 fontSize = 12.sp, lineHeight = 16.sp, color = muted
@@ -162,11 +180,11 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
                     AgentKind.entries.forEach { agent ->
                         val on = agent in agents
                         Row(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { AgentMemory.setAgent(agent, !on) }.padding(vertical = 2.dp),
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).accessibleToggleRow(checked = on, role = Role.Switch) { AgentMemory.setAgent(agent, !on) }.padding(vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(agent.label(), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                            Switch(checked = on, onCheckedChange = { AgentMemory.setAgent(agent, it) })
+                            Switch(checked = on, onCheckedChange = null)
                         }
                     }
                 }
@@ -183,14 +201,14 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
                             fontSize = 12.sp, lineHeight = 16.sp, color = muted
                         )
                     }
-                    IconButton(onClick = { AgentMemory.setListLimit(listLimit - 1) }, enabled = listLimit > 0) {
+                    IconButton(onClick = { AgentMemory.setListLimit(listLimit - 1) }, enabled = listLimit > 0, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Remove, L.settings.agentMemory.fewer)
                     }
                     Text(
                         "$listLimit", fontSize = 16.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-                        modifier = Modifier.widthIn(min = 26.dp)
+                        modifier = Modifier.widthIn(min = 26.dp).semantics { liveRegion = LiveRegionMode.Polite }
                     )
-                    IconButton(onClick = { AgentMemory.setListLimit(listLimit + 1) }, enabled = listLimit < AgentMemory.MAX_LIST_LIMIT) {
+                    IconButton(onClick = { AgentMemory.setListLimit(listLimit + 1) }, enabled = listLimit < AgentMemory.MAX_LIST_LIMIT, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Add, L.common.more)
                     }
                 }
@@ -199,7 +217,10 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
             // ----- chat history -----
             Spacer(Modifier.height(12.dp))
             Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().accessibleToggleRow(checked = saveHistory, role = Role.Switch) { AgentMemory.setSaveHistory(!saveHistory) }.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text(L.settings.agentMemory.saveChatHistory, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                         Text(
@@ -208,7 +229,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Switch(checked = saveHistory, onCheckedChange = { AgentMemory.setSaveHistory(it) })
+                    Switch(checked = saveHistory, onCheckedChange = null)
                 }
             }
             if (onOpenHistory != null) {
@@ -217,7 +238,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
                     onClick = onOpenHistory,
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).semantics { role = Role.Button }
                 ) {
                     Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
@@ -234,14 +255,14 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
         Spacer(Modifier.height(22.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(L.settings.agentMemory.memories, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(L.settings.agentMemory.memories, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                 Text(
                     if (enabled) L.settings.agentMemory.tapOneToEditIt else L.settings.agentMemory.keptWhileMemoryIsOffAgents,
                     fontSize = 12.sp, color = muted
                 )
             }
             if (loading || searching) CircularProgressIndicator(Modifier.padding(end = 12.dp).size(18.dp), strokeWidth = 2.dp)
-            FilledTonalButton(onClick = { editing = MemoryBridgeClient.Memory() }) {
+            FilledTonalButton(onClick = { editing = MemoryBridgeClient.Memory() }, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(L.common.add)
@@ -252,7 +273,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
             value = query, onValueChange = { query = it }, singleLine = true,
             placeholder = { Text(L.settings.agentMemory.searchMemoriesAndPastChats) },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
-            trailingIcon = if (query.isNotEmpty()) ({ IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, L.common.clear) } }) else null,
+            trailingIcon = if (query.isNotEmpty()) ({ IconButton(onClick = { query = "" }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.clear) } }) else null,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(4.dp))
@@ -283,7 +304,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
         } else {
             loadError?.let { err ->
                 ErrorText(err)
-                TextButton(onClick = { reload++ }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text(L.common.tryAgain) }
+                TextButton(onClick = { reload++ }, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.tryAgain) }
             }
             if (memories.isEmpty() && !loading && loadError == null) {
                 Text(
@@ -344,7 +365,7 @@ fun AgentMemoryScreen(onOpenHistory: (() -> Unit)? = null) {
 @Composable
 private fun GroupHeader(title: String, subtitle: String?) {
     Spacer(Modifier.height(14.dp))
-    Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
     if (!subtitle.isNullOrBlank()) {
         Text(
             subtitle, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -358,18 +379,18 @@ private fun GroupHeader(title: String, subtitle: String?) {
 private fun ErrorText(text: String) {
     Text(
         text, fontSize = 12.5.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.error,
-        modifier = Modifier.padding(vertical = 8.dp)
+        modifier = Modifier.padding(vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }
     )
 }
 
 @Composable
 private fun MemoryCard(m: MemoryBridgeClient.Memory, onClick: () -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val muted = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.surfaceContainerLow)
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).semantics { role = Role.Button }
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(m.name.ifBlank { L.common.untitled }, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -395,7 +416,7 @@ private fun MemoryCard(m: MemoryBridgeClient.Memory, onClick: () -> Unit) {
 
 @Composable
 private fun HistoryCard(h: MemoryBridgeClient.HistoryHit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val muted = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.surfaceContainerLow)
     Surface(
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -420,9 +441,11 @@ private fun HistoryCard(h: MemoryBridgeClient.HistoryHit) {
 @Composable
 private fun MemoryChip(label: String, highlight: Boolean) {
     val c = if (highlight) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+    val bg = c.copy(alpha = 0.13f)
+    val accessibleText = ensureAccessibleContrast(c, bg, 4.5f, MaterialTheme.colorScheme.surfaceContainerLow)
     Text(
-        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = c, maxLines = 1, overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(c.copy(alpha = 0.13f)).padding(horizontal = 6.dp, vertical = 2.dp)
+        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = accessibleText, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(bg).padding(horizontal = 6.dp, vertical = 2.dp)
     )
 }
 
@@ -472,13 +495,17 @@ private fun MemoryEditor(
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(14.dp))
-                Text(L.settings.agentMemory.mode, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                MemoryOption(L.common.always, L.settings.agentMemory.everyChatGetsItInFull, always) { always = true }
-                MemoryOption(L.settings.agentMemory.passive, L.settings.agentMemory.listedWhenRelevantTheAgentReads, !always) { always = false }
+                Text(L.settings.agentMemory.mode, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                Column(Modifier.selectableGroup()) {
+                    MemoryOption(L.common.always, L.settings.agentMemory.everyChatGetsItInFull, always) { always = true }
+                    MemoryOption(L.settings.agentMemory.passive, L.settings.agentMemory.listedWhenRelevantTheAgentReads, !always) { always = false }
+                }
                 Spacer(Modifier.height(10.dp))
-                Text(L.settings.agentMemory.scope, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                MemoryOption(L.common.allProjects, L.settings.agentMemory.anyChatCanGetIt, !oneProject) { oneProject = false }
-                MemoryOption(L.settings.agentMemory.oneProject, L.settings.agentMemory.onlyChatsInThatProjectFolder, oneProject) { oneProject = true }
+                Text(L.settings.agentMemory.scope, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                Column(Modifier.selectableGroup()) {
+                    MemoryOption(L.common.allProjects, L.settings.agentMemory.anyChatCanGetIt, !oneProject) { oneProject = false }
+                    MemoryOption(L.settings.agentMemory.oneProject, L.settings.agentMemory.onlyChatsInThatProjectFolder, oneProject) { oneProject = true }
+                }
                 if (oneProject) {
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
@@ -493,6 +520,7 @@ private fun MemoryEditor(
                                 FilterChip(
                                     selected = p == project.trim(),
                                     onClick = { project = p },
+                                    modifier = Modifier.minTouchTarget(48.dp),
                                     label = {
                                         Text(
                                             p.trimEnd('/').substringAfterLast('/').ifBlank { p },
@@ -506,12 +534,13 @@ private fun MemoryEditor(
                 }
                 error?.let {
                     Spacer(Modifier.height(10.dp))
-                    Text(it, fontSize = 12.5.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.error)
+                    Text(it, fontSize = 12.5.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 }
             }
         },
         confirmButton = {
             Button(
+                modifier = Modifier.minTouchTarget(48.dp),
                 enabled = !saving && name.isNotBlank() && text.isNotBlank() && (!oneProject || project.isNotBlank()),
                 onClick = {
                     saving = true
@@ -539,11 +568,11 @@ private fun MemoryEditor(
         dismissButton = {
             Row {
                 if (!isNew) {
-                    TextButton(onClick = { confirmDelete = true }, enabled = !saving) {
+                    TextButton(onClick = { confirmDelete = true }, enabled = !saving, modifier = Modifier.minTouchTarget(48.dp)) {
                         Text(L.common.delete, color = MaterialTheme.colorScheme.error)
                     }
                 }
-                TextButton(onClick = onDismiss, enabled = !saving) { Text(L.common.cancel) }
+                TextButton(onClick = onDismiss, enabled = !saving, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
             }
         }
     )
@@ -554,7 +583,7 @@ private fun MemoryEditor(
             title = { Text("Delete \"${memory.name.ifBlank { "Untitled" }}\"?") },
             text = { Text(L.settings.agentMemory.agentsWillNoLongerGetIt) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                     confirmDelete = false
                     saving = true
                     error = null
@@ -569,7 +598,7 @@ private fun MemoryEditor(
                     }
                 }) { Text(L.common.delete, color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { confirmDelete = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -580,11 +609,11 @@ private fun MemoryOption(title: String, subtitle: String, selected: Boolean, onS
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .selectable(selected = selected, onClick = onSelect)
+            .accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onSelect)
+        RadioButton(selected = selected, onClick = null)
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 14.sp)
             Text(subtitle, fontSize = 11.5.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

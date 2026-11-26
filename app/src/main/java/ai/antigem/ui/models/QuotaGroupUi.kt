@@ -43,6 +43,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,6 +59,8 @@ import ai.antigem.theme.QuotaAmber
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.theme.QuotaRed
 import ai.antigem.ui.agents.SegmentedSelector
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** Green / amber / red by the share left. */
@@ -72,14 +78,15 @@ fun QuotaMeter(window: QuotaWindowUi, modifier: Modifier = Modifier) {
     val fill by animateFloatAsState(window.remaining.coerceIn(0f, 1f), label = "quota_meter")
     val time = formatCleanCountdown(window.resetIso, window.countdown)
     val muted = MaterialTheme.colorScheme.onSurface
+    val secondaryText = accessibleMutedColor(alpha = 0.72f)
     Surface(
-        modifier = modifier,
+        modifier = modifier.semantics(mergeDescendants = true) {},
         shape = RoundedCornerShape(8.dp),
         color = muted.copy(alpha = 0.04f),
         border = BorderStroke(1.dp, muted.copy(alpha = 0.07f))
     ) {
         Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(window.label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = muted.copy(alpha = 0.8f))
+            Text(window.label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = muted.copy(alpha = 0.85f))
             Spacer(Modifier.width(6.dp))
             Box(Modifier.width(30.dp).height(5.dp).clip(RoundedCornerShape(3.dp)).background(muted.copy(alpha = 0.1f))) {
                 Box(Modifier.fillMaxWidth(fill).fillMaxHeight().clip(RoundedCornerShape(3.dp)).background(color))
@@ -87,7 +94,7 @@ fun QuotaMeter(window: QuotaWindowUi, modifier: Modifier = Modifier) {
             Spacer(Modifier.width(6.dp))
             Text(pctText, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = color)
             if (time.isNotBlank()) {
-                Text(" · $time", fontSize = 11.sp, color = muted.copy(alpha = 0.5f), maxLines = 1)
+                Text(" · $time", fontSize = 11.sp, color = secondaryText, maxLines = 1)
             }
         }
     }
@@ -103,24 +110,25 @@ fun QuotaGroupHeader(
     windows: List<QuotaWindowUi>,
     modifier: Modifier = Modifier
 ) {
+    val mutedHeaderColor = accessibleMutedColor(alpha = 0.75f)
     Column(modifier.fillMaxWidth().padding(top = 18.dp, bottom = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+            Box(Modifier.size(8.dp).clip(CircleShape).background(accent).clearAndSetSemantics {})
             Spacer(Modifier.width(8.dp))
             Text(
                 title.uppercase(),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = mutedHeaderColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).semantics { heading() }
             )
             Text(
                 if (count == 1) "1 model" else L.models.quotaGroupUi.countModels(count),
                 fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                color = mutedHeaderColor
             )
         }
         if (windows.isNotEmpty()) {
@@ -142,7 +150,7 @@ fun PillWindowRow(selected: QuotaPillWindow, accent: Color, modifier: Modifier =
                 L.models.quotaGroupUi.shareLeftNextToTheModel,
                 fontSize = 11.sp,
                 lineHeight = 14.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                color = accessibleMutedColor(alpha = 0.72f)
             )
         }
         Spacer(Modifier.width(12.dp))
@@ -160,7 +168,7 @@ fun PillWindowRow(selected: QuotaPillWindow, accent: Color, modifier: Modifier =
 @Composable
 fun EditGroupsAction(editing: Boolean, accent: Color, onToggle: () -> Unit) {
     val bg by animateColorAsState(if (editing) accent.copy(alpha = 0.16f) else Color.Transparent, label = "edit_groups_bg")
-    IconButton(onClick = onToggle, modifier = Modifier.size(38.dp)) {
+    IconButton(onClick = onToggle, modifier = Modifier.minTouchTarget(48.dp)) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(bg), contentAlignment = Alignment.Center) {
             Icon(
                 if (editing) Icons.Filled.Check else Icons.Outlined.Edit,
@@ -190,10 +198,10 @@ fun EditGroupsBanner(accent: Color, modifier: Modifier = Modifier, onDone: () ->
                     L.models.quotaGroupUi.pickWhichLimitEachModelCounts,
                     fontSize = 11.5.sp,
                     lineHeight = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = accessibleMutedColor(alpha = 0.72f)
                 )
             }
-            TextButton(onClick = onDone) { Text(L.common.done, color = accent, fontWeight = FontWeight.SemiBold) }
+            TextButton(onClick = onDone, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.done, color = accent, fontWeight = FontWeight.SemiBold) }
         }
     }
 }
@@ -210,18 +218,20 @@ fun GroupMoveButton(
 ) {
     var open by remember { mutableStateOf(false) }
     val muted = MaterialTheme.colorScheme.onSurface
+    val subColor = accessibleMutedColor(alpha = 0.72f)
     Box {
         Surface(
             onClick = { open = true },
             shape = RoundedCornerShape(8.dp),
             color = accent.copy(alpha = 0.1f),
-            border = BorderStroke(1.dp, accent.copy(alpha = 0.28f))
+            border = BorderStroke(1.dp, accent.copy(alpha = 0.28f)),
+            modifier = Modifier.minTouchTarget(48.dp)
         ) {
-            Row(Modifier.padding(start = 8.dp, end = 4.dp, top = 5.dp, bottom = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.SwapHoriz, null, tint = accent, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(5.dp))
                 Text(current?.title ?: L.models.quotaGroupUi.noGroup, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = accent, maxLines = 1)
-                if (isMoved) Text("  · moved", fontSize = 10.5.sp, color = muted.copy(alpha = 0.5f))
+                if (isMoved) Text("  · moved", fontSize = 10.5.sp, color = subColor)
                 Icon(Icons.Filled.ArrowDropDown, null, tint = accent, modifier = Modifier.size(18.dp))
             }
         }
@@ -230,7 +240,7 @@ fun GroupMoveButton(
                 text = {
                     Column {
                         Text(L.models.quotaGroupUi.automatic, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text(automatic?.title ?: L.models.quotaGroupUi.noGroup, fontSize = 11.5.sp, color = muted.copy(alpha = 0.55f))
+                        Text(automatic?.title ?: L.models.quotaGroupUi.noGroup, fontSize = 11.5.sp, color = subColor)
                     }
                 },
                 leadingIcon = { CheckSlot(!isMoved, accent) },
@@ -243,7 +253,7 @@ fun GroupMoveButton(
                         Column {
                             Text(g.title, fontSize = 14.sp)
                             val limits = g.headerWindows.joinToString(" · ") { "${it.label} ${quotaPercentText(it.remaining, it.oneDecimal)}" }
-                            if (limits.isNotBlank()) Text(limits, fontSize = 11.5.sp, color = muted.copy(alpha = 0.55f))
+                            if (limits.isNotBlank()) Text(limits, fontSize = 11.5.sp, color = subColor)
                         }
                     },
                     leadingIcon = { CheckSlot(isMoved && g.id == current?.id, accent) },

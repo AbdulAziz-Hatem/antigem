@@ -35,6 +35,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,6 +47,8 @@ import ai.antigem.data.changelog.ChangeKind
 import ai.antigem.data.changelog.Changelog
 import ai.antigem.data.changelog.ChangelogVersion
 import ai.antigem.theme.AppColors
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 // Timeline geometry: the rail runs down the left gutter, each version's dot sits level with its card's title.
@@ -134,7 +139,7 @@ private fun HeroCard(releases: Int, changes: Int, since: String?, latest: Change
                 }
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(L.settings.changelog.whatsNew, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    Text(L.settings.changelog.whatsNew, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
                     Text(
                         if (upToDate) L.settings.changelog.youreOnVVersionNameThe(BuildConfig.VERSION_NAME) else L.settings.changelog.youreOnVVersionName(BuildConfig.VERSION_NAME),
                         fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -185,7 +190,8 @@ private fun MonthMarker(label: String, isFirst: Boolean, railColor: Color) {
         }
         Text(
             label.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+            color = ensureAccessibleContrast(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.surface, minRatio = 4.5f),
+            modifier = Modifier.semantics { heading() }
         )
     }
 }
@@ -252,7 +258,16 @@ private fun VersionCard(
     val chevron by animateFloatAsState(if (expanded) 180f else 0f, tween(220), label = "chevron")
 
     Surface(modifier = modifier, shape = RoundedCornerShape(16.dp), color = cardBg, border = border) {
-        Column(Modifier.clickable(onClick = onToggle).padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp)) {
+        Column(
+            Modifier
+                .minTouchTarget(48.dp)
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = if (expanded) L.common.collapse else L.common.expand,
+                    onClick = onToggle
+                )
+                .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("v${version.versionName}", fontSize = 16.5.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(8.dp))
@@ -263,7 +278,7 @@ private fun VersionCard(
                 }
                 Spacer(Modifier.weight(1f))
                 Icon(
-                    Icons.Outlined.ExpandMore, if (expanded) L.common.collapse else L.common.expand,
+                    Icons.Outlined.ExpandMore, null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp).rotate(chevron)
                 )
             }
@@ -298,8 +313,9 @@ private fun VersionCard(
 
 @Composable
 private fun VersionBadge(text: String, color: Color) {
+    val fg = ensureAccessibleContrast(color, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
     Text(
-        text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = color,
+        text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = fg,
         modifier = Modifier.clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.14f)).padding(horizontal = 8.dp, vertical = 2.5.dp)
     )
 }
@@ -307,16 +323,18 @@ private fun VersionBadge(text: String, color: Color) {
 /** "2 New · 1 Fixed" as small coloured chips. */
 @Composable
 private fun KindSummary(version: ChangelogVersion) {
+    val surface = MaterialTheme.colorScheme.surface
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         ChangeKind.entries.forEach { kind ->
             val n = version.counts[kind] ?: return@forEach
+            val fg = ensureAccessibleContrast(kind.color(), surface, minRatio = 4.5f)
             Row(
                 Modifier.clip(RoundedCornerShape(50)).background(kind.color().copy(alpha = 0.10f)).padding(horizontal = 8.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(kind.color()))
+                Box(Modifier.size(6.dp).clip(CircleShape).background(fg))
                 Spacer(Modifier.width(5.dp))
-                Text("$n ${kind.label}", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = kind.color())
+                Text("$n ${kind.label}", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = fg)
             }
         }
     }
@@ -371,7 +389,7 @@ internal fun WhatsNewCard(cardBg: Color, cardBorder: BorderStroke, onClick: () -
         border = BorderStroke(1.dp, Brush.linearGradient(listOf(primary.copy(alpha = 0.55f), AppColors.accentAlt.copy(alpha = 0.35f)))),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(Modifier.clickable(onClick = onClick).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.minTouchTarget(48.dp).clickable(role = Role.Button, onClick = onClick).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(34.dp).clip(RoundedCornerShape(10.dp))
@@ -390,7 +408,8 @@ internal fun WhatsNewCard(cardBg: Color, cardBorder: BorderStroke, onClick: () -
             current.lines.take(2).forEach { line -> ChangeRow(line.text, line.kind) }
             Text(
                 L.settings.changelog.seeAllVersionscountVersions(versions.size),
-                fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = primary
+                fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold,
+                color = ensureAccessibleContrast(primary, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
             )
         }
     }

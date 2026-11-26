@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -159,10 +165,12 @@ fun StemBlockView(kind: StemKind, code: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun StemTabs(selected: Int, onSelect: (Int) -> Unit) {
+    val tabTrackBg = MaterialTheme.colorScheme.surfaceVariant
     Row(
         Modifier
+            .selectableGroup()
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(tabTrackBg)
             .padding(2.dp)
     ) {
         listOf(L.components.stemBlocks.diagram, L.common.code).forEachIndexed { i, label ->
@@ -170,12 +178,13 @@ private fun StemTabs(selected: Int, onSelect: (Int) -> Unit) {
                 Modifier
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (selected == i) ClaudeTerracotta else Color.Transparent)
-                    .clickable { onSelect(i) }
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+                    .accessibleSelectionRow(selected = selected == i, role = Role.Tab) { onSelect(i) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
                     label, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                    color = if (selected == i) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    color = if (selected == i) MaterialTheme.colorScheme.onPrimary else accessibleMutedColor(alpha = 0.78f, background = tabTrackBg)
                 )
             }
         }
@@ -184,8 +193,8 @@ private fun StemTabs(selected: Int, onSelect: (Int) -> Unit) {
 
 @Composable
 private fun StemIconButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, tint: Color? = null, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(28.dp)) {
-        Icon(icon, label, tint = tint ?: MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(15.dp))
+    IconButton(onClick = onClick, modifier = Modifier.minTouchTarget(48.dp)) {
+        Icon(icon, label, tint = tint ?: accessibleMutedColor(alpha = 0.72f), modifier = Modifier.size(16.dp))
     }
 }
 
@@ -346,7 +355,7 @@ private fun TikzBody(code: String, isDark: Boolean, onSvg: (String) -> Unit) {
             )
             StemStatus(L.components.stemBlocks.compilingWithTexFirstTimeTakes, Modifier.align(Alignment.BottomCenter))
         }
-        "error" -> Column(Modifier.fillMaxWidth().padding(10.dp)) {
+        "error" -> Column(Modifier.fillMaxWidth().padding(10.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
             Text(L.components.stemBlocks.couldntCompileThisTikzPicture, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.error)
             Spacer(Modifier.height(6.dp))
             SelectionContainer {
@@ -635,9 +644,9 @@ private fun StemFullscreenDialog(kind: StemKind, code: String, html: String?, on
                     Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) { Icon(Icons.Default.Close, L.common.close) }
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Default.Close, L.common.close) }
                     Spacer(Modifier.width(6.dp))
-                    Text(kind.component.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Text(kind.component.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                     StemTabs(selectedTab) { selectedTab = it }
                     Spacer(Modifier.width(4.dp))
                     if (selectedTab == 0) StemIconButton(Icons.Outlined.RestartAlt, L.common.reload) { restartKey++ }

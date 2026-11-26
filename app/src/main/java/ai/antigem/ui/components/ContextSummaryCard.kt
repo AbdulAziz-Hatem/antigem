@@ -20,6 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,7 +66,11 @@ fun ActiveContextSummaryCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded }
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Button) { isExpanded = !isExpanded }
+                    .semantics(mergeDescendants = true) {
+                        stateDescription = if (isExpanded) L.common.collapse else L.common.expand
+                    }
                     .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -89,6 +100,7 @@ fun ActiveContextSummaryCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(modifier = Modifier.width(6.dp))
+                        val badgeColor = ensureAccessibleContrast(QuotaGreen, QuotaGreen.copy(alpha = 0.15f), 4.5f, bgColor)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
@@ -99,7 +111,7 @@ fun ActiveContextSummaryCard(
                                 text = L.components.contextSummaryCard.activeSummary,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = QuotaGreen
+                                color = badgeColor
                             )
                         }
                     }
@@ -113,25 +125,25 @@ fun ActiveContextSummaryCard(
                 // Edit Button
                 IconButton(
                     onClick = { showEditDialog = true },
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Edit,
                         contentDescription = L.components.contextSummaryCard.editSummary,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.size(15.dp)
+                        tint = accessibleMutedColor(alpha = 0.72f, background = bgColor),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
                 // Delete Button
                 IconButton(
                     onClick = onDeleteSummary,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.DeleteOutline,
                         contentDescription = L.components.contextSummaryCard.deleteSummary,
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -139,7 +151,7 @@ fun ActiveContextSummaryCard(
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    tint = accessibleMutedColor(alpha = 0.7f, background = bgColor),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -198,7 +210,8 @@ fun ContextSummarizeAlertBanner(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
         border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.4f))
@@ -238,7 +251,7 @@ fun ContextSummarizeAlertBanner(
                     TextButton(
                         onClick = { showPostponeMenu = true },
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Text(L.components.contextSummaryCard.notNow, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -282,10 +295,13 @@ fun ContextSummarizeAlertBanner(
 
                 Button(
                     onClick = onSummarizeNow,
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ClaudeTerracotta,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.height(32.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.AutoAwesome,
@@ -312,7 +328,8 @@ fun LiveSummarizingCard(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
         border = BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.5f))
@@ -397,7 +414,8 @@ fun EditSummaryDialog(
                         text = L.components.contextSummaryCard.editContextMemory,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
                     )
                 }
 

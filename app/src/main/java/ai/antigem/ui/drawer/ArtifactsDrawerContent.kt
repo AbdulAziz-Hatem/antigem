@@ -23,6 +23,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,6 +46,10 @@ import ai.antigem.ui.components.ArtifactDownloadHelper
 import ai.antigem.ui.components.FullScreenImageDialog
 import ai.antigem.ui.components.LocalFileLinkHandler
 import ai.antigem.ui.components.LocalSnackbarHostState
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.formatCountForSpeech
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import java.io.File
 import ai.antigem.i18n.L
@@ -53,13 +66,23 @@ fun ArtifactsDrawerContent(
     val fileLinkHandler = LocalFileLinkHandler.current
 
     var selectedImageForPreview by remember { mutableStateOf<ArtifactSnapshot?>(null) }
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val mutedText = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
+    val mutedIcon = accessibleMutedColor(alpha = 0.72f, background = surfaceBg, minRatio = 3.0f)
+    val badgeBg = ClaudeTerracotta.copy(alpha = 0.18f)
+    val accessibleBadgeText = ensureAccessibleContrast(ClaudeTerracotta, badgeBg, 4.5f, surfaceBg)
+    val accessibleHeaderIcon = ensureAccessibleContrast(ClaudeTerracotta, ClaudeTerracotta.copy(alpha = 0.15f), 3.0f, surfaceBg)
 
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(surfaceBg)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .semantics {
+                paneTitle = L.drawer.artifactsDrawer.artifacts
+                isTraversalGroup = true
+            }
     ) {
         // Top Header
         Row(
@@ -72,13 +95,14 @@ fun ArtifactsDrawerContent(
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(ClaudeTerracotta.copy(alpha = 0.15f)),
+                    .background(ClaudeTerracotta.copy(alpha = 0.15f))
+                    .clearAndSetSemantics {},
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Layers,
                     contentDescription = null,
-                    tint = ClaudeTerracotta,
+                    tint = accessibleHeaderIcon,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -91,38 +115,41 @@ fun ArtifactsDrawerContent(
                         text = L.drawer.artifactsDrawer.artifacts,
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = ClaudeTerracotta.copy(alpha = 0.18f),
+                        color = badgeBg,
                         border = BorderStroke(0.8.dp, ClaudeTerracotta.copy(alpha = 0.35f))
                     ) {
                         Text(
                             text = "${artifacts.size}",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = ClaudeTerracotta,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            color = accessibleBadgeText,
+                            modifier = Modifier
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                                .semantics { contentDescription = formatCountForSpeech(artifacts.size) }
                         )
                     }
                 }
                 Text(
                     text = L.drawer.artifactsDrawer.generatedFilesPlansMedia,
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = mutedText
                 )
             }
 
             IconButton(
                 onClick = onClose,
-                modifier = Modifier.size(32.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = L.common.close,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = mutedIcon,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -149,21 +176,23 @@ fun ArtifactsDrawerContent(
                     Icon(
                         imageVector = Icons.Outlined.FolderOpen,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
-                        modifier = Modifier.size(48.dp)
+                        tint = mutedIcon,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clearAndSetSemantics {}
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = L.drawer.artifactsDrawer.noArtifactsGeneratedYet,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = mutedText
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = L.drawer.artifactsDrawer.plansWalkthroughsAndGeneratedImagesWill,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        color = mutedText,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
@@ -239,13 +268,33 @@ private fun ArtifactCardItem(
         artifact.absoluteUri.substringAfterLast("/")
     }
 
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerHigh
+    val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val summaryBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val summaryText = ensureAccessibleContrast(
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+        summaryBg,
+        4.5f,
+        surfaceBg
+    )
+
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(12.dp))
-            .clickable { onOpen() },
+            .clickable(role = Role.Button, onClick = onOpen)
+            .semantics {
+                customActions = listOf(
+                    CustomAccessibilityAction(L.drawer.artifactsDrawer.downloadToDownloadsAntigem) {
+                        onDownload()
+                        true
+                    }
+                )
+            },
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = cardBg,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
     ) {
         Column(
@@ -279,16 +328,18 @@ private fun ArtifactCardItem(
                         )
                     }
                 } else {
-                    val (icon, bgTint, iconTint) = when {
+                    val (icon, bgTint, rawIconTint) = when {
                         isPlan -> Triple(Icons.Outlined.AutoAwesome, ClaudeTerracotta.copy(alpha = 0.16f), ClaudeTerracotta)
                         isWalkthrough -> Triple(Icons.Outlined.Description, GeminiBlue.copy(alpha = 0.16f), GeminiBlue)
                         else -> Triple(Icons.AutoMirrored.Outlined.InsertDriveFile, ai.antigem.theme.AppColors.accentTeal.copy(alpha = 0.16f), ai.antigem.theme.AppColors.accentTeal)
                     }
+                    val iconTint = ensureAccessibleContrast(rawIconTint, bgTint, 3.0f, cardBg)
                     Box(
                         modifier = Modifier
                             .size(42.dp)
                             .clip(CircleShape)
-                            .background(bgTint),
+                            .background(bgTint)
+                            .clearAndSetSemantics {},
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -317,7 +368,7 @@ private fun ArtifactCardItem(
                             text = subtitle,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            color = cardMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -327,17 +378,22 @@ private fun ArtifactCardItem(
                 // Download Button
                 IconButton(
                     onClick = onDownload,
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Download,
-                        contentDescription = L.drawer.artifactsDrawer.downloadToDownloadsAntigem,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(17.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = L.drawer.artifactsDrawer.downloadToDownloadsAntigem,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
                 }
             }
 
@@ -346,14 +402,14 @@ private fun ArtifactCardItem(
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    color = summaryBg,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = artifact.summary,
                         fontSize = 11.5.sp,
                         lineHeight = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        color = summaryText,
                         maxLines = 3,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(8.dp)

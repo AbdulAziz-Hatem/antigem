@@ -43,7 +43,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -62,6 +68,10 @@ import ai.antigem.theme.QuotaRed
 import ai.antigem.ui.claude.ClaudeCard
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -70,12 +80,12 @@ private fun toast(msg: String, ok: Boolean = true) =
 
 @Composable
 private fun PanelTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
 }
 
 @Composable
 private fun PanelHint(text: String, modifier: Modifier = Modifier) {
-    Text(text, fontSize = 11.5.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = modifier)
+    Text(text, fontSize = 11.5.sp, lineHeight = 15.sp, color = accessibleMutedColor(alpha = 0.72f), modifier = modifier)
 }
 
 /** What the plugin formats a repository holds mean for [agent], when it has no skills to add. */
@@ -147,6 +157,11 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
         }
     }
 
+    val accessibleAccent = ensureAccessibleContrast(accent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleAmber = ensureAccessibleContrast(QuotaAmber, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val mutedText = accessibleMutedColor(alpha = 0.72f)
+
     // ---- add from GitHub
     ClaudeCard {
         PanelTitle(L.settings.agentSkills.addSkillsFromGithub)
@@ -163,14 +178,15 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
             Spacer(Modifier.width(8.dp))
             Button(
                 onClick = { find() }, enabled = source.isNotBlank() && !inspecting && !installing,
+                modifier = Modifier.minTouchTarget(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = accent)
             ) {
                 if (inspecting) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White) else Text(L.settings.agentSkills.find)
             }
         }
-        if (inspecting) PanelHint(L.settings.agentSkills.lookingForSkillsInTheRepository, Modifier.padding(top = 6.dp))
+        if (inspecting) PanelHint(L.settings.agentSkills.lookingForSkillsInTheRepository, Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite })
         findError?.let {
-            Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp))
+            Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite })
             SetupWithAiLink(accent) { aiSetup = source.trim() to it }
         }
 
@@ -178,7 +194,7 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
             Spacer(Modifier.height(10.dp))
             if (res.skills.isEmpty()) {
                 Text(L.settings.agentSkills.noSkillsFoundInRepoValue(res.repo, (if (res.subpath.isNotBlank()) "/${res.subpath}" else "")),
-                    fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+                    fontSize = 12.5.sp, color = accessibleMutedColor(alpha = 0.8f), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 pluginHint(agent, res.pluginKinds)?.let { PanelHint(it, Modifier.padding(top = 4.dp)) }
                 SetupWithAiLink(accent) { aiSetup = source.trim() to L.settings.agentSkills.itHasNoSkillsNoFolder }
             } else {
@@ -188,24 +204,33 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
                     if (res.skills.size > 1) TextButton(onClick = {
                         val all = count < res.skills.size
                         res.skills.forEach { picked[it.path] = all }
-                    }, enabled = !installing) { Text(if (count < res.skills.size) L.common.selectAll else L.settings.agentSkills.selectNone, fontSize = 12.sp) }
+                    }, enabled = !installing, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (count < res.skills.size) L.common.selectAll else L.settings.agentSkills.selectNone, fontSize = 12.sp) }
                 }
                 res.skills.forEach { s ->
                     HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-                    Row(verticalAlignment = Alignment.Top) {
+                    val checked = picked[s.path] == true
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .accessibleToggleRow(checked = checked, role = Role.Checkbox) {
+                                if (!installing) picked[s.path] = !checked
+                            },
+                        verticalAlignment = Alignment.Top
+                    ) {
                         Checkbox(
-                            checked = picked[s.path] == true, onCheckedChange = { picked[s.path] = it }, enabled = !installing,
+                            checked = checked, onCheckedChange = null, enabled = !installing,
                             colors = CheckboxDefaults.colors(checkedColor = accent)
                         )
                         Column(Modifier.weight(1f).padding(top = 10.dp)) {
                             Text(s.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                             if (s.description.isNotBlank()) Text(s.description, fontSize = 11.5.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                                color = mutedText)
                             Text(s.path.ifBlank { L.settings.agentSkills.theWholeRepository } + if (s.id != s.path.substringAfterLast('/')) "  →  ${s.id}" else "",
-                                fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
+                                fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = mutedText)
                             when {
-                                s.sameSource -> Text(L.settings.agentSkills.alreadyAddedAddingItAgainUpdates, fontSize = 11.sp, color = accent)
-                                s.exists -> Text(L.settings.agentSkills.aDifferentSkillNamedIdIs(s.id), fontSize = 11.sp, color = QuotaAmber)
+                                s.sameSource -> Text(L.settings.agentSkills.alreadyAddedAddingItAgainUpdates, fontSize = 11.sp, color = accessibleAccent)
+                                s.exists -> Text(L.settings.agentSkills.aDifferentSkillNamedIdIs(s.id), fontSize = 11.sp, color = accessibleAmber)
                             }
                         }
                     }
@@ -237,7 +262,9 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
                                 installing = false
                             }
                         },
-                        enabled = count > 0 && !installing, colors = ButtonDefaults.buttonColors(containerColor = accent)
+                        enabled = count > 0 && !installing,
+                        modifier = Modifier.minTouchTarget(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accent)
                     ) {
                         if (installing) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
@@ -246,7 +273,7 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
                         } else Text(if (count == 1) L.settings.agentSkills.add1Skill else L.settings.agentSkills.addCountSkills(count))
                     }
                     Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { found = null }, enabled = !installing) { Text(L.common.cancel) }
+                    TextButton(onClick = { found = null }, enabled = !installing, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
                 }
             }
         }
@@ -258,17 +285,17 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
             Column(Modifier.weight(1f)) {
                 PanelTitle(L.settings.agentSkills.yourSkillsValue((skills?.let { " (${it.size})" } ?: "")))
                 if (dir.isNotBlank()) Text(dir, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    color = mutedText, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = { scope.launch { reload() } }, enabled = !loading) {
+            IconButton(onClick = { scope.launch { reload() } }, enabled = !loading, modifier = Modifier.minTouchTarget(48.dp)) {
                 if (loading) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = accent)
                 else Icon(Icons.Outlined.Refresh, L.common.refresh)
             }
         }
-        loadError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
+        loadError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }) }
         val list = skills
         when {
-            list == null && loadError == null -> PanelHint(L.common.loading, Modifier.padding(top = 6.dp))
+            list == null && loadError == null -> PanelHint(L.common.loading, Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite })
             list != null && list.isEmpty() -> PanelHint(L.settings.agentSkills.noSkillsHereYetAddSome, Modifier.padding(top = 6.dp))
         }
         list.orEmpty().forEach { s ->
@@ -280,23 +307,25 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
                         Text(s.name, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (s.kind == "plugin") {
                             Spacer(Modifier.width(6.dp))
-                            Surface(shape = RoundedCornerShape(6.dp), color = accent.copy(alpha = 0.15f)) {
-                                Text(L.settings.agentSkills.plugin, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = accent, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
+                            val pluginBg = accent.copy(alpha = 0.15f)
+                            val pluginText = ensureAccessibleContrast(accent, pluginBg, 4.5f, MaterialTheme.colorScheme.surface)
+                            Surface(shape = RoundedCornerShape(6.dp), color = pluginBg) {
+                                Text(L.settings.agentSkills.plugin, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = pluginText, modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
                             }
                         }
                     }
                     if (s.description.isNotBlank()) Text(s.description, fontSize = 11.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                        color = mutedText)
                     Text(
                         s.source?.let { src -> "github.com/${src.repo}" + (if (src.path.isNotBlank()) " · ${src.path}" else "") + (if (src.ref.isNotBlank()) " @${src.ref}" else "") }
                             ?: L.settings.agentSkills.addedByHand,
-                        fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis
+                        fontSize = 10.5.sp, color = mutedText, maxLines = 1, overflow = TextOverflow.Ellipsis
                     )
                 }
                 if (op != null) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = accent)
                     Spacer(Modifier.width(6.dp))
-                    Text(if (op == "update") L.common.updating else L.common.removing, fontSize = 11.5.sp, color = accent)
+                    Text(if (op == "update") L.common.updating else L.common.removing, fontSize = 11.5.sp, color = accessibleAccent, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                 } else {
                     if (s.source != null) IconButton(onClick = {
                         busy[s.id] = "update"
@@ -306,8 +335,8 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
                                 .onFailure { toast(it.message ?: L.settings.agentSkills.couldNotUpdateName(s.name), ok = false) }
                             busy.remove(s.id)
                         }
-                    }) { Icon(Icons.Outlined.Refresh, L.settings.agentSkills.updateFromGithub, tint = accent) }
-                    IconButton(onClick = { confirmRemove = s }) { Icon(Icons.Outlined.Delete, L.common.remove, tint = QuotaRed.copy(alpha = 0.85f)) }
+                    }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.settings.agentSkills.updateFromGithub, tint = accessibleAccent) }
+                    IconButton(onClick = { confirmRemove = s }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Delete, L.common.remove, tint = accessibleRed) }
                 }
             }
         }
@@ -323,7 +352,7 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
             title = { Text(L.settings.agentSkills.removeName(s.name)) },
             text = { Text(if (s.source == null) L.settings.agentSkills.thisDeletesTheFolderPathIt(s.path) else L.settings.agentSkills.thisDeletesTheFolderPath(s.path)) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                     confirmRemove = null
                     busy[s.id] = "remove"
                     scope.launch {
@@ -332,9 +361,9 @@ fun AgentSkillsPanel(agent: AgentKind, accent: Color, onChanged: () -> Unit = {}
                             .onFailure { toast(it.message ?: L.settings.agentSkills.couldNotRemoveName(s.name), ok = false) }
                         busy.remove(s.id)
                     }
-                }) { Text(L.common.remove, color = QuotaRed) }
+                }) { Text(L.common.remove, color = accessibleRed) }
             },
-            dismissButton = { TextButton(onClick = { confirmRemove = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { confirmRemove = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -349,8 +378,8 @@ fun AgentSkillsDialog(agent: AgentKind, accent: Color, title: String, onDismiss:
         ) {
             Column(Modifier.padding(top = 12.dp)) {
                 Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = onDismiss) { Text(L.common.done) }
+                    Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f).semantics { heading() })
+                    TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.done) }
                 }
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -411,7 +440,7 @@ fun AgyGitHubPluginDialog(accent: Color, onInstalled: () -> Unit, onDismiss: () 
                     keyboardActions = KeyboardActions(onDone = { install() }),
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (installing) Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (installing) Row(Modifier.padding(top = 10.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = accent)
                     Spacer(Modifier.width(8.dp))
                     PanelHint(L.settings.agentSkills.downloadingAndInstalling)
@@ -419,19 +448,20 @@ fun AgyGitHubPluginDialog(accent: Color, onInstalled: () -> Unit, onDismiss: () 
                 if (failed) SetupWithAiLink(accent) { aiSetup = source.trim() to output?.lines()?.firstOrNull() }
                 output?.let {
                     Spacer(Modifier.height(10.dp))
-                    Surface(shape = RoundedCornerShape(8.dp), color = (if (failed) MaterialTheme.colorScheme.error else accent).copy(alpha = 0.08f)) {
+                    val outBg = (if (failed) MaterialTheme.colorScheme.error else accent).copy(alpha = 0.08f)
+                    Surface(shape = RoundedCornerShape(8.dp), color = outBg, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
                         Text(it, fontSize = 11.sp, fontFamily = FontFamily.Monospace, lineHeight = 14.sp,
-                            color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                            color = if (failed) MaterialTheme.colorScheme.error else accessibleMutedColor(alpha = 0.8f, background = outBg),
                             modifier = Modifier.padding(8.dp).fillMaxWidth())
                     }
                 }
             }
         },
         confirmButton = {
-            if (output != null && !failed) TextButton(onClick = onDismiss) { Text(L.common.done) }
-            else Button(onClick = { install() }, enabled = source.isNotBlank() && !installing, colors = ButtonDefaults.buttonColors(containerColor = accent)) { Text(L.common.install) }
+            if (output != null && !failed) TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.done) }
+            else Button(onClick = { install() }, enabled = source.isNotBlank() && !installing, modifier = Modifier.minTouchTarget(48.dp), colors = ButtonDefaults.buttonColors(containerColor = accent)) { Text(L.common.install) }
         },
-        dismissButton = { if (output == null || failed) TextButton(onClick = onDismiss, enabled = !installing) { Text(L.common.cancel) } }
+        dismissButton = { if (output == null || failed) TextButton(onClick = onDismiss, enabled = !installing, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
     aiSetup?.let { (src, why) -> SetupWithAiDialog(src, AgentKind.AGY, why) { aiSetup = null } }
 }
@@ -439,14 +469,16 @@ fun AgyGitHubPluginDialog(accent: Color, onInstalled: () -> Unit, onDismiss: () 
 /** A slim row at the top of a list: what it adds, and a button that opens the GitHub dialog. */
 @Composable
 fun GitHubActionRow(title: String, subtitle: String, button: String, accent: Color, onClick: () -> Unit) {
-    Surface(shape = RoundedCornerShape(12.dp), color = accent.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
+    val bg = accent.copy(alpha = 0.08f)
+    val accessibleAccent = ensureAccessibleContrast(accent, bg, 4.5f, MaterialTheme.colorScheme.surface)
+    Surface(shape = RoundedCornerShape(12.dp), color = bg, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Text(subtitle, fontSize = 11.sp, lineHeight = 14.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(subtitle, fontSize = 11.sp, lineHeight = 14.sp, color = accessibleMutedColor(alpha = 0.72f, background = bg))
             }
             Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = onClick, shape = RoundedCornerShape(10.dp)) { Text(button, fontSize = 12.sp, color = accent) }
+            OutlinedButton(onClick = onClick, shape = RoundedCornerShape(10.dp), modifier = Modifier.minTouchTarget(48.dp)) { Text(button, fontSize = 12.sp, color = accessibleAccent) }
         }
     }
 }

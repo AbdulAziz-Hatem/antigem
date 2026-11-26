@@ -43,12 +43,17 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.ensureAccessibleContrast
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -130,7 +135,7 @@ fun BrowserAgentOverlay(tabId: String, modifier: Modifier = Modifier, topInset: 
     val density = LocalDensity.current
 
     BoxWithConstraints(modifier.fillMaxSize().alpha(shown)) {
-        Canvas(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().clearAndSetSemantics {}) {
             // Glowing frame: a few strokes fading inwards
             val glow = listOf(2.dp to 0.95f, 6.dp to 0.35f, 12.dp to 0.14f)
             for ((width, a) in glow) {
@@ -184,21 +189,24 @@ fun BrowserAgentOverlay(tabId: String, modifier: Modifier = Modifier, topInset: 
             val edge = with(density) { 4.dp.roundToPx() }
             // Stay below whatever sits at the top (e.g. the lock pill)
             val topLimit = with(density) { (topInset - 6.dp).roundToPx() }.coerceAtLeast(edge)
+            val pillBg = ensureAccessibleContrast(accent, Color.White, 4.5f).copy(alpha = 0.95f)
             Box(
                 Modifier
                     .offset {
                         val px = (cx * areaW).roundToInt()
                         val py = (cy * areaH).roundToInt()
                         var x = px + gapX
-                        var y = py + gapY
+                        val yBase = py + gapY
+                        var y = yBase
                         if (x + labelW > areaW - edge) x = px - labelW - edge
                         if (y + labelH > areaH - edge) y = py - labelH - edge
-                        if (y < topLimit) y = max(topLimit, py + gapY)
+                        if (y < topLimit) y = max(topLimit, yBase)
                         IntOffset(x.coerceIn(edge, max(edge, areaW - labelW - edge)), y.coerceIn(topLimit, max(topLimit, areaH - labelH - edge)))
                     }
                     .onSizeChanged { labelW = it.width; labelH = it.height }
                     .widthIn(max = maxWidth * 0.7f)
-                    .background(accent.copy(alpha = 0.95f), RoundedCornerShape(50))
+                    .background(pillBg, RoundedCornerShape(50))
+                    .semantics { liveRegion = LiveRegionMode.Polite }
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             ) {
                 Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -210,6 +218,7 @@ fun BrowserAgentOverlay(tabId: String, modifier: Modifier = Modifier, topInset: 
                     .padding(top = topInset)
                     .widthIn(max = maxWidth * 0.86f)
                     .background(Color(0xE6202020), RoundedCornerShape(50))
+                    .semantics { liveRegion = LiveRegionMode.Polite }
                     .padding(horizontal = 12.dp, vertical = 5.dp)
             ) {
                 Text(

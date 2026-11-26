@@ -1,6 +1,11 @@
 package ai.antigem.ui.settings
 
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -22,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -66,6 +72,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -398,39 +410,43 @@ internal fun ServersSubScreen(
                 Button(
                     onClick = { showUnsavedDialog = false },
                     colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.settings.serversSettings.keepEditing, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    showUnsavedDialog = false
-                    remote = AuthPreferences.currentRemoteMode
-                    tunnel = AuthPreferences.currentRemoteMode && AuthPreferences.currentRemoteTunnel
-                    hubText = currentHubUrl
-                    bridgeText = currentBridgeUrl
-                    securityToken = initSecurityToken
-                    bridgeBinPath = custom(authPrefs.getAgyBridgeBinaryPathSync(), authPrefs.getDefaultBridgeBinaryPath())
-                    agyBinPath = custom(authPrefs.getAgyBinaryPathSync(), authPrefs.getDefaultAgyBinaryPath())
-                    claudeBinPath = custom(authPrefs.getClaudeBinaryPathSync(), authPrefs.getDefaultClaudeBinaryPath())
-                    openCodeBinPath = custom(authPrefs.getOpenCodeBinaryPathSync(), authPrefs.getDefaultOpenCodeBinaryPath())
-                    codexBinPath = custom(authPrefs.getCodexBinaryPathSync(), authPrefs.getDefaultCodexBinaryPath())
-                    sshKey = AuthPreferences.currentSshPrivateKey
-                    sshPassphrase = AuthPreferences.currentSshKeyPassphrase
-                    remoteBridgeBin = storedBridgeBin()
-                    remoteAgyBin = storedAgyBin()
-                    remoteClaudeBin = storedClaudeBin()
-                    remoteOpenCodeBin = storedOpenCodeBin()
-                    remoteCodexBin = storedCodexBin()
-                    remoteInstallDir = authPrefs.getRemoteInstallDirSync()
-                    listenBridge = initListenBridge; listenHub = initListenHub; listenBind = initListenBind
-                    edgeName = initEdgeName; edgeValue = initEdgeValue
-                    coroutineScope.launch {
-                        sshHost = authPrefs.termuxSshHost.first().takeIf { AuthPreferences.currentRemoteMode } ?: ""
-                        sshPort = (authPrefs.termuxSshPort.first().takeIf { AuthPreferences.currentRemoteMode } ?: 22).toString()
-                        sshUser = authPrefs.termuxSshUser.first().takeIf { AuthPreferences.currentRemoteMode } ?: ""
-                        sshPass = authPrefs.termuxSshPass.first().takeIf { AuthPreferences.currentRemoteMode } ?: ""
-                    }
-                }) { Text(L.settings.serversSettings.discardChanges, color = MaterialTheme.colorScheme.error) }
+                TextButton(
+                    onClick = {
+                        showUnsavedDialog = false
+                        remote = AuthPreferences.currentRemoteMode
+                        tunnel = AuthPreferences.currentRemoteMode && AuthPreferences.currentRemoteTunnel
+                        hubText = currentHubUrl
+                        bridgeText = currentBridgeUrl
+                        securityToken = initSecurityToken
+                        bridgeBinPath = custom(authPrefs.getAgyBridgeBinaryPathSync(), authPrefs.getDefaultBridgeBinaryPath())
+                        agyBinPath = custom(authPrefs.getAgyBinaryPathSync(), authPrefs.getDefaultAgyBinaryPath())
+                        claudeBinPath = custom(authPrefs.getClaudeBinaryPathSync(), authPrefs.getDefaultClaudeBinaryPath())
+                        openCodeBinPath = custom(authPrefs.getOpenCodeBinaryPathSync(), authPrefs.getDefaultOpenCodeBinaryPath())
+                        codexBinPath = custom(authPrefs.getCodexBinaryPathSync(), authPrefs.getDefaultCodexBinaryPath())
+                        sshKey = AuthPreferences.currentSshPrivateKey
+                        sshPassphrase = AuthPreferences.currentSshKeyPassphrase
+                        remoteBridgeBin = storedBridgeBin()
+                        remoteAgyBin = storedAgyBin()
+                        remoteClaudeBin = storedClaudeBin()
+                        remoteOpenCodeBin = storedOpenCodeBin()
+                        remoteCodexBin = storedCodexBin()
+                        remoteInstallDir = authPrefs.getRemoteInstallDirSync()
+                        listenBridge = initListenBridge; listenHub = initListenHub; listenBind = initListenBind
+                        edgeName = initEdgeName; edgeValue = initEdgeValue
+                        coroutineScope.launch {
+                            sshHost = authPrefs.termuxSshHost.first().takeIf { AuthPreferences.currentRemoteMode } ?: ""
+                            sshPort = (authPrefs.termuxSshPort.first().takeIf { AuthPreferences.currentRemoteMode } ?: 22).toString()
+                            sshUser = authPrefs.termuxSshUser.first().takeIf { AuthPreferences.currentRemoteMode } ?: ""
+                            sshPass = authPrefs.termuxSshPass.first().takeIf { AuthPreferences.currentRemoteMode } ?: ""
+                        }
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.settings.serversSettings.discardChanges, color = MaterialTheme.colorScheme.error) }
             },
             shape = RoundedCornerShape(16.dp),
             containerColor = MaterialTheme.colorScheme.surface
@@ -460,11 +476,12 @@ internal fun ServersSubScreen(
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.settings.serversSettings.reopenNow, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { showRestartDialog = false }, shape = RoundedCornerShape(8.dp)) {
+                TextButton(onClick = { showRestartDialog = false }, shape = RoundedCornerShape(8.dp), modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.common.later, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
@@ -475,6 +492,7 @@ internal fun ServersSubScreen(
 
     if (showProfileMenu) {
         val list = remember(profileTick) { authPrefs.listProfiles(true) + authPrefs.listProfiles(false) }
+        val sheetMuted = accessibleMutedColor(alpha = 0.72f)
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { showProfileMenu = false },
             sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -483,17 +501,18 @@ internal fun ServersSubScreen(
             shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
         ) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-                Text(L.settings.serversSettings.savedProfiles, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(L.settings.serversSettings.savedProfiles, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                 Text(L.settings.serversSettings.tapOneToLoadItIts, fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+                    color = sheetMuted, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
                 if (list.isEmpty()) {
                     Text(L.settings.serversSettings.nothingSavedYetFillInThe, fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(vertical = 24.dp))
+                        color = sheetMuted, modifier = Modifier.padding(vertical = 24.dp))
                 }
                 Column(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()).heightIn(max = 460.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     list.forEach { o ->
                         val r = o.optBoolean("remote")
                         val accent = if (r) QuotaGreen else ClaudeTerracotta
+                        val accentText = ensureAccessibleContrast(accent, accent.copy(alpha = 0.15f), 4.5f, cardBg)
                         val where = AuthPreferences.hostOf(o.optString("bridge")).ifBlank { AuthPreferences.hostOf(o.optString("hub")) }
                             .let { h -> if (r && o.optString("sshUser").isNotBlank()) "${o.optString("sshUser")}@${o.optString("sshHost").ifBlank { h }}" else h }
                         Surface(
@@ -508,10 +527,10 @@ internal fun ServersSubScreen(
                             shape = RoundedCornerShape(14.dp),
                             color = cardBg,
                             border = cardBorder,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                         ) {
                             Row(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(if (r) Icons.Outlined.Dns else Icons.Outlined.Terminal, null, tint = accent, modifier = Modifier.size(22.dp))
+                                Icon(if (r) Icons.Outlined.Dns else Icons.Outlined.Terminal, null, tint = accentText, modifier = Modifier.size(22.dp))
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -519,16 +538,16 @@ internal fun ServersSubScreen(
                                             overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                         Spacer(Modifier.width(8.dp))
                                         Surface(shape = RoundedCornerShape(4.dp), color = accent.copy(alpha = 0.15f)) {
-                                            Text(if (r && o.optBoolean("tunnel")) "SSH TUNNEL" else if (r) L.settings.serversSettings.server else L.settings.serversSettings.local, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = accent,
+                                            Text(if (r && o.optBoolean("tunnel")) "SSH TUNNEL" else if (r) L.settings.serversSettings.server else L.settings.serversSettings.local, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = accentText,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp))
                                         }
                                     }
-                                    if (where.isNotBlank()) Text(where, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 1)
+                                    if (where.isNotBlank()) Text(where, fontSize = 11.5.sp, color = sheetMuted, maxLines = 1)
                                 }
-                                TextButton(enabled = r == remote, onClick = { profileToUpdate = o }) {
+                                TextButton(enabled = r == remote, onClick = { profileToUpdate = o }, modifier = Modifier.minTouchTarget(48.dp)) {
                                     Text(L.common.update, fontSize = 12.sp)
                                 }
-                                TextButton(onClick = { profileToDelete = r to o.optString("name") }) {
+                                TextButton(onClick = { profileToDelete = r to o.optString("name") }, modifier = Modifier.minTouchTarget(48.dp)) {
                                     Text(L.common.delete, fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                                 }
                             }
@@ -540,6 +559,7 @@ internal fun ServersSubScreen(
     }
 
     if (showSaveProfile) {
+        val dialogMuted = accessibleMutedColor(alpha = 0.72f)
         AlertDialog(
             onDismissRequest = { showSaveProfile = false },
             title = { Text(if (remote) L.settings.serversSettings.saveServerProfile else L.settings.serversSettings.saveLocalProfile, fontWeight = FontWeight.Bold, fontSize = 17.sp) },
@@ -548,11 +568,16 @@ internal fun ServersSubScreen(
                     OutlinedTextField(profileName, { profileName = it }, label = { Text(L.settings.serversSettings.profileName) }, singleLine = true, shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth())
                     if (remote) {
                         Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.Checkbox(checked = profileWithSecrets, onCheckedChange = { profileWithSecrets = it })
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().accessibleToggleRow(checked = profileWithSecrets, role = Role.Checkbox) {
+                                profileWithSecrets = !profileWithSecrets
+                            }
+                        ) {
+                            androidx.compose.material3.Checkbox(checked = profileWithSecrets, onCheckedChange = null)
                             Column {
                                 Text(L.settings.serversSettings.includeSshPasswordAndKey, fontSize = 13.sp)
-                                Text(L.settings.serversSettings.offByDefaultAnyoneUsingThis, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                Text(L.settings.serversSettings.offByDefaultAnyoneUsingThis, fontSize = 10.5.sp, color = dialogMuted)
                             }
                         }
                     }
@@ -569,10 +594,11 @@ internal fun ServersSubScreen(
                         showSaveProfile = false; profileTick++
                         saveFeedback = L.settings.serversSettings.profileProfilenameSavedOnThisPhone(profileName.trim()); saveIsError = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.common.save, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { showSaveProfile = false }) { Text(L.common.cancel) } },
+            dismissButton = { TextButton(onClick = { showSaveProfile = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } },
             shape = RoundedCornerShape(16.dp), containerColor = MaterialTheme.colorScheme.surface
         )
     }
@@ -597,10 +623,11 @@ internal fun ServersSubScreen(
                         profileToUpdate = null; profileTick++
                         saveFeedback = L.settings.serversSettings.profileUnameUpdated(uName); saveIsError = false
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.common.update, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { profileToUpdate = null }) { Text(L.common.cancel) } },
+            dismissButton = { TextButton(onClick = { profileToUpdate = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } },
             shape = RoundedCornerShape(16.dp), containerColor = MaterialTheme.colorScheme.surface
         )
     }
@@ -613,10 +640,11 @@ internal fun ServersSubScreen(
             confirmButton = {
                 Button(
                     onClick = { authPrefs.deleteProfile(delRemote, name); profileToDelete = null; profileTick++ },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error), shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.common.delete, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { profileToDelete = null }) { Text(L.common.cancel) } },
+            dismissButton = { TextButton(onClick = { profileToDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } },
             shape = RoundedCornerShape(16.dp), containerColor = MaterialTheme.colorScheme.surface
         )
     }
@@ -636,17 +664,21 @@ internal fun ServersSubScreen(
                         ai.antigem.ui.browser.BrowserExtensionManager.instance.restartHost()
                         Toast.makeText(context, L.settings.serversSettings.newKeyMadeRemoveTheAntigem, Toast.LENGTH_LONG).show()
                     },
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.settings.serversSettings.makeNewKey, fontWeight = FontWeight.Bold) }
             },
-            dismissButton = { TextButton(onClick = { confirmNewPhoneKey = false }) { Text(L.common.cancel) } },
+            dismissButton = { TextButton(onClick = { confirmNewPhoneKey = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } },
             shape = RoundedCornerShape(16.dp), containerColor = MaterialTheme.colorScheme.surface
         )
     }
 
     if (showServerLog) ServerLogDialog(context) { showServerLog = false }
 
-    val subtle = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val subtle = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, surfaceBg)
+    val accessibleRed = ensureAccessibleContrast(Color.Red, cardBg, 4.5f, surfaceBg)
 
     Column(
         modifier = Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp),
@@ -656,10 +688,10 @@ internal fun ServersSubScreen(
         Card(Modifier.fillMaxWidth(), RoundedCornerShape(14.dp), CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Dns, null, tint = QuotaGreen, modifier = Modifier.size(22.dp))
+                    Icon(Icons.Outlined.Dns, null, tint = accessibleGreen, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(L.settings.serversSettings.agentsRunOn, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(L.settings.serversSettings.agentsRunOn, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                         Text(
                             when {
                                 !remote && phoneChroot -> L.settings.serversSettings.thisPhoneInTheRootedUbuntu
@@ -672,18 +704,20 @@ internal fun ServersSubScreen(
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text(L.common.thisPhone, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = subtle)
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ModeOption("AntiGem", !remote && !phoneChroot, Modifier.weight(1f)) { selectPhone(false) }
-                    ModeOption(L.common.ubuntuChroot, !remote && phoneChroot, Modifier.weight(1f)) { selectPhone(true) }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(L.settings.serversSettings.yourServer, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = subtle)
-                Spacer(Modifier.height(4.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ModeOption(L.common.server, remote && !tunnel, Modifier.weight(1f)) { selectMode(true, false) }
-                    ModeOption(L.settings.serversSettings.sshTunnel, remote && tunnel, Modifier.weight(1f)) { selectMode(true, true) }
+                Column(Modifier.selectableGroup()) {
+                    Text(L.common.thisPhone, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = subtle)
+                    Spacer(Modifier.height(4.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ModeOption("AntiGem", !remote && !phoneChroot, Modifier.weight(1f)) { selectPhone(false) }
+                        ModeOption(L.common.ubuntuChroot, !remote && phoneChroot, Modifier.weight(1f)) { selectPhone(true) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(L.settings.serversSettings.yourServer, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = subtle)
+                    Spacer(Modifier.height(4.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ModeOption(L.common.server, remote && !tunnel, Modifier.weight(1f)) { selectMode(true, false) }
+                        ModeOption(L.settings.serversSettings.sshTunnel, remote && tunnel, Modifier.weight(1f)) { selectMode(true, true) }
+                    }
                 }
 
                 // ----- Saved profiles (saved only when the user taps "Save as profile") -----
@@ -693,12 +727,16 @@ internal fun ServersSubScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { profileTick++; showProfileMenu = true },
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                     ) {
                         val n = remember(profileTick) { authPrefs.listProfiles(true).size + authPrefs.listProfiles(false).size }
                         Text("Saved profiles ($n)", fontSize = 12.sp)
                     }
-                    OutlinedButton(onClick = { profileName = loadedProfile?.takeIf { it.first == remote }?.second.orEmpty(); showSaveProfile = true }, shape = RoundedCornerShape(8.dp)) {
+                    OutlinedButton(
+                        onClick = { profileName = loadedProfile?.takeIf { it.first == remote }?.second.orEmpty(); showSaveProfile = true },
+                        modifier = Modifier.minTouchTarget(48.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
                         Text(L.settings.serversSettings.saveAsProfile, fontSize = 12.sp)
                     }
                 }
@@ -732,7 +770,7 @@ internal fun ServersSubScreen(
         // ----- The two addresses -----
         Card(Modifier.fillMaxWidth(), RoundedCornerShape(14.dp), CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
             Column(Modifier.padding(16.dp)) {
-                Text(L.settings.serversSettings.serverAddresses, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                Text(L.settings.serversSettings.serverAddresses, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                 Text(
                     when {
                         remote && tunnel -> L.settings.serversSettings.use127001With(BuildConfig.BRIDGE_PORT, BuildConfig.HUB_PORT)
@@ -769,7 +807,7 @@ internal fun ServersSubScreen(
 
                 if (remote && !tunnel) {
                     Spacer(Modifier.height(14.dp))
-                    Text(L.settings.serversSettings.portsOnTheServer, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(L.settings.serversSettings.portsOnTheServer, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                     Text(
                         L.settings.serversSettings.theAddressesAboveAreWhatThe(BuildConfig.BRIDGE_PORT, BuildConfig.HUB_PORT),
                         fontSize = 11.sp, color = subtle
@@ -790,10 +828,22 @@ internal fun ServersSubScreen(
 
                 Spacer(Modifier.height(12.dp))
                 StatusLine(isServerOnline || hubTestStatus?.startsWith("✓") == true, L.settings.serversSettings.hub, AuthPreferences.normalizeServerUrl(hubText, BuildConfig.HUB_PORT) ?: L.settings.serversSettings.invalidAddress)
-                hubTestStatus?.let { Text(it, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = if (it.startsWith("✓")) QuotaGreen else Color.Red, modifier = Modifier.padding(top = 4.dp)) }
+                hubTestStatus?.let {
+                    Text(
+                        it, fontSize = 11.5.sp, fontWeight = FontWeight.Medium,
+                        color = if (it.startsWith("✓")) accessibleGreen else accessibleRed,
+                        modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                }
                 Spacer(Modifier.height(6.dp))
                 StatusLine(isBridgeOnline || bridgeTestStatus?.startsWith("✓") == true, L.settings.serversSettings.bridge, AuthPreferences.normalizeServerUrl(bridgeText, BuildConfig.BRIDGE_PORT) ?: L.settings.serversSettings.invalidAddress)
-                bridgeTestStatus?.let { Text(it, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = if (it.startsWith("✓")) QuotaGreen else Color.Red, modifier = Modifier.padding(top = 4.dp)) }
+                bridgeTestStatus?.let {
+                    Text(
+                        it, fontSize = 11.5.sp, fontWeight = FontWeight.Medium,
+                        color = if (it.startsWith("✓")) accessibleGreen else accessibleRed,
+                        modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                }
                 ai.antigem.ui.agents.BridgeVersionLine(Modifier.padding(top = 6.dp))
 
                 Spacer(Modifier.height(14.dp))
@@ -810,7 +860,7 @@ internal fun ServersSubScreen(
                                 hubTestStatus = if (ok) "✓ Hub reachable ($msg)" else "✗ Hub: $msg"
                             }
                         },
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), enabled = !isTestingHub
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp), enabled = !isTestingHub
                     ) {
                         if (isTestingHub) { CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp); Spacer(Modifier.width(6.dp)) }
                         Text(L.settings.serversSettings.testHub, fontSize = 12.sp)
@@ -827,7 +877,7 @@ internal fun ServersSubScreen(
                                 bridgeTestStatus = if (ok) "✓ Bridge reachable ($msg)" else "✗ Bridge: $msg"
                             }
                         },
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), enabled = !isTestingBridge
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp), enabled = !isTestingBridge
                     ) {
                         if (isTestingBridge) { CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp); Spacer(Modifier.width(6.dp)) }
                         Text(L.settings.serversSettings.testBridge, fontSize = 12.sp)
@@ -841,10 +891,10 @@ internal fun ServersSubScreen(
             if (!tunnel) Card(Modifier.fillMaxWidth(), RoundedCornerShape(14.dp), CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Security, null, tint = QuotaGreen, modifier = Modifier.size(22.dp))
+                        Icon(Icons.Outlined.Security, null, tint = accessibleGreen, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(L.settings.serversSettings.proxyAccessHeaderSecondLayer, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(L.settings.serversSettings.proxyAccessHeaderSecondLayer, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                             Text(
                                 L.settings.serversSettings.optionalTheAppAddsThisHeader,
                                 fontSize = 11.5.sp, color = subtle
@@ -869,7 +919,7 @@ internal fun ServersSubScreen(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = { edgeValue = AuthPreferences.generateEdgeHeaderValue(); saveFeedback = null },
-                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                            modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                         ) { Icon(Icons.Outlined.Shuffle, null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.serversSettings.generate, fontSize = 12.sp) }
                         OutlinedButton(
                             enabled = edgeValue.isNotBlank(),
@@ -879,7 +929,7 @@ internal fun ServersSubScreen(
                                 ai.antigem.data.security.SecretClipboard.copy(context, "nginx rule", snippet)
                                 Toast.makeText(context, L.settings.serversSettings.nginxRuleCopied, Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                            modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                         ) { Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.serversSettings.copyNginxRule, fontSize = 12.sp) }
                     }
                     Spacer(Modifier.height(6.dp))
@@ -898,7 +948,7 @@ internal fun ServersSubScreen(
                         Icon(Icons.Outlined.Terminal, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(L.settings.serversSettings.sshAccess, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(L.settings.serversSettings.sshAccess, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                             Text(
                                 L.settings.serversSettings.usedToInstallStartAndStop,
                                 fontSize = 11.5.sp, color = subtle
@@ -941,7 +991,7 @@ internal fun ServersSubScreen(
                         textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace, fontSize = 10.sp)
                     )
                     Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { keyPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) {
+                        OutlinedButton(onClick = { keyPicker.launch(arrayOf("*/*")) }, modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)) {
                             Text(L.settings.serversSettings.chooseKeyFile, fontSize = 12.sp)
                         }
                         OutlinedButton(
@@ -951,7 +1001,7 @@ internal fun ServersSubScreen(
                                 if (SshSessionFactory.looksLikePrivateKey(text)) { sshKey = text.trim(); saveFeedback = null }
                                 else Toast.makeText(context, L.settings.serversSettings.theClipboardDoesNotHoldA, Toast.LENGTH_SHORT).show()
                             },
-                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                            modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                         ) { Text(L.settings.serversSettings.pasteKey, fontSize = 12.sp) }
                     }
                     if (sshKey.isNotBlank()) {
@@ -965,7 +1015,11 @@ internal fun ServersSubScreen(
                     }
                     sshTestStatus?.let {
                         Spacer(Modifier.height(6.dp))
-                        Text(it, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = if (it.startsWith("✓")) QuotaGreen else Color.Red)
+                        Text(
+                            it, fontSize = 11.5.sp, fontWeight = FontWeight.Medium,
+                            color = if (it.startsWith("✓")) accessibleGreen else accessibleRed,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -990,7 +1044,7 @@ internal fun ServersSubScreen(
                                     )
                                 }
                             },
-                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp), enabled = !isTestingSsh
+                            modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp), enabled = !isTestingSsh
                         ) {
                             if (isTestingSsh) { CircularProgressIndicator(Modifier.size(13.dp), strokeWidth = 2.dp); Spacer(Modifier.width(6.dp)) }
                             Text(L.settings.serversSettings.testSsh, fontSize = 12.sp)
@@ -1000,7 +1054,7 @@ internal fun ServersSubScreen(
                                 SshSessionFactory.forgetHostKey(sshHost.trim(), sshPort.toIntOrNull() ?: 22)
                                 Toast.makeText(context, L.settings.serversSettings.savedHostKeyForgottenTheNext, Toast.LENGTH_LONG).show()
                             },
-                            modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                            modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                         ) { Text(L.settings.serversSettings.forgetHostKey, fontSize = 12.sp) }
                     }
                     Spacer(Modifier.height(6.dp))
@@ -1013,11 +1067,13 @@ internal fun ServersSubScreen(
                     HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                     Spacer(Modifier.height(10.dp))
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).let { it },
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(L.settings.serversSettings.advancedServerPathsAndPorts, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { showAdvanced = !showAdvanced }) { Text(if (showAdvanced) L.common.hide else L.common.show, fontSize = 12.sp) }
+                        TextButton(onClick = { showAdvanced = !showAdvanced }, modifier = Modifier.minTouchTarget(48.dp)) {
+                            Text(if (showAdvanced) L.common.hide else L.common.show, fontSize = 12.sp)
+                        }
                     }
                     if (showAdvanced) {
                         Text(
@@ -1074,7 +1130,7 @@ internal fun ServersSubScreen(
                         Icon(Icons.Outlined.Terminal, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(L.settings.serversSettings.agentPathsInTheUbuntuChroot, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(L.settings.serversSettings.agentPathsInTheUbuntuChroot, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                             Text(L.settings.serversSettings.forAdvancedUseOnlyLeaveThem, fontSize = 11.5.sp, color = subtle)
                         }
                     }
@@ -1107,7 +1163,7 @@ internal fun ServersSubScreen(
                             saveFeedback = L.settings.serversSettings.agentPathsResetToTheDefaults
                             saveIsError = false
                         },
-                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Outlined.RestartAlt, null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1123,7 +1179,7 @@ internal fun ServersSubScreen(
                         Icon(Icons.Outlined.Terminal, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(L.settings.serversSettings.agentPathsInAntigem, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                            Text(L.settings.serversSettings.agentPathsInAntigem, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                             Text(L.settings.serversSettings.forAdvancedUseOnlyLeaveThem, fontSize = 11.5.sp, color = subtle)
                         }
                     }
@@ -1168,7 +1224,7 @@ internal fun ServersSubScreen(
                             saveFeedback = L.settings.serversSettings.settingsResetToDefaultsClickSave
                             saveIsError = false
                         },
-                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Outlined.RestartAlt, null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(6.dp))
@@ -1185,7 +1241,7 @@ internal fun ServersSubScreen(
                     Icon(Icons.Outlined.Security, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(L.settings.serversSettings.securityTokenHeaderObfuscation, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(L.settings.serversSettings.securityTokenHeaderObfuscation, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                         Text(
                             if (remote && tunnel) L.settings.serversSettings.theSecretThatProtectsTheBridge
                             else if (remote) "The secret that protects the bridge. The app starts the server with it. Use https:// on the internet: over plain http it is visible on the network."
@@ -1206,19 +1262,19 @@ internal fun ServersSubScreen(
                     trailingIcon = {
                         Text(
                             "${securityToken.length}/12", fontSize = 11.sp,
-                            color = if (securityToken.length == AuthPreferences.TOKEN_LENGTH) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = if (securityToken.length == AuthPreferences.TOKEN_LENGTH) accessibleGreen else subtle,
                             modifier = Modifier.padding(end = 12.dp)
                         )
                     }
                 )
                 Spacer(Modifier.height(8.dp))
                 val framedHeader = AuthPreferences.buildFramedHeader(securityToken)
-                Text(L.settings.serversSettings.httpFramedHeaderFramedheader(framedHeader), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                Text(L.settings.serversSettings.httpFramedHeaderFramedheader(framedHeader), fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = subtle)
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
                         onClick = { securityToken = AuthPreferences.generateRandomToken(); saveFeedback = null },
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Outlined.Shuffle, null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.serversSettings.randomize, fontSize = 12.sp)
                     }
@@ -1227,7 +1283,7 @@ internal fun ServersSubScreen(
                             ai.antigem.data.security.SecretClipboard.copy(context, "Framed Security Header", framedHeader)
                             Toast.makeText(context, L.settings.serversSettings.copiedFramedheaderToClipboard(framedHeader), Toast.LENGTH_SHORT).show()
                         },
-                        modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Outlined.ContentCopy, null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.serversSettings.copyHeader, fontSize = 12.sp)
                     }
@@ -1242,20 +1298,24 @@ internal fun ServersSubScreen(
                     Icon(Icons.Outlined.Key, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(L.settings.serversSettings.phoneToolsKey, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(L.settings.serversSettings.phoneToolsKey, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                         Text(L.settings.serversSettings.protectsThisPhonesToolsAgentsSend, fontSize = 11.5.sp, color = subtle)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = { confirmNewPhoneKey = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) {
+                OutlinedButton(onClick = { confirmNewPhoneKey = true }, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)) {
                     Icon(Icons.Outlined.Shuffle, null, modifier = Modifier.size(15.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.serversSettings.newKey, fontSize = 12.sp)
                 }
             }
         }
 
         saveFeedback?.let {
-            Surface(Modifier.fillMaxWidth(), RoundedCornerShape(8.dp), color = (if (saveIsError) Color.Red else QuotaGreen).copy(alpha = 0.12f)) {
-                Text(it, fontSize = 12.sp, color = if (saveIsError) Color.Red else QuotaGreen, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(10.dp))
+            Surface(
+                Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                RoundedCornerShape(8.dp),
+                color = (if (saveIsError) Color.Red else QuotaGreen).copy(alpha = 0.12f)
+            ) {
+                Text(it, fontSize = 12.sp, color = if (saveIsError) accessibleRed else accessibleGreen, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(10.dp))
             }
         }
 
@@ -1321,10 +1381,11 @@ internal fun ServersSubScreen(
                             clearTextAsk = null
                             clearHostAccepted = host
                             saveAll(askHub, askBridge)
-                        }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) { Text(L.settings.serversSettings.keepPlainHttp) }
                 },
-                dismissButton = { TextButton(onClick = { clearTextAsk = null }) { Text(L.common.cancel) } }
+                dismissButton = { TextButton(onClick = { clearTextAsk = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
             )
         }
 
@@ -1370,7 +1431,7 @@ internal fun ServersSubScreen(
                 }
                 saveAll(hub, bridge)
             },
-            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp), shape = RoundedCornerShape(10.dp),
             colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta)
         ) {
             Icon(Icons.Default.Save, null, modifier = Modifier.size(16.dp))
@@ -1383,18 +1444,21 @@ internal fun ServersSubScreen(
 @Composable
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 private fun ModeOption(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val bg = if (selected) QuotaGreen.copy(alpha = 0.16f) else Color.Transparent
+    val selectedColor = ensureAccessibleContrast(QuotaGreen, bg, 4.5f, surfaceBg)
+    val unselectedColor = accessibleMutedColor(alpha = 0.8f)
     Surface(
-        onClick = onClick,
-        modifier = modifier.height(38.dp),
+        modifier = modifier.accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onClick),
         shape = RoundedCornerShape(10.dp),
-        color = if (selected) QuotaGreen.copy(alpha = 0.16f) else Color.Transparent,
-        border = BorderStroke(1.dp, if (selected) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f))
+        color = bg,
+        border = BorderStroke(1.dp, if (selected) selectedColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f))
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
             Text(
                 label, fontSize = 12.sp, maxLines = 1,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                color = if (selected) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                color = if (selected) selectedColor else unselectedColor
             )
         }
     }
@@ -1416,6 +1480,8 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
     val tunnels by RemoteServerManager.tunnels.collectAsState()
     val ssh by RemoteServerManager.sshState.collectAsState()
     val live = AuthPreferences.currentRemoteMode
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val accessibleRed = ensureAccessibleContrast(Color.Red, cardBg, 4.5f, surfaceBg)
 
     fun persist(next: List<AuthPreferences.PortForward>) {
         list = next
@@ -1429,7 +1495,7 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
                 Icon(Icons.Outlined.Dns, null, tint = ClaudeTerracotta, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(L.settings.serversSettings.portForwardsServerThisPhone, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(L.settings.serversSettings.portForwardsServerThisPhone, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
                     Text(
                         "Reach a port of the server on this phone, e.g. a dev server started with npm run dev on port 5173: " +
                             "then open http://127.0.0.1:5173 here. Runs over the SSH connection; changes apply right away.",
@@ -1443,7 +1509,7 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
                 val active = live && tunnels.any { it.startsWith("phone 127.0.0.1:${f.localPort} ") }
                 val failed = live && tunnels.any { it.contains("phone port ${f.localPort} not forwarded") }
                 val dot = when {
-                    !f.enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    !f.enabled -> subtle
                     active -> QuotaGreen
                     failed -> Color.Red
                     else -> ai.antigem.theme.AppColors.warning
@@ -1457,23 +1523,38 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
                     else -> "opening…"
                 }
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(8.dp), shape = CircleShape, color = dot) {}
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(f.name.ifBlank { L.settings.serversSettings.portServerport(f.serverPort) }, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
-                        Text("server :${f.serverPort} → http://127.0.0.1:${f.localPort} · $state", fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = subtle)
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .accessibleToggleRow(checked = f.enabled, role = Role.Switch) {
+                                persist(list.toMutableList().also { it[index] = f.copy(enabled = !f.enabled) })
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(Modifier.size(8.dp).clearAndSetSemantics {}, shape = CircleShape, color = dot) {}
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f).padding(end = 6.dp)) {
+                            Text(f.name.ifBlank { L.settings.serversSettings.portServerport(f.serverPort) }, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1)
+                            Text("server :${f.serverPort} → http://127.0.0.1:${f.localPort} · $state", fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = subtle)
+                        }
+                        Switch(
+                            checked = f.enabled,
+                            onCheckedChange = null,
+                            colors = SwitchDefaults.colors(checkedTrackColor = QuotaGreen)
+                        )
                     }
-                    androidx.compose.material3.IconButton(onClick = {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-                        cm?.setPrimaryClip(android.content.ClipData.newPlainText("Forwarded address", "http://127.0.0.1:${f.localPort}"))
-                        Toast.makeText(context, "Copied http://127.0.0.1:${f.localPort}", Toast.LENGTH_SHORT).show()
-                    }) { Icon(Icons.Outlined.ContentCopy, L.settings.serversSettings.copyAddress, modifier = Modifier.size(17.dp)) }
-                    Switch(
-                        checked = f.enabled,
-                        onCheckedChange = { on -> persist(list.toMutableList().also { it[index] = f.copy(enabled = on) }) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = QuotaGreen)
-                    )
-                    androidx.compose.material3.IconButton(onClick = { persist(list.filterIndexed { i, _ -> i != index }) }) {
+                    androidx.compose.material3.IconButton(
+                        onClick = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Forwarded address", "http://127.0.0.1:${f.localPort}"))
+                            Toast.makeText(context, "Copied http://127.0.0.1:${f.localPort}", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Icon(Icons.Outlined.ContentCopy, L.settings.serversSettings.copyAddress, modifier = Modifier.size(17.dp)) }
+                    androidx.compose.material3.IconButton(
+                        onClick = { persist(list.filterIndexed { i, _ -> i != index }) },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Icon(Icons.Outlined.DeleteOutline, L.common.remove, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(19.dp))
                     }
                 }
@@ -1508,10 +1589,13 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
                             serverPort = ""; localPort = ""; name = ""
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp)
+                    colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta), shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.common.add, fontWeight = FontWeight.Bold) }
             }
-            error?.let { Text(it, fontSize = 11.5.sp, color = Color.Red, modifier = Modifier.padding(top = 6.dp)) }
+            error?.let {
+                Text(it, fontSize = 11.5.sp, color = accessibleRed, modifier = Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite })
+            }
             Spacer(Modifier.height(6.dp))
             Text(
                 L.settings.serversSettings.theProgramOnTheServerHas,
@@ -1524,9 +1608,9 @@ private fun PortForwardsCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
 @Composable
 private fun StatusLine(online: Boolean, label: String, address: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(Modifier.size(8.dp), shape = CircleShape, color = if (online) QuotaGreen else Color.Red) {}
+        Surface(Modifier.size(8.dp).clearAndSetSemantics {}, shape = CircleShape, color = if (online) QuotaGreen else Color.Red) {}
         Spacer(Modifier.width(6.dp))
-        Text("$label: $address", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        Text("$label: $address", fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = accessibleMutedColor(alpha = 0.72f))
     }
 }
 
@@ -1538,8 +1622,10 @@ private fun RemoteServerCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
     val ssh by RemoteServerManager.sshState.collectAsState()
     val detail by RemoteServerManager.detail.collectAsState()
     val tunnels by RemoteServerManager.tunnels.collectAsState()
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, surfaceBg)
 
-    val (label, color) = when (val s = status) {
+    val (label, rawColor) = when (val s = status) {
         is LocalServerStatus.Running -> L.settings.serversSettings.bridgeRunningOnTheServer to QuotaGreen
         is LocalServerStatus.Starting -> L.common.starting to ai.antigem.theme.AppColors.warning
         is LocalServerStatus.Stopping -> L.settings.serversSettings.stopping to ai.antigem.theme.AppColors.warning
@@ -1547,13 +1633,14 @@ private fun RemoteServerCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
         is LocalServerStatus.Error -> s.message to Color.Red
         is LocalServerStatus.Idle -> L.settings.serversSettings.notStarted to ai.antigem.theme.AppColors.textSecondary
     }
+    val color = ensureAccessibleContrast(rawColor, cardBg, 4.5f, surfaceBg)
 
     Card(Modifier.fillMaxWidth(), RoundedCornerShape(14.dp), CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.padding(16.dp)) {
-            Text(L.settings.serversSettings.serverControl, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(L.settings.serversSettings.serverControl, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.Top) {
-                Surface(Modifier.padding(top = 4.dp).size(8.dp), shape = CircleShape, color = color) {}
+            Row(verticalAlignment = Alignment.Top, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+                Surface(Modifier.padding(top = 4.dp).size(8.dp).clearAndSetSemantics {}, shape = CircleShape, color = color) {}
                 Spacer(Modifier.width(8.dp))
                 Column {
                     Text(label, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = color)
@@ -1563,7 +1650,7 @@ private fun RemoteServerCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
             Spacer(Modifier.height(6.dp))
             Text(
                 L.settings.serversSettings.sshMessage(ssh.message),
-                fontSize = 11.5.sp, color = if (ssh.connected) QuotaGreen else subtle
+                fontSize = 11.5.sp, color = if (ssh.connected) accessibleGreen else subtle
             )
             if (tunnels.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
@@ -1572,12 +1659,12 @@ private fun RemoteServerCard(cardBg: Color, cardBorder: BorderStroke, subtle: Co
             }
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { LocalServerManager.startServer(context, forceRestart = false) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text(L.common.start, fontSize = 12.sp) }
-                OutlinedButton(onClick = { LocalServerManager.restartServer(context) }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text(L.common.restart, fontSize = 12.sp) }
-                OutlinedButton(onClick = { LocalServerManager.stopServer() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) { Text(L.common.stop, fontSize = 12.sp) }
+                OutlinedButton(onClick = { LocalServerManager.startServer(context, forceRestart = false) }, modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)) { Text(L.common.start, fontSize = 12.sp) }
+                OutlinedButton(onClick = { LocalServerManager.restartServer(context) }, modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)) { Text(L.common.restart, fontSize = 12.sp) }
+                OutlinedButton(onClick = { LocalServerManager.stopServer() }, modifier = Modifier.weight(1f).minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)) { Text(L.common.stop, fontSize = 12.sp) }
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onShowLog, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp)) { Text(L.settings.serversSettings.serverLog, fontSize = 12.sp) }
+            OutlinedButton(onClick = onShowLog, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp), shape = RoundedCornerShape(8.dp)) { Text(L.settings.serversSettings.serverLog, fontSize = 12.sp) }
         }
     }
 }
@@ -1596,8 +1683,8 @@ private fun ServerLogDialog(context: Context, onDismiss: () -> Unit) {
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(L.common.close) } },
-        dismissButton = { TextButton(onClick = { RemoteServerManager.refreshLog(context) }) { Text(L.common.refresh) } },
+        confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) } },
+        dismissButton = { TextButton(onClick = { RemoteServerManager.refreshLog(context) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.refresh) } },
         shape = RoundedCornerShape(16.dp),
         containerColor = MaterialTheme.colorScheme.surface
     )

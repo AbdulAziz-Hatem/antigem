@@ -32,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ai.antigem.domain.model.ChatMessage
+import ai.antigem.i18n.L
 
 /**
  * The prompt a user message actually sent: a voice request's full prompt, else the text before the chat collapsed its
@@ -60,7 +63,7 @@ private val HIDDEN_TAG = Regex("</?(antigem-expansion|attached-files)\\b[^>]*>")
 fun FullPromptDialog(prompt: String, attachmentCount: Int = 0, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val accent = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
     val styled = remember(prompt, accent) {
         buildAnnotatedString {
             var last = 0
@@ -89,10 +92,17 @@ fun FullPromptDialog(prompt: String, attachmentCount: Int = 0, onDismiss: () -> 
             Column(Modifier.padding(start = 18.dp, end = 10.dp, top = 12.dp, bottom = 10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("Full prompt", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Full prompt",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.semantics { heading() }
+                        )
                         Text(stats, fontSize = 12.sp, color = muted)
                     }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, contentDescription = "Close") }
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Outlined.Close, contentDescription = L.common.close)
+                    }
                 }
                 Text(
                     "Exactly what was sent to the agent, including the parts the chat hides." +
@@ -121,15 +131,18 @@ fun FullPromptDialog(prompt: String, attachmentCount: Int = 0, onDismiss: () -> 
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Full prompt", prompt))
-                        Toast.makeText(context, "Copied the full prompt", Toast.LENGTH_SHORT).show()
-                    }) {
+                    TextButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Full prompt", prompt))
+                            Toast.makeText(context, "Copied the full prompt", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                         Text("Copy all", modifier = Modifier.padding(start = 6.dp))
                     }
-                    TextButton(onClick = onDismiss) { Text("Close") }
+                    TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) }
                 }
             }
         }

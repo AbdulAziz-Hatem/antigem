@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -71,6 +72,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -96,6 +102,10 @@ import ai.antigem.theme.QuotaAmber
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.theme.QuotaRed
 import ai.antigem.ui.components.ClaudeAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 private const val OPENROUTER_BASE_URL = "https://openrouter.ai/api"
@@ -156,40 +166,45 @@ fun ProvidersPage(deps: ClaudeSettingsDeps) {
     val testing = remember { mutableStateMapOf<String, Boolean>() }
     val results = remember { mutableStateMapOf<String, ClaudeProviderTestResult>() }
     LaunchedEffect(Unit) { backend.refreshProviders() }
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
 
-    Text(L.claude.providers.otherAnthropicCompatibleApis, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    Text(L.claude.providers.otherAnthropicCompatibleApis, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
     Text(
         L.claude.providers.openrouterKimiDeepseekZAiTheir,
         fontSize = 11.5.sp, color = muted
     )
     // Claude Code speaks only Anthropic's API: other providers work better in OpenCode
     val oc = ai.antigem.ui.components.OpenCodeAccent
-    Surface(shape = RoundedCornerShape(12.dp), color = oc.copy(alpha = 0.08f), border = BorderStroke(1.dp, oc.copy(alpha = 0.35f))) {
+    val ocBg = oc.copy(alpha = 0.08f)
+    val accessibleOc = ensureAccessibleContrast(oc, ocBg, 4.5f, MaterialTheme.colorScheme.surface)
+    Surface(shape = RoundedCornerShape(12.dp), color = ocBg, border = BorderStroke(1.dp, oc.copy(alpha = 0.35f))) {
         Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(L.claude.providers.thirdPartyModelsWorkBetterIn, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = oc)
+            Text(L.claude.providers.thirdPartyModelsWorkBetterIn, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = accessibleOc)
             Text(
                 L.claude.providers.claudeCodeOnlySpeaksAnthropicsApi,
-                fontSize = 11.5.sp, color = muted
+                fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f, background = ocBg)
             )
         }
     }
 
     settingsEndpoint?.let { endpoint ->
-        Surface(shape = RoundedCornerShape(12.dp), color = QuotaAmber.copy(alpha = 0.1f), border = BorderStroke(1.dp, QuotaAmber.copy(alpha = 0.4f))) {
+        val warnBg = QuotaAmber.copy(alpha = 0.1f)
+        Surface(shape = RoundedCornerShape(12.dp), color = warnBg, border = BorderStroke(1.dp, QuotaAmber.copy(alpha = 0.4f))) {
             Column(Modifier.padding(12.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(L.claude.providers.settingsJsonSendsEveryChatTo(endpoint), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 Text(
                     L.claude.providers.thenEvenChatsOnClaudesModels,
-                    fontSize = 11.5.sp, color = muted
+                    fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f, background = warnBg)
                 )
-                TextButton(enabled = !importing, onClick = {
+                TextButton(enabled = !importing, modifier = Modifier.minTouchTarget(48.dp), onClick = {
                     importing = true
                     backend.importSettingsProvider { err ->
                         importing = false
                         Toast.makeText(context, err ?: L.claude.providers.movedIntoAProvider, Toast.LENGTH_SHORT).show()
                     }
-                }) { Text(if (importing) L.claude.providers.moving else L.claude.providers.moveIntoAProvider, color = ClaudeAccent) }
+                }) { Text(if (importing) L.claude.providers.moving else L.claude.providers.moveIntoAProvider, color = ensureAccessibleContrast(ClaudeAccent, warnBg, 4.5f, MaterialTheme.colorScheme.surface)) }
             }
         }
     }
@@ -201,10 +216,10 @@ fun ProvidersPage(deps: ClaudeSettingsDeps) {
     }
 
     // quick start
-    Text(L.claude.providers.addAProvider, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+    Text(L.claude.providers.addAProvider, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, modifier = Modifier.semantics { heading() })
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         PRESETS.filter { it.label != "OpenRouter" || providers.none { p -> p.openrouter } }.forEach { preset ->
-            OutlinedButton(onClick = { editing = preset.provider }) { Text("+ ${preset.label}") }
+            OutlinedButton(onClick = { editing = preset.provider }, modifier = Modifier.minTouchTarget(48.dp)) { Text("+ ${preset.label}") }
         }
     }
 
@@ -260,7 +275,7 @@ fun ProvidersPage(deps: ClaudeSettingsDeps) {
                 )
             },
             confirmButton = {
-                TextButton(enabled = !restarting, onClick = {
+                TextButton(enabled = !restarting, modifier = Modifier.minTouchTarget(48.dp), onClick = {
                     restarting = true
                     backend.restartProviderChats(p.id) { restarted, busy, err ->
                         restarting = false
@@ -271,9 +286,9 @@ fun ProvidersPage(deps: ClaudeSettingsDeps) {
                         }
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                     }
-                }) { Text(if (restarting) L.common.restarting else L.claude.providers.restartIdleChatsNow, color = ClaudeAccent) }
+                }) { Text(if (restarting) L.common.restarting else L.claude.providers.restartIdleChatsNow, color = accessibleAccent) }
             },
-            dismissButton = { TextButton(onClick = { savedProvider = null }) { Text(L.common.later) } }
+            dismissButton = { TextButton(onClick = { savedProvider = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.later) } }
         )
     }
 
@@ -282,8 +297,8 @@ fun ProvidersPage(deps: ClaudeSettingsDeps) {
             onDismissRequest = { toDelete = null },
             title = { Text("Remove ${p.name}?", fontWeight = FontWeight.Bold) },
             text = { Text(L.claude.providers.itsKeyHeadersAndModelsAre, fontSize = 13.5.sp) },
-            confirmButton = { TextButton(onClick = { backend.deleteProvider(p.id); toDelete = null }) { Text(L.common.remove, color = QuotaRed) } },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text(L.common.cancel) } }
+            confirmButton = { TextButton(onClick = { backend.deleteProvider(p.id); toDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.remove, color = accessibleRed) } },
+            dismissButton = { TextButton(onClick = { toDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -298,7 +313,9 @@ private fun ProviderCard(
     onDelete: () -> Unit,
     onTest: () -> Unit
 ) {
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
     var expanded by remember(p.id) { mutableStateOf(false) }
     ClaudeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -306,8 +323,8 @@ private fun ProviderCard(
                 Text(p.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp)
                 Text(p.base_url, fontSize = 11.sp, fontFamily = FontFamily.Monospace, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = onEdit) { Icon(Icons.Outlined.Edit, L.common.edit) }
-            IconButton(onClick = onDelete) { Icon(Icons.Outlined.Delete, L.common.remove, tint = QuotaRed.copy(alpha = 0.8f)) }
+            IconButton(onClick = onEdit, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Edit, L.common.edit) }
+            IconButton(onClick = onDelete, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Delete, L.common.remove, tint = accessibleRed) }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             p.api_key_hint?.let { Badge(L.claude.providers.keyValue(it)) }
@@ -333,15 +350,15 @@ private fun ProviderCard(
             }
         }
         if (p.models.size > 5) {
-            TextButton(onClick = { expanded = !expanded }) {
-                Text(if (expanded) L.claude.providers.showFewer else L.claude.providers.showAllModelscount(p.models.size), color = ClaudeAccent, fontSize = 12.sp)
+            TextButton(onClick = { expanded = !expanded }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Text(if (expanded) L.claude.providers.showFewer else L.claude.providers.showAllModelscount(p.models.size), color = accessibleAccent, fontSize = 12.sp)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(enabled = !testing, onClick = onTest) {
-                Icon(Icons.Outlined.NetworkCheck, null, Modifier.size(16.dp), tint = ClaudeAccent)
+            TextButton(enabled = !testing, onClick = onTest, modifier = Modifier.minTouchTarget(48.dp)) {
+                Icon(Icons.Outlined.NetworkCheck, null, Modifier.size(16.dp), tint = accessibleAccent)
                 Spacer(Modifier.width(6.dp))
-                Text(L.claude.providers.testConnection, color = ClaudeAccent)
+                Text(L.claude.providers.testConnection, color = accessibleAccent)
             }
             if (testing) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = ClaudeAccent)
         }
@@ -351,18 +368,27 @@ private fun ProviderCard(
 
 @Composable
 private fun Badge(text: String) {
+    val bg = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
     Text(
-        text, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)).padding(horizontal = 7.dp, vertical = 3.dp)
+        text, fontSize = 10.5.sp, color = accessibleMutedColor(alpha = 0.72f, background = bg),
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(bg).padding(horizontal = 7.dp, vertical = 3.dp)
     )
 }
 
 @Composable
 private fun TestResultView(r: ClaudeProviderTestResult) {
     val color = if (r.ok) QuotaGreen else QuotaRed
-    Surface(shape = RoundedCornerShape(10.dp), color = color.copy(alpha = 0.1f), border = BorderStroke(1.dp, color.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
+    val bg = color.copy(alpha = 0.1f)
+    val accessibleColor = ensureAccessibleContrast(color, bg, 4.5f, MaterialTheme.colorScheme.surface)
+    val mutedBg = accessibleMutedColor(alpha = 0.72f, background = bg)
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = bg,
+        border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
+    ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.Top) {
-            Icon(if (r.ok) Icons.Outlined.CheckCircle else Icons.Outlined.ErrorOutline, null, tint = color, modifier = Modifier.size(18.dp))
+            Icon(if (r.ok) Icons.Outlined.CheckCircle else Icons.Outlined.ErrorOutline, null, tint = accessibleColor, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 if (r.ok) {
@@ -371,9 +397,9 @@ private fun TestResultView(r: ClaudeProviderTestResult) {
                 } else {
                     Text(L.claude.providers.connectionFailed, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
                     Text(r.error, fontSize = 11.5.sp)
-                    if (r.hint.isNotBlank()) Text(r.hint, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    if (r.hint.isNotBlank()) Text(r.hint, fontSize = 11.5.sp, color = mutedBg)
                 }
-                if (r.url.isNotBlank()) Text(r.url, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                if (r.url.isNotBlank()) Text(r.url, fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = mutedBg)
             }
         }
     }
@@ -418,7 +444,10 @@ private fun ProviderEditor(
 ) {
     val isNew = initial.id.isBlank()
     val context = LocalContext.current
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleAmber = ensureAccessibleContrast(QuotaAmber, MaterialTheme.colorScheme.surface, 4.5f)
     var name by remember { mutableStateOf(initial.name) }
     var baseUrl by remember { mutableStateOf(initial.base_url) }
     var key by remember { mutableStateOf("") }
@@ -539,10 +568,11 @@ private fun ProviderEditor(
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, L.common.close) }
-                    Text(if (isNew) L.claude.providers.addProvider else L.claude.providers.editName(initial.name), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.close) }
+                    Text(if (isNew) L.claude.providers.addProvider else L.claude.providers.editName(initial.name), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f).semantics { heading() })
                     TextButton(
                         enabled = !saving && name.isNotBlank() && baseUrl.isNotBlank() && (!isNew || key.isNotBlank()),
+                        modifier = Modifier.minTouchTarget(48.dp),
                         onClick = {
                             val (p, err) = build()
                             if (p == null) {
@@ -556,7 +586,7 @@ private fun ProviderEditor(
                                 error = e
                             }
                         }
-                    ) { Text(if (saving) L.common.saving else L.common.save, color = ClaudeAccent, fontWeight = FontWeight.Bold) }
+                    ) { Text(if (saving) L.common.saving else L.common.save, color = accessibleAccent, fontWeight = FontWeight.Bold) }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                 Column(
@@ -564,7 +594,7 @@ private fun ProviderEditor(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     note?.let { Text(it, fontSize = 12.sp, color = muted) }
-                    error?.let { Text(it, fontSize = 12.5.sp, color = QuotaRed, fontWeight = FontWeight.SemiBold) }
+                    error?.let { Text(it, fontSize = 12.5.sp, color = accessibleRed, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
 
                     // ---- connection
                     EditorSection(L.claude.providers.connection, L.claude.providers.whereTheChatSendsItsRequests) {
@@ -580,10 +610,11 @@ private fun ProviderEditor(
                             visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth()
                         )
                         Text(L.claude.providers.howTheKeyIsSent, fontSize = 12.sp, color = muted)
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                             listOf("bearer" to "Bearer token", "x-api-key" to L.claude.providers.xApiKeyHeader).forEach { (mode, label) ->
                                 FilterChip(
                                     selected = authMode == mode, onClick = { authMode = mode }, label = { Text(label) },
+                                    modifier = Modifier.minTouchTarget(48.dp),
                                     colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ClaudeAccent.copy(alpha = 0.2f))
                                 )
                             }
@@ -594,7 +625,7 @@ private fun ProviderEditor(
                             fontSize = 11.sp, color = muted
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(enabled = !testing && baseUrl.isNotBlank(), onClick = { runTest(models.firstOrNull()?.id ?: newModel.trim()) }) {
+                            OutlinedButton(enabled = !testing && baseUrl.isNotBlank(), modifier = Modifier.minTouchTarget(48.dp), onClick = { runTest(models.firstOrNull()?.id ?: newModel.trim()) }) {
                                 Icon(Icons.Outlined.NetworkCheck, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(L.claude.providers.testConnection)
@@ -617,15 +648,21 @@ private fun ProviderEditor(
                                 placeholder = { Text("https://api.example.com/v1/models") }, modifier = Modifier.fillMaxWidth()
                             )
                         } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Switch(checked = freeOnly, onCheckedChange = { freeOnly = it }, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .accessibleToggleRow(checked = freeOnly, role = Role.Switch) { freeOnly = !freeOnly },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Switch(checked = freeOnly, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
                                 Spacer(Modifier.width(10.dp))
                                 Text(L.claude.providers.onlyFreeModelsThatCanCall, fontSize = 12.5.sp)
                             }
                         }
                         val canFetch = openRouter || modelsUrl.isNotBlank()
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(enabled = canFetch && !fetching && baseUrl.isNotBlank(), onClick = { runFetch() }) {
+                            OutlinedButton(enabled = canFetch && !fetching && baseUrl.isNotBlank(), modifier = Modifier.minTouchTarget(48.dp), onClick = { runFetch() }) {
                                 Icon(Icons.Outlined.CloudDownload, null, Modifier.size(16.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(L.claude.providers.fetchTheProvidersList)
@@ -633,19 +670,19 @@ private fun ProviderEditor(
                             Spacer(Modifier.width(4.dp))
                             if (fetching) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeAccent)
                             fetchRaw?.let { raw ->
-                                IconButton(onClick = { showRaw = true }) {
-                                    Icon(Icons.Outlined.Code, L.claude.providers.showTheRawResponse, tint = if (raw.status in 200..299) ClaudeAccent else QuotaAmber)
+                                IconButton(onClick = { showRaw = true }, modifier = Modifier.minTouchTarget(48.dp)) {
+                                    Icon(Icons.Outlined.Code, L.claude.providers.showTheRawResponse, tint = if (raw.status in 200..299) accessibleAccent else accessibleAmber)
                                 }
                             }
                         }
-                        TextButton(enabled = canFetch, onClick = { showMapping = true }) {
+                        TextButton(enabled = canFetch, modifier = Modifier.minTouchTarget(48.dp), onClick = { showMapping = true }) {
                             Text(
                                 if (mapping == null) L.claude.providers.fieldMappingPagination else L.claude.providers.fieldMappingPaginationCustomised,
-                                color = ClaudeAccent, fontSize = 12.sp
+                                color = accessibleAccent, fontSize = 12.sp
                             )
                         }
                         fetchError?.let { msg ->
-                            Surface(shape = RoundedCornerShape(10.dp), color = QuotaRed.copy(alpha = 0.1f), border = BorderStroke(1.dp, QuotaRed.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth()) {
+                            Surface(shape = RoundedCornerShape(10.dp), color = QuotaRed.copy(alpha = 0.1f), border = BorderStroke(1.dp, QuotaRed.copy(alpha = 0.35f)), modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(L.claude.providers.couldNotFetchTheModels, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
                                     Text(msg, fontSize = 11.5.sp)
@@ -653,7 +690,7 @@ private fun ProviderEditor(
                             }
                         }
                         fetchNote?.let { msg ->
-                            Surface(shape = RoundedCornerShape(10.dp), color = QuotaAmber.copy(alpha = 0.1f), border = BorderStroke(1.dp, QuotaAmber.copy(alpha = 0.4f)), modifier = Modifier.fillMaxWidth()) {
+                            Surface(shape = RoundedCornerShape(10.dp), color = QuotaAmber.copy(alpha = 0.1f), border = BorderStroke(1.dp, QuotaAmber.copy(alpha = 0.4f)), modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
                                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(L.claude.providers.noModelsToAdd, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
                                     Text(msg, fontSize = 11.5.sp)
@@ -665,7 +702,7 @@ private fun ProviderEditor(
 
                         models.forEach { m ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f).clickable { editingModel = m }.padding(vertical = 4.dp)) {
+                                Column(Modifier.weight(1f).minTouchTarget(48.dp).clickable(role = Role.Button) { editingModel = m }.padding(vertical = 4.dp)) {
                                     Text(m.name?.takeIf { it.isNotBlank() } ?: m.id, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Text(
                                         listOfNotNull(
@@ -675,14 +712,14 @@ private fun ProviderEditor(
                                             L.claude.providers.canReason.takeIf { m.can_think }
                                         ).joinToString(" · "),
                                         fontSize = 10.5.sp, fontFamily = FontFamily.Monospace,
-                                        color = if (m.contextLabel(draft) != null) muted else QuotaAmber, maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        color = if (m.contextLabel(draft) != null) muted else accessibleAmber, maxLines = 1, overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                TextButton(enabled = !testing, onClick = { runTest(m.id) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
-                                    Text(L.claude.providers.test, color = ClaudeAccent, fontSize = 12.sp)
+                                TextButton(enabled = !testing, modifier = Modifier.minTouchTarget(48.dp), onClick = { runTest(m.id) }, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)) {
+                                    Text(L.claude.providers.test, color = accessibleAccent, fontSize = 12.sp)
                                 }
-                                IconButton(onClick = { editingModel = m }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Edit, L.claude.providers.editModel, Modifier.size(16.dp)) }
-                                IconButton(onClick = { models = models - m }, modifier = Modifier.size(32.dp)) { Icon(Icons.Outlined.Close, L.claude.providers.removeModel, Modifier.size(16.dp)) }
+                                IconButton(onClick = { editingModel = m }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Edit, L.claude.providers.editModel, Modifier.size(16.dp)) }
+                                IconButton(onClick = { models = models - m }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.claude.providers.removeModel, Modifier.size(16.dp)) }
                             }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -693,11 +730,12 @@ private fun ProviderEditor(
                             )
                             IconButton(
                                 enabled = newModel.isNotBlank() && newModel.none { it.isWhitespace() } && models.none { it.id == newModel.trim() },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 onClick = {
                                     models = models + ClaudeProviderModel(newModel.trim())
                                     newModel = ""
                                 }
-                            ) { Icon(Icons.Outlined.Add, L.claude.providers.addModel, tint = ClaudeAccent) }
+                            ) { Icon(Icons.Outlined.Add, L.claude.providers.addModel, tint = accessibleAccent) }
                         }
                     }
 
@@ -711,7 +749,13 @@ private fun ProviderEditor(
                             L.claude.providers.sonnetOpusAndSubagentRequestsAre,
                             fontSize = 11.sp, color = muted
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleToggleRow(checked = sendThinking, role = Role.Switch) { sendThinking = !sendThinking },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(Modifier.weight(1f)) {
                                 Text(L.claude.providers.sendAThinkingBudget, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                 Text(
@@ -719,7 +763,7 @@ private fun ProviderEditor(
                                     fontSize = 11.sp, color = muted
                                 )
                             }
-                            Switch(checked = sendThinking, onCheckedChange = { sendThinking = it }, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
+                            Switch(checked = sendThinking, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
                         }
                         if (sendThinking) {
                             OutlinedTextField(
@@ -750,12 +794,18 @@ private fun ProviderEditor(
                             modifier = Modifier.fillMaxWidth(),
                             supportingText = { Text(L.claude.providers.rateLimitsRejectedKeysAndNetwork) }
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleToggleRow(checked = disableBetas, role = Role.Switch) { disableBetas = !disableBetas },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Column(Modifier.weight(1f)) {
                                 Text(L.claude.providers.disableExperimentalBetas, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                                 Text(L.claude.providers.turnOnIfTheProviderAnswers, fontSize = 11.sp, color = muted)
                             }
-                            Switch(checked = disableBetas, onCheckedChange = { disableBetas = it }, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
+                            Switch(checked = disableBetas, onCheckedChange = null, colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
                         }
                     }
 
@@ -822,8 +872,8 @@ private fun ProviderEditor(
 @Composable
 private fun EditorSection(title: String, subtitle: String, content: @Composable () -> Unit) {
     ClaudeCard {
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        Text(subtitle, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
+        Text(subtitle, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f))
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
 }
@@ -831,7 +881,8 @@ private fun EditorSection(title: String, subtitle: String, content: @Composable 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModelEditDialog(model: ClaudeProviderModel, provider: ClaudeProvider, onDismiss: () -> Unit, onSave: (ClaudeProviderModel) -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
     var name by remember { mutableStateOf(model.name.orEmpty()) }
     var ctx by remember { mutableStateOf(if (model.context_length > 0) model.context_length.toString() else "") }
     var out by remember { mutableStateOf(if (model.max_output_tokens > 0) model.max_output_tokens.toString() else "") }
@@ -859,12 +910,13 @@ private fun ModelEditDialog(model: ClaudeProviderModel, provider: ClaudeProvider
                     placeholder = { Text(if (provider.default_max_output > 0) "default: ${tokenLabel(provider.default_max_output)}" else L.claude.providers.eG8k) },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text(L.common.thinking, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(L.common.thinking, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.semantics { heading() })
                 if (model.can_think) Text(L.claude.providers.theProvidersModelListSaysThis, fontSize = 11.sp, color = muted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                     listOf("" to L.claude.providers.inherit, "off" to L.claude.providers.neverSend, "budget" to L.claude.providers.customBudget).forEach { (mode, label) ->
                         FilterChip(
                             selected = thinkMode == mode, onClick = { thinkMode = mode }, label = { Text(label) },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ClaudeAccent.copy(alpha = 0.2f))
                         )
                     }
@@ -881,16 +933,16 @@ private fun ModelEditDialog(model: ClaudeProviderModel, provider: ClaudeProvider
             }
         },
         confirmButton = {
-            TextButton(enabled = ctxValue != null && outValue != null && budgetOk, onClick = {
+            TextButton(enabled = ctxValue != null && outValue != null && budgetOk, modifier = Modifier.minTouchTarget(48.dp), onClick = {
                 onSave(
                     model.copy(
                         name = name.trim().ifBlank { null }, context_length = ctxValue ?: 0, max_output_tokens = outValue ?: 0,
                         thinking_mode = thinkMode, thinking_budget = if (thinkMode == "budget") budget ?: 0 else 0
                     )
                 )
-            }) { Text(L.common.ok, color = ClaudeAccent) }
+            }) { Text(L.common.ok, color = accessibleAccent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
@@ -906,6 +958,8 @@ private fun FetchedModelsDialog(
     var picked by remember { mutableStateOf(models.map { it.id }.filter { it !in existing }.toSet()) }
     var query by remember { mutableStateOf("") }
     val shown = models.filter { query.isBlank() || it.id.contains(query, true) || it.name.orEmpty().contains(query, true) }
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("$providerName: ${models.size} models", fontWeight = FontWeight.Bold) },
@@ -915,19 +969,24 @@ private fun FetchedModelsDialog(
                     OutlinedTextField(query, { query = it }, placeholder = { Text(L.common.search) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 }
                 Row {
-                    TextButton(onClick = { picked = picked + shown.map { it.id }.filter { it !in existing } }) { Text(L.common.selectAll) }
-                    TextButton(onClick = { picked = picked - shown.map { it.id }.toSet() }) { Text(L.claude.providers.none) }
+                    TextButton(onClick = { picked = picked + shown.map { it.id }.filter { it !in existing } }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.selectAll) }
+                    TextButton(onClick = { picked = picked - shown.map { it.id }.toSet() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.claude.providers.none) }
                 }
                 LazyColumn(Modifier.heightIn(max = 380.dp)) {
                     items(shown, key = { it.id }) { m ->
                         val added = m.id in existing
+                        val isPicked = m.id in picked
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                                .clickable(enabled = !added) { picked = if (m.id in picked) picked - m.id else picked + m.id },
+                                .then(
+                                    if (!added) Modifier.accessibleToggleRow(checked = isPicked, role = Role.Checkbox) {
+                                        picked = if (isPicked) picked - m.id else picked + m.id
+                                    } else Modifier.minTouchTarget(48.dp)
+                                ),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
-                                checked = added || m.id in picked, onCheckedChange = null, enabled = !added,
+                                checked = added || isPicked, onCheckedChange = null, enabled = !added,
                                 colors = CheckboxDefaults.colors(checkedColor = ClaudeAccent)
                             )
                             Spacer(Modifier.width(6.dp))
@@ -935,7 +994,7 @@ private fun FetchedModelsDialog(
                                 Text(m.name?.takeIf { it.isNotBlank() } ?: m.id, fontSize = 13.sp)
                                 Text(
                                     listOfNotNull(m.id, m.contextLabel(), L.claude.providers.canReason.takeIf { m.can_think }, "added".takeIf { added }).joinToString(" · "),
-                                    fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                    fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = muted
                                 )
                             }
                         }
@@ -944,11 +1003,11 @@ private fun FetchedModelsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onAdd(models.filter { it.id in picked }) }) {
-                Text(if (picked.isEmpty()) L.claude.providers.updateSizes else L.claude.providers.addPickedcount(picked.size), color = ClaudeAccent)
+            TextButton(onClick = { onAdd(models.filter { it.id in picked }) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Text(if (picked.isEmpty()) L.claude.providers.updateSizes else L.claude.providers.addPickedcount(picked.size), color = accessibleAccent)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
@@ -962,13 +1021,14 @@ private fun ModelIdField(
     placeholder: String
 ) {
     var open by remember { mutableStateOf(false) }
+    val muted = accessibleMutedColor(alpha = 0.72f)
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value, onValueChange, label = { Text(label) }, singleLine = true, placeholder = { Text(placeholder) },
             modifier = Modifier.fillMaxWidth(),
             trailingIcon = {
                 if (models.isNotEmpty()) {
-                    IconButton(onClick = { open = !open }) { Icon(Icons.Filled.ArrowDropDown, L.claude.providers.chooseFromTheProvidersModels) }
+                    IconButton(onClick = { open = !open }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Filled.ArrowDropDown, L.claude.providers.chooseFromTheProvidersModels) }
                 }
             }
         )
@@ -982,7 +1042,7 @@ private fun ModelIdField(
                     text = {
                         Column {
                             Text(m.name?.takeIf { it.isNotBlank() } ?: m.id, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (!m.name.isNullOrBlank()) Text(m.id, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                            if (!m.name.isNullOrBlank()) Text(m.id, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = muted)
                         }
                     },
                     onClick = { onValueChange(m.id); open = false }
@@ -997,7 +1057,9 @@ private fun ModelIdField(
 private fun RawResponseDialog(raw: ClaudeFetchRaw, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleAmber = ensureAccessibleContrast(QuotaAmber, MaterialTheme.colorScheme.surface, 4.5f)
     val verdict = when {
         raw.status == 0 -> L.claude.providers.noAnswerFromTheServerNetwork
         raw.status !in 200..299 -> L.claude.providers.theServerRefusedTheRequestHttp(raw.status)
@@ -1029,7 +1091,7 @@ private fun RawResponseDialog(raw: ClaudeFetchRaw, onDismiss: () -> Unit) {
                         fontSize = 11.sp, color = muted
                     )
                 }
-                if (raw.paging_error.isNotBlank()) Text(L.claude.providers.stoppedEarlyPagingError(raw.paging_error), fontSize = 11.sp, color = QuotaAmber)
+                if (raw.paging_error.isNotBlank()) Text(L.claude.providers.stoppedEarlyPagingError(raw.paging_error), fontSize = 11.sp, color = accessibleAmber)
                 Text(L.claude.providers.theBodyBelowIsTheFirst, fontSize = 10.5.sp, color = muted)
                 Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f), modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
                     Column(Modifier.verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(8.dp)) {
@@ -1039,12 +1101,12 @@ private fun RawResponseDialog(raw: ClaudeFetchRaw, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = {
+            TextButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                 clipboard.setText(AnnotatedString(text))
                 Toast.makeText(context, L.common.copied, Toast.LENGTH_SHORT).show()
-            }) { Icon(Icons.Outlined.ContentCopy, null, Modifier.size(14.dp), tint = ClaudeAccent); Spacer(Modifier.width(6.dp)); Text(L.common.copy, color = ClaudeAccent) }
+            }) { Icon(Icons.Outlined.ContentCopy, null, Modifier.size(14.dp), tint = accessibleAccent); Spacer(Modifier.width(6.dp)); Text(L.common.copy, color = accessibleAccent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.close) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) } }
     )
 }
 
@@ -1059,11 +1121,12 @@ private fun SuggestField(
     autoLabel: String = L.claude.providers.detectAutomatically2
 ) {
     var open by remember { mutableStateOf(false) }
+    val muted = accessibleMutedColor(alpha = 0.72f)
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value, onValueChange, label = { Text(label) }, singleLine = true, placeholder = { Text(placeholder) },
             modifier = Modifier.fillMaxWidth(),
-            trailingIcon = { IconButton(onClick = { open = !open }) { Icon(Icons.Filled.ArrowDropDown, L.claude.providers.choose) } }
+            trailingIcon = { IconButton(onClick = { open = !open }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Filled.ArrowDropDown, L.claude.providers.choose) } }
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = 320.dp)) {
             DropdownMenuItem(text = { Text(autoLabel, fontSize = 13.sp) }, onClick = { onValueChange(""); open = false })
@@ -1072,7 +1135,7 @@ private fun SuggestField(
                     text = {
                         Column {
                             Text(o.path.ifBlank { L.claude.providers.topLevel }, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
-                            if (o.sample.isNotBlank()) Text(o.sample, fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (o.sample.isNotBlank()) Text(o.sample, fontSize = 10.5.sp, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     },
                     onClick = { onValueChange(o.path); open = false }
@@ -1094,7 +1157,8 @@ private fun ModelsMappingDialog(
     onDismiss: () -> Unit,
     onApply: (ClaudeModelsMapping) -> Unit
 ) {
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
     var m by remember { mutableStateOf(initial) }
     val lists = raw?.lists.orEmpty()
     val topKeys = raw?.top_keys.orEmpty()
@@ -1112,12 +1176,12 @@ private fun ModelsMappingDialog(
                     else L.claude.providers.suggestionsComeFromTheLastAnswer,
                     fontSize = 11.5.sp, color = muted
                 )
-                Text(L.claude.providers.whereTheModelsAre, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(L.claude.providers.whereTheModelsAre, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.semantics { heading() })
                 SuggestField(
                     m.list_path, { m = m.copy(list_path = it) }, L.claude.providers.listPath,
                     lists.map { ClaudeRawKey(it.path, L.claude.providers.countItems(it.count) + if (it.strings) L.claude.providers.idsAsPlainText else "") }
                 )
-                Text(L.claude.providers.fieldsOfOneModel, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(L.claude.providers.fieldsOfOneModel, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.semantics { heading() })
                 SuggestField(m.id_field, { m = m.copy(id_field = it) }, L.claude.providers.id, itemKeys)
                 SuggestField(m.name_field, { m = m.copy(name_field = it) }, L.claude.providers.displayName, itemKeys, "none")
                 SuggestField(m.context_field, { m = m.copy(context_field = it) }, L.claude.providers.contextWindow, itemKeys, "none")
@@ -1127,11 +1191,12 @@ private fun ModelsMappingDialog(
                     singleLine = true, placeholder = { Text(L.claude.providers.eGModels) }, modifier = Modifier.fillMaxWidth()
                 )
 
-                Text(L.claude.providers.pagination, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(L.claude.providers.pagination, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.semantics { heading() })
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
                     listOf("" to L.claude.providers.detect, "none" to L.claude.providers.none, "cursor" to L.claude.providers.cursor, "token" to L.claude.providers.pageToken, "next_url" to L.claude.providers.nextUrl).forEach { (mode, label) ->
                         FilterChip(
                             selected = m.pagination == mode, onClick = { m = m.copy(pagination = mode) }, label = { Text(label) },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             colors = FilterChipDefaults.filterChipColors(selectedContainerColor = ClaudeAccent.copy(alpha = 0.2f))
                         )
                     }
@@ -1178,11 +1243,11 @@ private fun ModelsMappingDialog(
                 Text(L.claude.providers.atMost100Pages20000, fontSize = 10.5.sp, color = muted)
             }
         },
-        confirmButton = { TextButton(onClick = { onApply(m) }) { Text(L.claude.providers.applyFetch, color = ClaudeAccent) } },
+        confirmButton = { TextButton(onClick = { onApply(m) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.claude.providers.applyFetch, color = accessibleAccent) } },
         dismissButton = {
             Row {
-                TextButton(onClick = { m = ClaudeModelsMapping(); sizeText = "" }) { Text(L.claude.providers.reset) }
-                TextButton(onClick = onDismiss) { Text(L.common.cancel) }
+                TextButton(onClick = { m = ClaudeModelsMapping(); sizeText = "" }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.claude.providers.reset) }
+                TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
             }
         }
     )

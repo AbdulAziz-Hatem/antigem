@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -63,6 +64,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +98,11 @@ import ai.antigem.ui.components.ConversationExportHelper
 import ai.antigem.ui.components.ConversationShareHelper
 import ai.antigem.ui.components.DrawerEngineWarmingUpView
 import ai.antigem.ui.components.SidebarChatListSkeleton
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -356,9 +374,18 @@ fun ChatHistoryDrawer(
 
     if (instanceToTerminate != null) {
         val (inst, title) = instanceToTerminate!!
+        val dialogBg = MaterialTheme.colorScheme.surface
+        val bodyMuted = accessibleMutedColor(alpha = 0.8f, background = dialogBg)
         AlertDialog(
             onDismissRequest = { instanceToTerminate = null },
-            title = { Text(L.drawer.chatHistoryDrawer.activeCliProcess, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            title = {
+                Text(
+                    L.drawer.chatHistoryDrawer.activeCliProcess,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    modifier = Modifier.semantics { heading() }
+                )
+            },
             text = {
                 Column {
                     Text(
@@ -386,7 +413,7 @@ fun ChatHistoryDrawer(
                         text = L.drawer.chatHistoryDrawer.terminateThisInstanceToImmediatelyFree,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        color = bodyMuted
                     )
                 }
             },
@@ -396,13 +423,14 @@ fun ChatHistoryDrawer(
                         onTerminateInstance(inst.conversationId)
                         instanceToTerminate = null
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Text(L.drawer.chatHistoryDrawer.terminateFreeRam, fontSize = 13.sp)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { instanceToTerminate = null }) {
+                TextButton(onClick = { instanceToTerminate = null }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.drawer.chatHistoryDrawer.keepRunning, fontSize = 13.sp)
                 }
             }
@@ -410,31 +438,36 @@ fun ChatHistoryDrawer(
     }
 
     if (showSigningInProgressDialog) {
+        val dialogBg = MaterialTheme.colorScheme.surface
+        val dialogMuted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
         AlertDialog(
             onDismissRequest = { showSigningInProgressDialog = false },
             title = {
                 Text(
                     text = L.drawer.chatHistoryDrawer.signInInProgress,
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.semantics { heading() }
                 )
             },
             text = {
                 Text(
                     text = L.drawer.chatHistoryDrawer.aSignInRequestIsCurrently,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = dialogMuted
                 )
             },
             confirmButton = {
                 Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TextButton(
                         onClick = {
                             showSigningInProgressDialog = false
                             onCheckAuth()
-                        }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Text(L.drawer.chatHistoryDrawer.checkStatus)
                     }
@@ -442,7 +475,8 @@ fun ChatHistoryDrawer(
                         onClick = {
                             showSigningInProgressDialog = false
                             onLogin()
-                        }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Text(L.drawer.chatHistoryDrawer.signInAgain)
                     }
@@ -450,17 +484,19 @@ fun ChatHistoryDrawer(
             },
             dismissButton = {
                 Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     TextButton(
                         onClick = {
                             showSigningInProgressDialog = false
                             onCancelLogin()
-                        }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Text(L.common.later)
                     }
-                    TextButton(onClick = { showSigningInProgressDialog = false }) {
+                    TextButton(onClick = { showSigningInProgressDialog = false }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Text(L.common.cancel)
                     }
                 }
@@ -469,6 +505,8 @@ fun ChatHistoryDrawer(
     }
 
     if (showExitConfirmDialog) {
+        val dialogBg = MaterialTheme.colorScheme.surface
+        val dialogMuted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
         AlertDialog(
             onDismissRequest = { showExitConfirmDialog = false },
             icon = {
@@ -492,7 +530,8 @@ fun ChatHistoryDrawer(
                     text = L.drawer.chatHistoryDrawer.exitAntigem,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
             },
             text = {
@@ -501,16 +540,20 @@ fun ChatHistoryDrawer(
                         text = if (chrootInUse) L.drawer.chatHistoryDrawer.doYouWantToExitThe
                         else L.drawer.chatHistoryDrawer.doYouWantToExitThe2,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = dialogMuted,
                         lineHeight = 20.sp
                     )
                     // the Ubuntu chroot runs outside the app: keep it working, or stop it too (this exit only)
                     if (chrootInUse) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 8.dp).clickable { stopChrootOnExit = !stopChrootOnExit }
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleToggleRow(checked = stopChrootOnExit, role = Role.Checkbox) { stopChrootOnExit = !stopChrootOnExit }
                         ) {
-                            Checkbox(checked = stopChrootOnExit, onCheckedChange = { stopChrootOnExit = it })
+                            Checkbox(checked = stopChrootOnExit, onCheckedChange = null)
                             Text(
                                 if (stopChrootOnExit) L.drawer.chatHistoryDrawer.alsoStopTheUbuntuChrootIts
                                 else L.drawer.chatHistoryDrawer.alsoStopTheUbuntuChrootOff,
@@ -559,7 +602,8 @@ fun ChatHistoryDrawer(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError
                     ),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.PowerSettingsNew,
@@ -573,18 +617,21 @@ fun ChatHistoryDrawer(
             dismissButton = {
                 TextButton(
                     onClick = { showExitConfirmDialog = false },
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Text(L.common.cancel, fontSize = 13.5.sp)
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = dialogBg,
             shape = RoundedCornerShape(18.dp)
         )
     }
 
     if (conversationToDelete != null) {
         val targetConv = conversationToDelete!!
+        val dialogBg = MaterialTheme.colorScheme.surfaceContainerHigh
+        val dialogMuted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
         AlertDialog(
             onDismissRequest = { conversationToDelete = null },
             icon = {
@@ -608,14 +655,15 @@ fun ChatHistoryDrawer(
                     text = L.drawer.chatHistoryDrawer.deleteConversation,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
             },
             text = {
                 Text(
                     text = L.drawer.chatHistoryDrawer.areYouSureYouWantTo(targetConv.title.ifBlank { L.drawer.chatHistoryDrawer.thisConversation }),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = dialogMuted,
                     lineHeight = 20.sp
                 )
             },
@@ -631,7 +679,8 @@ fun ChatHistoryDrawer(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError
                     ),
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
@@ -645,19 +694,31 @@ fun ChatHistoryDrawer(
             dismissButton = {
                 TextButton(
                     onClick = { conversationToDelete = null },
-                    shape = RoundedCornerShape(10.dp)
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Text(L.common.cancel, fontSize = 13.5.sp)
                 }
             },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            containerColor = dialogBg,
             shape = RoundedCornerShape(18.dp)
         )
     }
 
+    val drawerBg = MaterialTheme.colorScheme.surface
+    val drawerMutedText = accessibleMutedColor(alpha = 0.72f, background = drawerBg)
+    val drawerMutedIcon = accessibleMutedColor(alpha = 0.72f, background = drawerBg, minRatio = 3.0f)
+    val accessibleTerracotta = ensureAccessibleContrast(ClaudeTerracotta, drawerBg, 4.5f, drawerBg)
+    val accessibleErrorIcon = ensureAccessibleContrast(MaterialTheme.colorScheme.error, drawerBg, 3.0f, drawerBg)
+
     ModalDrawerSheet(
-        modifier = modifier.fillMaxWidth(0.82f),
-        drawerContainerColor = MaterialTheme.colorScheme.surface,
+        modifier = modifier
+            .fillMaxWidth(0.82f)
+            .semantics {
+                paneTitle = L.drawer.chatHistoryDrawer.conversationHistory
+                isTraversalGroup = true
+            },
+        drawerContainerColor = drawerBg,
         drawerTonalElevation = 0.dp
     ) {
         Column(
@@ -680,59 +741,78 @@ fun ChatHistoryDrawer(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.3).sp,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .semantics { heading() }
                 )
 
                 @Composable
                 fun HeaderIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, active: Boolean, onClick: () -> Unit) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .minTouchTarget(48.dp)
                             .clip(CircleShape)
-                            .background(if (active) ClaudeTerracotta.copy(alpha = 0.14f) else Color.Transparent)
-                            .clickable(onClick = onClick),
+                            .clickable(role = Role.Button, onClick = onClick),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(if (active) ClaudeTerracotta.copy(alpha = 0.14f) else Color.Transparent),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = description,
+                                tint = if (active) accessibleTerracotta else drawerMutedIcon,
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HeaderIcon(Icons.Default.Search, L.common.search, isSearchActive || searchQuery.isNotBlank()) {
+                        isSearchActive = !isSearchActive
+                        if (!isSearchActive) {
+                            searchQuery = ""
+                            onSearchQueryChange("")
+                        }
+                    }
+                    HeaderIcon(
+                        if (groupByWorkspace) Icons.Default.Folder else Icons.Outlined.FolderOpen,
+                        if (groupByWorkspace) L.drawer.chatHistoryDrawer.disableWorkspaceGrouping else L.drawer.chatHistoryDrawer.groupByWorkspace,
+                        groupByWorkspace
+                    ) { onToggleGroupByWorkspace(!groupByWorkspace) }
+                    HeaderIcon(
+                        Icons.Outlined.Archive,
+                        if (showArchived) L.drawer.chatHistoryDrawer.showChats else L.drawer.chatHistoryDrawer.showArchivedChats,
+                        showArchived
+                    ) { onToggleShowArchived(!showArchived) }
+
+                    // Exit app: quiet until pressed (it asks first)
+                    Box(
+                        modifier = Modifier
+                            .minTouchTarget(48.dp)
+                            .clip(CircleShape)
+                            .clickable(role = Role.Button) { showExitConfirmDialog = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = icon,
-                            contentDescription = description,
-                            tint = if (active) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = L.drawer.chatHistoryDrawer.exitApp,
+                            tint = accessibleErrorIcon,
                             modifier = Modifier.size(19.dp)
                         )
                     }
-                }
-                HeaderIcon(Icons.Default.Search, L.common.search, isSearchActive || searchQuery.isNotBlank()) {
-                    isSearchActive = !isSearchActive
-                    if (!isSearchActive) {
-                        searchQuery = ""
-                        onSearchQueryChange("")
-                    }
-                }
-                HeaderIcon(
-                    if (groupByWorkspace) Icons.Default.Folder else Icons.Outlined.FolderOpen,
-                    if (groupByWorkspace) L.drawer.chatHistoryDrawer.disableWorkspaceGrouping else L.drawer.chatHistoryDrawer.groupByWorkspace,
-                    groupByWorkspace
-                ) { onToggleGroupByWorkspace(!groupByWorkspace) }
-                HeaderIcon(
-                    Icons.Outlined.Archive,
-                    if (showArchived) L.drawer.chatHistoryDrawer.showChats else L.drawer.chatHistoryDrawer.showArchivedChats,
-                    showArchived
-                ) { onToggleShowArchived(!showArchived) }
-
-                // Exit app: quiet until pressed (it asks first)
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .clickable { showExitConfirmDialog = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PowerSettingsNew,
-                        contentDescription = L.drawer.chatHistoryDrawer.exitApp,
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.75f),
-                        modifier = Modifier.size(19.dp)
-                    )
                 }
             }
 
@@ -746,9 +826,11 @@ fun ChatHistoryDrawer(
                 enter = expandVertically() + fadeIn(),
                 exit = shrinkVertically() + fadeOut()
             ) {
+                val searchBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                val searchMuted = accessibleMutedColor(alpha = 0.72f, background = searchBg, surfaceFallback = drawerBg)
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    color = searchBg,
                     border = BorderStroke(
                         1.dp,
                         if (searchQuery.isNotBlank()) ClaudeTerracotta.copy(alpha = 0.5f)
@@ -757,18 +839,18 @@ fun ChatHistoryDrawer(
                     modifier = Modifier
                         .padding(top = 10.dp)
                         .fillMaxWidth()
-                        .height(40.dp)
+                        .heightIn(min = 48.dp)
                 ) {
                     Row(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
                             .padding(start = 12.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = null,
-                            tint = if (searchQuery.isNotBlank()) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            tint = if (searchQuery.isNotBlank()) accessibleTerracotta else searchMuted,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -794,7 +876,7 @@ fun ChatHistoryDrawer(
                                         Text(
                                             text = L.drawer.chatHistoryDrawer.searchChats,
                                             fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                                            color = searchMuted
                                         )
                                     }
                                     innerTextField()
@@ -807,12 +889,12 @@ fun ChatHistoryDrawer(
                                     searchQuery = ""
                                     onSearchQueryChange("")
                                 },
-                                modifier = Modifier.size(32.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = L.common.clear,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    tint = searchMuted,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -820,12 +902,12 @@ fun ChatHistoryDrawer(
                         // Deep search (message contents, filters)
                         IconButton(
                             onClick = { showFullSearchDialog = true },
-                            modifier = Modifier.size(34.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Tune,
                                 contentDescription = L.drawer.chatHistoryDrawer.advancedSearch,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                tint = searchMuted,
                                 modifier = Modifier.size(17.dp)
                             )
                         }
@@ -849,18 +931,24 @@ fun ChatHistoryDrawer(
                     Text(
                         text = L.drawer.chatHistoryDrawer.filteredcountChatValueFound(filtered.size, if (filtered.size != 1) "s" else ""),
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        color = drawerMutedText,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
-                    Text(
-                        text = L.drawer.chatHistoryDrawer.advancedSearch2,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = ClaudeTerracotta,
+                    Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { showFullSearchDialog = true }
-                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
+                            .minTouchTarget(48.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(role = Role.Button) { showFullSearchDialog = true }
+                            .padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = L.drawer.chatHistoryDrawer.advancedSearch2,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = accessibleTerracotta
+                        )
+                    }
                 }
             }
 
@@ -872,7 +960,8 @@ fun ChatHistoryDrawer(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp, vertical = 2.dp)
-                        .horizontalScroll(rememberScrollState()),
+                        .horizontalScroll(rememberScrollState())
+                        .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -890,37 +979,65 @@ fun ChatHistoryDrawer(
                     }
                     allItems.forEach { (agent, label) ->
                         val selected = !jarvisFilter && agentFilter == agent
-                        val accent = agent?.accent() ?: ClaudeTerracotta
-                        Text(
-                            text = label,
-                            fontSize = 11.5.sp,
-                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (selected) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        val rawAccent = agent?.accent() ?: ClaudeTerracotta
+                        val pillBg = if (selected) rawAccent.copy(alpha = 0.14f) else Color.Transparent
+                        val pillFg = if (selected) ensureAccessibleContrast(rawAccent, pillBg, 4.5f, drawerBg) else drawerMutedText
+                        Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (selected) accent.copy(alpha = 0.14f) else Color.Transparent)
-                                .clickable { jarvisFilter = false; agentFilter = agent }
-                                .padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
+                                .accessibleSelectionRow(selected = selected, role = Role.Tab) {
+                                    jarvisFilter = false
+                                    agentFilter = agent
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.5.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                color = pillFg,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(pillBg)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                     if (jarvisEnabled) {
                         val jarvisAccent = ai.antigem.ui.jarvis.Cyan
-                        Row(
+                        val jarvisPillBg = if (jarvisFilter) jarvisAccent.copy(alpha = 0.14f) else Color.Transparent
+                        val jarvisFg = if (jarvisFilter) ensureAccessibleContrast(jarvisAccent, jarvisPillBg, 4.5f, drawerBg) else drawerMutedText
+                        val jarvisIconTint = ensureAccessibleContrast(
+                            if (jarvisFilter) jarvisAccent else jarvisAccent.copy(alpha = 0.7f),
+                            jarvisPillBg,
+                            3.0f,
+                            drawerBg
+                        )
+                        Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (jarvisFilter) jarvisAccent.copy(alpha = 0.14f) else Color.Transparent)
-                                .clickable { agentFilter = null; jarvisFilter = true }
-                                .padding(start = 7.dp, end = 10.dp, top = 3.dp, bottom = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .accessibleSelectionRow(selected = jarvisFilter, role = Role.Tab) {
+                                    agentFilter = null
+                                    jarvisFilter = true
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            ai.antigem.ui.jarvis.JarvisBotIcon(15.dp, if (jarvisFilter) jarvisAccent else jarvisAccent.copy(alpha = 0.7f))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = L.common.jarvis,
-                                fontSize = 11.5.sp,
-                                fontWeight = if (jarvisFilter) FontWeight.SemiBold else FontWeight.Normal,
-                                color = if (jarvisFilter) jarvisAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(jarvisPillBg)
+                                    .padding(start = 7.dp, end = 10.dp, top = 5.dp, bottom = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ai.antigem.ui.jarvis.JarvisBotIcon(15.dp, jarvisIconTint)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = L.common.jarvis,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (jarvisFilter) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = jarvisFg
+                                )
+                            }
                         }
                     }
                 }
@@ -937,7 +1054,7 @@ fun ChatHistoryDrawer(
                     Icon(
                         imageVector = Icons.Outlined.Archive,
                         contentDescription = null,
-                        tint = ClaudeTerracotta,
+                        tint = accessibleTerracotta,
                         modifier = Modifier.size(15.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -945,18 +1062,23 @@ fun ChatHistoryDrawer(
                         text = L.drawer.chatHistoryDrawer.archivedChatsToplevelchatscount(topLevelChats.size),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = ClaudeTerracotta,
-                        modifier = Modifier.weight(1f)
+                        color = accessibleTerracotta,
+                        modifier = Modifier.weight(1f).semantics { heading() }
                     )
-                    Text(
-                        text = L.drawer.chatHistoryDrawer.backToChats,
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    Box(
                         modifier = Modifier
+                            .minTouchTarget(48.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable { onToggleShowArchived(false) }
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    )
+                            .clickable(role = Role.Button) { onToggleShowArchived(false) }
+                            .padding(horizontal = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = L.drawer.chatHistoryDrawer.backToChats,
+                            fontSize = 11.5.sp,
+                            color = drawerMutedText
+                        )
+                    }
                 }
             }
 
@@ -1019,7 +1141,8 @@ fun ChatHistoryDrawer(
                             Button(
                                 onClick = onRetry,
                                 shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Text(L.common.retry, fontSize = 12.5.sp)
                             }
@@ -1041,7 +1164,7 @@ fun ChatHistoryDrawer(
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                                 modifier = Modifier.padding(horizontal = 24.dp),
                                 fontSize = 13.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                color = drawerMutedText
                             )
                         }
                     }
@@ -1117,10 +1240,14 @@ fun ChatHistoryDrawer(
                                                 .then(
                                                     if (chats.size > 5) {
                                                         Modifier
+                                                            .minTouchTarget(48.dp)
                                                             .clip(RoundedCornerShape(6.dp))
-                                                            .clickable {
+                                                            .clickable(role = Role.Button) {
                                                                 expandedGroups =
                                                                     if (isExpanded) expandedGroups - groupName else expandedGroups + groupName
+                                                            }
+                                                            .semantics {
+                                                                stateDescription = if (isExpanded) L.chat.stepGroupPill.expanded else L.chat.stepGroupPill.collapsed
                                                             }
                                                     } else Modifier
                                                 )
@@ -1134,7 +1261,7 @@ fun ChatHistoryDrawer(
                                                     else -> Icons.Default.Folder
                                                 },
                                                 contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                tint = drawerMutedIcon,
                                                 modifier = Modifier.size(15.dp)
                                             )
                                             Spacer(modifier = Modifier.width(7.dp))
@@ -1146,11 +1273,13 @@ fun ChatHistoryDrawer(
                                                 },
                                                 fontSize = 13.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                                color = drawerMutedText,
                                                 letterSpacing = 0.2.sp,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.weight(1f, fill = false)
+                                                modifier = Modifier
+                                                    .weight(1f, fill = false)
+                                                    .semantics { heading() }
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Surface(
@@ -1161,7 +1290,7 @@ fun ChatHistoryDrawer(
                                                     text = "${chats.size}",
                                                     fontSize = 10.5.sp,
                                                     fontWeight = FontWeight.Medium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    color = drawerMutedText,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
                                                 )
                                             }
@@ -1170,7 +1299,7 @@ fun ChatHistoryDrawer(
                                                 Icon(
                                                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                                     contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                    tint = drawerMutedIcon,
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                             }
@@ -1231,24 +1360,25 @@ fun ChatHistoryDrawer(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 modifier = Modifier
                                                     .padding(start = 12.dp, top = 2.dp, bottom = 4.dp)
+                                                    .minTouchTarget(48.dp)
                                                     .clip(RoundedCornerShape(4.dp))
-                                                    .clickable {
+                                                    .clickable(role = Role.Button) {
                                                         expandedGroups =
                                                             if (isExpanded) expandedGroups - groupName else expandedGroups + groupName
                                                     }
-                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    .padding(horizontal = 6.dp, vertical = 4.dp)
                                             ) {
                                                 Text(
                                                     text = if (isExpanded) L.drawer.chatHistoryDrawer.showLess else L.drawer.chatHistoryDrawer.showValueMore(chats.size - 5),
                                                     fontSize = 11.5.sp,
                                                     fontWeight = FontWeight.Medium,
-                                                    color = ClaudeTerracotta
+                                                    color = accessibleTerracotta
                                                 )
                                                 Spacer(modifier = Modifier.width(2.dp))
                                                 Icon(
                                                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                                     contentDescription = null,
-                                                    tint = ClaudeTerracotta,
+                                                    tint = accessibleTerracotta,
                                                     modifier = Modifier.size(14.dp)
                                                 )
                                             }
@@ -1271,89 +1401,119 @@ fun ChatHistoryDrawer(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Settings on left: icon only, same style as the Themes button next to it
-                Surface(
-                    onClick = onOpenSettings,
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.Transparent,
-                    modifier = Modifier.padding(end = 4.dp)
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = L.common.settings,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(8.dp).size(20.dp)
-                    )
-                }
-
-                // Themes: a floating picker over the sidebar and chat, to try themes and see them live
-                if (onOpenThemes != null) {
+                    // Settings on left: icon only, same style as the Themes button next to it
                     Surface(
-                        onClick = onOpenThemes,
+                        onClick = onOpenSettings,
                         shape = RoundedCornerShape(8.dp),
                         color = Color.Transparent,
-                        modifier = Modifier.padding(end = 4.dp)
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .minTouchTarget(48.dp)
+                            .semantics { role = Role.Button }
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Palette,
-                            contentDescription = L.common.themes,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(8.dp).size(20.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = L.common.settings,
+                                tint = drawerMutedIcon,
+                                modifier = Modifier.padding(8.dp).size(20.dp)
+                            )
+                        }
                     }
+
+                    // Themes: a floating picker over the sidebar and chat, to try themes and see them live
+                    if (onOpenThemes != null) {
+                        Surface(
+                            onClick = onOpenThemes,
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.Transparent,
+                            modifier = Modifier
+                                .padding(end = 4.dp)
+                                .minTouchTarget(48.dp)
+                                .semantics { role = Role.Button }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Palette,
+                                    contentDescription = L.common.themes,
+                                    tint = drawerMutedIcon,
+                                    modifier = Modifier.padding(8.dp).size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Mini Apps: the grid of on-device apps in ~/mini-apps
+                    val miniAppsContext = androidx.compose.ui.platform.LocalContext.current
+                    Surface(
+                        onClick = { miniAppsContext.startActivity(android.content.Intent(miniAppsContext, ai.antigem.ui.miniapps.MiniAppsActivity::class.java)) },
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Transparent,
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .minTouchTarget(48.dp)
+                            .semantics { role = Role.Button }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Apps,
+                                contentDescription = L.drawer.chatHistoryDrawer.miniApps,
+                                tint = drawerMutedIcon,
+                                modifier = Modifier.padding(8.dp).size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Connect to PC: which PC is in use, switch, add one
+                    pcButton?.invoke()
                 }
 
-                // Mini Apps: the grid of on-device apps in ~/mini-apps
-                val miniAppsContext = androidx.compose.ui.platform.LocalContext.current
-                Surface(
-                    onClick = { miniAppsContext.startActivity(android.content.Intent(miniAppsContext, ai.antigem.ui.miniapps.MiniAppsActivity::class.java)) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color.Transparent,
-                    modifier = Modifier.padding(end = 4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Apps,
-                        contentDescription = L.drawer.chatHistoryDrawer.miniApps,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(8.dp).size(20.dp)
-                    )
-                }
-
-                // Connect to PC: which PC is in use, switch, add one
-                pcButton?.invoke()
-
-                // keeps the profile / login button on the right
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.width(6.dp))
 
                 // Profile / Login on right
                 if (accountsButton != null) {
                     accountsButton()
                 } else if (isAuthBusy) {
-                    Surface(
-                        onClick = { showSigningInProgressDialog = true },
-                        shape = RoundedCornerShape(14.dp),
-                        color = ClaudeTerracotta.copy(alpha = 0.12f),
-                        modifier = Modifier.height(30.dp)
+                    val signingBg = ClaudeTerracotta.copy(alpha = 0.12f)
+                    val signingFg = ensureAccessibleContrast(ClaudeTerracotta, signingBg, 4.5f, drawerBg)
+                    Box(
+                        modifier = Modifier
+                            .minTouchTarget(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(role = Role.Button) { showSigningInProgressDialog = true }
+                            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = signingBg,
+                            modifier = Modifier.height(30.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .background(ClaudeTerracotta, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = L.drawer.chatHistoryDrawer.signingIn,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = ClaudeTerracotta
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(signingFg, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = L.drawer.chatHistoryDrawer.signingIn,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = signingFg
+                                )
+                            }
                         }
                     }
                 } else {
@@ -1367,7 +1527,10 @@ fun ChatHistoryDrawer(
                                 border = androidx.compose.foundation.BorderStroke(
                                     1.dp,
                                     ClaudeTerracotta.copy(alpha = 0.4f)
-                                )
+                                ),
+                                modifier = Modifier
+                                    .minTouchTarget(48.dp)
+                                    .semantics { role = Role.Button }
                             ) {
                                 Row(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -1437,19 +1600,23 @@ fun ChatHistoryDrawer(
 
                         ai.antigem.data.remote.SystemStatus.UNAUTHENTICATED -> {
                             // Not logged in (UNAUTHENTICATED) -> Sign In button
+                            val signInBg = ClaudeTerracotta.copy(alpha = 0.15f)
+                            val signInFg = ensureAccessibleContrast(ClaudeTerracotta, signInBg, 4.5f, drawerBg)
                             FilledTonalButton(
                                 onClick = onLogin,
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = ClaudeTerracotta.copy(alpha = 0.15f),
-                                    contentColor = ClaudeTerracotta
+                                    containerColor = signInBg,
+                                    contentColor = signInFg
                                 ),
-                                modifier = Modifier.height(32.dp)
+                                modifier = Modifier
+                                    .minTouchTarget(48.dp)
+                                    .semantics { liveRegion = LiveRegionMode.Polite }
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Outlined.Login,
-                                    contentDescription = L.drawer.chatHistoryDrawer.signIn,
+                                    contentDescription = null,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -1464,28 +1631,40 @@ fun ChatHistoryDrawer(
                         else -> {
                             // All intermediate or offline states (OFFLINE, STARTING, ACQUIRING_CSRF, CHECKING_AUTH, ERROR)
                             val statusObj = systemConnectionState.status
-                            Surface(
-                                onClick = if (statusObj == ai.antigem.data.remote.SystemStatus.OFFLINE || statusObj == ai.antigem.data.remote.SystemStatus.ERROR) onRetry else onCheckAuth,
-                                shape = RoundedCornerShape(14.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                modifier = Modifier.height(30.dp)
+                            val statusBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            val statusFg = accessibleMutedColor(alpha = 0.72f, background = statusBg, surfaceFallback = drawerBg)
+                            Box(
+                                modifier = Modifier
+                                    .minTouchTarget(48.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .clickable(role = Role.Button) {
+                                        if (statusObj == ai.antigem.data.remote.SystemStatus.OFFLINE || statusObj == ai.antigem.data.remote.SystemStatus.ERROR) onRetry() else onCheckAuth()
+                                    }
+                                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = statusBg,
+                                    modifier = Modifier.height(30.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(6.dp)
-                                            .background(statusObj.dotColor, CircleShape)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = statusObj.label,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Normal,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(statusObj.dotColor, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = statusObj.label,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            color = statusFg
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1598,10 +1777,56 @@ private fun ChatHistoryItemRow(
 ) {
     val isSubagent = depth > 0
     val startPadding = if (isSubagent) (12 + (depth * 14)).dp else 0.dp
+    val drawerBg = MaterialTheme.colorScheme.surface
+    val rowBg = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent
+    val effectiveRowBg = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else drawerBg
+    val rowMutedText = accessibleMutedColor(alpha = 0.72f, background = effectiveRowBg, surfaceFallback = drawerBg)
+    val rowMutedIcon = accessibleMutedColor(alpha = 0.72f, background = effectiveRowBg, minRatio = 3.0f, surfaceFallback = drawerBg)
+    val rowTerracotta = ensureAccessibleContrast(ClaudeTerracotta, effectiveRowBg, 4.5f, drawerBg)
     val statusDotColor = when {
         isActivelyRunning -> ai.antigem.theme.AppColors.success
         isScheduledOrBackground -> ai.antigem.theme.AppColors.warning
         else -> null
+    }
+    val rowScope = rememberCoroutineScope()
+    val rowContext = LocalContext.current
+    val customActionItems = buildList {
+        if (onTogglePin != null) {
+            add(
+                CustomAccessibilityAction(
+                    if (isPinned) L.drawer.chatHistoryDrawer.unpin else L.drawer.chatHistoryDrawer.pinToTop
+                ) {
+                    onTogglePin()
+                    AppToastHelper.showToast(
+                        if (isPinned) L.drawer.chatHistoryDrawer.chatUnpinned else L.drawer.chatHistoryDrawer.chatPinned,
+                        ChatToastType.SUCCESS
+                    )
+                    true
+                }
+            )
+        }
+        if (!conv.readOnly && claudeActions != null) {
+            add(
+                CustomAccessibilityAction(
+                    if (conv.archived) L.drawer.chatHistoryDrawer.unarchive else L.drawer.chatHistoryDrawer.archive
+                ) {
+                    claudeActions.archive(conv.id, !conv.archived)
+                    AppToastHelper.showToast(
+                        if (conv.archived) L.drawer.chatHistoryDrawer.chatUnarchived else L.drawer.chatHistoryDrawer.chatArchived,
+                        ChatToastType.SUCCESS
+                    )
+                    true
+                }
+            )
+        }
+        if (!conv.readOnly) {
+            add(
+                CustomAccessibilityAction(L.common.delete) {
+                    onRequestDelete(conv)
+                    true
+                }
+            )
+        }
     }
     Row(
         modifier = Modifier
@@ -1612,14 +1837,17 @@ private fun ChatHistoryItemRow(
                 top = if (isSubagent) 1.dp else 2.dp,
                 bottom = if (isSubagent) 1.dp else 2.dp
             )
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) MaterialTheme.colorScheme.surfaceVariant
-                else Color.Transparent
-            )
-            .clickable {
+            .background(rowBg)
+            .clickable(role = Role.Button) {
                 Log.d("CHAT_OPEN_DEBUG", "📂 [Drawer Row] User clicked: id=${conv.id}, title='${conv.title}'")
                 onSelectConversation(conv.id)
+            }
+            .semantics {
+                selected = isSelected
+                if (isPinned) stateDescription = L.drawer.chatHistoryDrawer.pinned
+                if (customActionItems.isNotEmpty()) customActions = customActionItems
             }
             .padding(
                 horizontal = if (isSubagent) 8.dp else 10.dp,
@@ -1632,7 +1860,7 @@ private fun ChatHistoryItemRow(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.CallSplit,
                     contentDescription = L.drawer.chatHistoryDrawer.subagent,
-                    tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    tint = if (isSelected) rowTerracotta else rowMutedIcon,
                     modifier = Modifier.size(15.dp)
                 )
                 if (statusDotColor != null) {
@@ -1653,18 +1881,21 @@ private fun ChatHistoryItemRow(
                 val isOpenCodeChat = conv.agent == ai.antigem.domain.model.AgentKind.OPENCODE
                 val isCodexChat = conv.agent == ai.antigem.domain.model.AgentKind.CODEX
                 if (isJarvis) {
-                    ai.antigem.ui.jarvis.JarvisBotIcon(19.dp, ai.antigem.ui.jarvis.Cyan.copy(alpha = if (isSelected) 1f else 0.85f))
+                    ai.antigem.ui.jarvis.JarvisBotIcon(
+                        19.dp,
+                        ensureAccessibleContrast(ai.antigem.ui.jarvis.Cyan.copy(alpha = if (isSelected) 1f else 0.85f), effectiveRowBg, 3.0f, drawerBg)
+                    )
                 } else Icon(
                     // an Antigravity cloud chat (Remote Agents) shows a cloud
                     imageVector = if (conv.isCloud) Icons.Outlined.Cloud else Icons.Outlined.ChatBubbleOutline,
                     contentDescription = if (conv.isCloud) L.drawer.chatHistoryDrawer.cloudChat else if (isClaudeChat) L.drawer.chatHistoryDrawer.claudeCodeChat else if (isOpenCodeChat) L.drawer.chatHistoryDrawer.opencodeChat else if (isCodexChat) L.drawer.chatHistoryDrawer.codexChat else null,
                     tint = when {
-                        conv.isCloud -> ai.antigem.theme.GeminiBlue.copy(alpha = if (isSelected) 1f else 0.85f)
-                        isClaudeChat -> ai.antigem.ui.components.ClaudeAccent.copy(alpha = if (isSelected) 1f else 0.85f)
-                        isOpenCodeChat -> ai.antigem.ui.components.OpenCodeAccent.copy(alpha = if (isSelected) 1f else 0.85f)
-                        isCodexChat -> ai.antigem.ui.components.CodexAccent.copy(alpha = if (isSelected) 1f else 0.85f)
-                        isSelected -> ClaudeTerracotta
-                        else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        conv.isCloud -> ensureAccessibleContrast(ai.antigem.theme.GeminiBlue.copy(alpha = if (isSelected) 1f else 0.85f), effectiveRowBg, 3.0f, drawerBg)
+                        isClaudeChat -> ensureAccessibleContrast(ai.antigem.ui.components.ClaudeAccent.copy(alpha = if (isSelected) 1f else 0.85f), effectiveRowBg, 3.0f, drawerBg)
+                        isOpenCodeChat -> ensureAccessibleContrast(ai.antigem.ui.components.OpenCodeAccent.copy(alpha = if (isSelected) 1f else 0.85f), effectiveRowBg, 3.0f, drawerBg)
+                        isCodexChat -> ensureAccessibleContrast(ai.antigem.ui.components.CodexAccent.copy(alpha = if (isSelected) 1f else 0.85f), effectiveRowBg, 3.0f, drawerBg)
+                        isSelected -> rowTerracotta
+                        else -> rowMutedIcon
                     },
                     modifier = Modifier.size(17.dp)
                 )
@@ -1692,7 +1923,7 @@ private fun ChatHistoryItemRow(
                 fontWeight = if (isSelected) FontWeight.SemiBold else if (isSubagent) FontWeight.Medium else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                color = if (isSubagent && isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
+                color = if (isSubagent && isSelected) rowTerracotta else MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f, fill = false)
             )
 
@@ -1701,36 +1932,47 @@ private fun ChatHistoryItemRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (subagents.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (isSubagentsExpanded) ClaudeTerracotta.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(
-                            alpha = 0.7f
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isSubagentsExpanded) ClaudeTerracotta.copy(alpha = 0.4f) else Color.Transparent
-                        ),
+                    val subBg = if (isSubagentsExpanded) ClaudeTerracotta.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    val subFg = if (isSubagentsExpanded) ensureAccessibleContrast(ClaudeTerracotta, subBg, 4.5f, drawerBg) else accessibleMutedColor(0.75f, subBg, surfaceFallback = drawerBg)
+                    Box(
                         modifier = Modifier
+                            .minTouchTarget(48.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable { onToggleSubagents?.invoke() }
+                            .clickable(
+                                role = Role.Button,
+                                onClickLabel = if (isSubagentsExpanded) L.drawer.chatHistoryDrawer.collapseSubagents else L.drawer.chatHistoryDrawer.expandSubagents
+                            ) { onToggleSubagents?.invoke() }
+                            .semantics {
+                                stateDescription = if (isSubagentsExpanded) L.chat.stepGroupPill.expanded else L.chat.stepGroupPill.collapsed
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = subBg,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSubagentsExpanded) ClaudeTerracotta.copy(alpha = 0.4f) else Color.Transparent
+                            )
                         ) {
-                            Text(
-                                text = "${subagents.size}",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isSubagentsExpanded) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(
-                                imageVector = if (isSubagentsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                contentDescription = if (isSubagentsExpanded) L.drawer.chatHistoryDrawer.collapseSubagents else L.drawer.chatHistoryDrawer.expandSubagents,
-                                tint = if (isSubagentsExpanded) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(13.dp)
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${subagents.size}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = subFg
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Icon(
+                                    imageVector = if (isSubagentsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = subFg,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -1738,8 +1980,8 @@ private fun ChatHistoryItemRow(
                 if (isPinned) {
                     Icon(
                         imageVector = Icons.Outlined.PushPin,
-                        contentDescription = L.drawer.chatHistoryDrawer.pinned,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        contentDescription = null,
+                        tint = rowMutedIcon,
                         modifier = Modifier.size(12.dp)
                     )
                 }
@@ -1748,7 +1990,7 @@ private fun ChatHistoryItemRow(
                     Text(
                         text = timeStr,
                         fontSize = if (isSubagent) 10.5.sp else 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                        color = rowMutedText
                     )
                 }
             }
@@ -1757,32 +1999,40 @@ private fun ChatHistoryItemRow(
         Spacer(modifier = Modifier.width(4.dp))
 
         if (activeInst != null) {
-            Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = ai.antigem.theme.AppColors.success.copy(alpha = 0.15f),
-                border = BorderStroke(1.dp, ai.antigem.theme.AppColors.success.copy(alpha = 0.5f)),
+            val runBg = ai.antigem.theme.AppColors.success.copy(alpha = 0.15f)
+            val runFg = ensureAccessibleContrast(ai.antigem.theme.AppColors.success, runBg, 4.5f, drawerBg)
+            Box(
                 modifier = Modifier
+                    .minTouchTarget(48.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .clickable {
+                    .clickable(role = Role.Button) {
                         onTerminateInstance(activeInst, conv.title)
                     }
+                    .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = runBg,
+                    border = BorderStroke(1.dp, ai.antigem.theme.AppColors.success.copy(alpha = 0.5f))
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .background(ai.antigem.theme.AppColors.success, CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = L.drawer.chatHistoryDrawer.running,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = ai.antigem.theme.AppColors.success
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(runFg, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = L.drawer.chatHistoryDrawer.running,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = runFg
+                        )
+                    }
                 }
             }
             Spacer(modifier = Modifier.width(6.dp))
@@ -1802,26 +2052,32 @@ private fun ChatHistoryItemRow(
         // Claude Code and OpenCode chats: renamed, exported and shared through claudeActions (routed by agent)
         val isAgentConv = conv.agent != ai.antigem.domain.model.AgentKind.AGY
         val clipboardManager = LocalClipboardManager.current
-        val context = LocalContext.current
+        val context = rowContext
 
-        val scope = rememberCoroutineScope()
+        val scope = rowScope
         val snackbarHostState = ai.antigem.ui.components.LocalSnackbarHostState.current
 
         if (showRename && claudeActions != null) {
             var newTitle by remember { mutableStateOf(conv.title) }
             AlertDialog(
                 onDismissRequest = { showRename = false },
-                title = { Text(L.drawer.chatHistoryDrawer.renameChat, fontWeight = FontWeight.Bold) },
+                title = { Text(L.drawer.chatHistoryDrawer.renameChat, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }) },
                 text = {
                     OutlinedTextField(value = newTitle, onValueChange = { newTitle = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        claudeActions.rename(conv.id, newTitle)
-                        showRename = false
-                    }, enabled = newTitle.isNotBlank()) { Text(L.common.save) }
+                    TextButton(
+                        onClick = {
+                            claudeActions.rename(conv.id, newTitle)
+                            showRename = false
+                        },
+                        enabled = newTitle.isNotBlank(),
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Text(L.common.save) }
                 },
-                dismissButton = { TextButton(onClick = { showRename = false }) { Text(L.common.cancel) } }
+                dismissButton = {
+                    TextButton(onClick = { showRename = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
+                }
             )
         }
 
@@ -1829,12 +2085,12 @@ private fun ChatHistoryItemRow(
         if (!conv.readOnly) Box {
             IconButton(
                 onClick = { menuExpanded = true },
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.MoreVert,
                     contentDescription = L.common.options,
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    tint = rowMutedIcon,
                     modifier = Modifier.size(17.dp)
                 )
             }
@@ -2133,12 +2389,22 @@ fun SearchChatsDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val dialogBg = MaterialTheme.colorScheme.surface
+        val dialogMutedText = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
+        val dialogMutedIcon = accessibleMutedColor(alpha = 0.72f, background = dialogBg, minRatio = 3.0f)
+        val accessibleTerracotta = ensureAccessibleContrast(ClaudeTerracotta, dialogBg, 4.5f, dialogBg)
+        val searchBoxBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        val searchBoxMuted = accessibleMutedColor(alpha = 0.72f, background = searchBoxBg, surfaceFallback = dialogBg)
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.82f),
+                .fillMaxHeight(0.82f)
+                .semantics {
+                    paneTitle = L.drawer.chatHistoryDrawer.searchConversations
+                    isTraversalGroup = true
+                },
             shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = dialogBg,
             tonalElevation = 6.dp,
             shadowElevation = 12.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
@@ -2155,6 +2421,7 @@ fun SearchChatsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -2168,7 +2435,7 @@ fun SearchChatsDialog(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                tint = ClaudeTerracotta,
+                                tint = accessibleTerracotta,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -2177,24 +2444,25 @@ fun SearchChatsDialog(
                                 text = L.drawer.chatHistoryDrawer.searchConversations,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = L.drawer.chatHistoryDrawer.conversationscountTotalChatsIndexed(conversations.size),
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                color = dialogMutedText
                             )
                         }
                     }
 
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = L.common.close,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            tint = dialogMutedIcon,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -2205,14 +2473,14 @@ fun SearchChatsDialog(
                 // Search input bar
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    color = searchBoxBg,
                     border = BorderStroke(
                         1.5.dp,
                         if (query.isNotBlank()) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(
                             alpha = 0.3f
                         )
                     ),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
                 ) {
                     Row(
                         modifier = Modifier
@@ -2223,9 +2491,7 @@ fun SearchChatsDialog(
                         Icon(
                             imageVector = Icons.Default.Search,
                             contentDescription = null,
-                            tint = if (query.isNotBlank()) ClaudeTerracotta else MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                alpha = 0.6f
-                            ),
+                            tint = if (query.isNotBlank()) accessibleTerracotta else searchBoxMuted,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -2245,7 +2511,7 @@ fun SearchChatsDialog(
                                     Text(
                                         text = L.drawer.chatHistoryDrawer.searchByTitleTopicOrModel,
                                         fontSize = 13.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        color = searchBoxMuted
                                     )
                                 }
                                 innerTextField()
@@ -2254,7 +2520,7 @@ fun SearchChatsDialog(
                         if (query.isNotEmpty()) {
                             IconButton(
                                 onClick = { query = "" },
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.minTouchTarget(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
@@ -2278,38 +2544,47 @@ fun SearchChatsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Time filters
-                    listOf("All", "Today", "Past 7d", "Past 30d").forEach { timeLabel ->
-                        val isSelected = selectedTimeFilter == timeLabel
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(
-                                alpha = 0.35f
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(
-                                    alpha = 0.2f
-                                )
-                            ),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedTimeFilter = timeLabel }
-                        ) {
-                            Text(
-                                // the filter keys stay English (compared above); only the shown label is translated
-                                text = when (timeLabel) {
-                                    "Today" -> L.drawer.chatHistoryDrawer.today
-                                    "Past 7d" -> L.drawer.chatHistoryDrawer.past7d
-                                    "Past 30d" -> L.drawer.chatHistoryDrawer.past30d
-                                    else -> L.drawer.chatHistoryDrawer.all
-                                },
-                                fontSize = 11.5.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(
-                                    alpha = 0.8f
-                                ),
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
-                            )
+                    Row(
+                        modifier = Modifier.selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf("All", "Today", "Past 7d", "Past 30d").forEach { timeLabel ->
+                            val isSelected = selectedTimeFilter == timeLabel
+                            val chipBg = if (isSelected) ClaudeTerracotta.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            val chipFg = if (isSelected) ensureAccessibleContrast(ClaudeTerracotta, chipBg, 4.5f, dialogBg)
+                                else accessibleMutedColor(0.8f, chipBg, surfaceFallback = dialogBg)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .accessibleSelectionRow(selected = isSelected, role = Role.Tab) {
+                                        selectedTimeFilter = timeLabel
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = chipBg,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                                    )
+                                ) {
+                                    Text(
+                                        // the filter keys stay English (compared above); only the shown label is translated
+                                        text = when (timeLabel) {
+                                            "Today" -> L.drawer.chatHistoryDrawer.today
+                                            "Past 7d" -> L.drawer.chatHistoryDrawer.past7d
+                                            "Past 30d" -> L.drawer.chatHistoryDrawer.past30d
+                                            else -> L.drawer.chatHistoryDrawer.all
+                                        },
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = chipFg,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -2321,46 +2596,53 @@ fun SearchChatsDialog(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
 
-                        workspaces.forEach { wsName ->
-                            val isSelected = selectedWorkspaceFilter == wsName
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(
-                                    alpha = 0.35f
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(
-                                        alpha = 0.2f
-                                    )
-                                ),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { selectedWorkspaceFilter = wsName }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        Row(
+                            modifier = Modifier.selectableGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            workspaces.forEach { wsName ->
+                                val isSelected = selectedWorkspaceFilter == wsName
+                                val chipBg = if (isSelected) ClaudeTerracotta.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                val chipFg = if (isSelected) ensureAccessibleContrast(ClaudeTerracotta, chipBg, 4.5f, dialogBg)
+                                    else accessibleMutedColor(0.8f, chipBg, surfaceFallback = dialogBg)
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .accessibleSelectionRow(selected = isSelected, role = Role.Tab) {
+                                            selectedWorkspaceFilter = wsName
+                                        },
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    if (wsName != "All") {
-                                        Icon(
-                                            imageVector = Icons.Default.Folder,
-                                            contentDescription = null,
-                                            tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(
-                                                alpha = 0.6f
-                                            ),
-                                            modifier = Modifier.size(12.dp)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = chipBg,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
                                         )
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            if (wsName != "All") {
+                                                Icon(
+                                                    imageVector = Icons.Default.Folder,
+                                                    contentDescription = null,
+                                                    tint = chipFg,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                            }
+                                            Text(
+                                                text = if (wsName == "All") L.drawer.chatHistoryDrawer.all else wsName,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = chipFg
+                                            )
+                                        }
                                     }
-                                    Text(
-                                        text = if (wsName == "All") L.drawer.chatHistoryDrawer.all else wsName,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(
-                                            alpha = 0.8f
-                                        )
-                                    )
                                 }
                             }
                         }
@@ -2374,7 +2656,8 @@ fun SearchChatsDialog(
                     text = "${results.size} match${if (results.size != 1) "es" else ""}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    color = dialogMutedText,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -2394,7 +2677,7 @@ fun SearchChatsDialog(
                             Icon(
                                 imageVector = Icons.Outlined.ChatBubbleOutline,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                                tint = dialogMutedIcon,
                                 modifier = Modifier.size(40.dp)
                             )
                             Text(
@@ -2406,7 +2689,7 @@ fun SearchChatsDialog(
                             Text(
                                 text = if (query.isNotBlank()) L.drawer.chatHistoryDrawer.noChatsMatchQueryTryDifferent(query) else L.drawer.chatHistoryDrawer.noChatsInThisCategory,
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                color = dialogMutedText,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
                         }
@@ -2418,11 +2701,12 @@ fun SearchChatsDialog(
                     ) {
                         items(results, key = { it.id }) { conv ->
                             val isSelected = conv.id == currentConversationId
+                            val cardBg = if (isSelected) ClaudeTerracotta.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = dialogBg)
+                            val cardTerracotta = ensureAccessibleContrast(ClaudeTerracotta, cardBg, 4.5f, dialogBg)
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant.copy(
-                                    alpha = 0.35f
-                                ),
+                                color = cardBg,
                                 border = BorderStroke(
                                     1.dp,
                                     if (isSelected) ClaudeTerracotta.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(
@@ -2431,14 +2715,18 @@ fun SearchChatsDialog(
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .minTouchTarget(48.dp)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
+                                    .clickable(role = Role.Button) {
                                         Log.d(
                                             "CHAT_OPEN_DEBUG",
                                             "📂 [Drawer Dialog] User clicked: id=${conv.id}, title='${conv.title}'"
                                         )
                                         onSelectConversation(conv.id)
                                         onDismiss()
+                                    }
+                                    .semantics(mergeDescendants = true) {
+                                        if (isSelected) selected = true
                                     }
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
@@ -2451,7 +2739,7 @@ fun SearchChatsDialog(
                                             text = conv.title,
                                             fontSize = 13.5.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
+                                            color = if (isSelected) cardTerracotta else MaterialTheme.colorScheme.onSurface,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f)
@@ -2462,7 +2750,7 @@ fun SearchChatsDialog(
                                             Text(
                                                 text = rel,
                                                 fontSize = 11.sp,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                                color = cardMuted
                                             )
                                         }
                                     }
@@ -2473,7 +2761,7 @@ fun SearchChatsDialog(
                                             text = conv.summary,
                                             fontSize = 11.5.sp,
                                             lineHeight = 15.sp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                            color = cardMuted,
                                             maxLines = 2,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -2488,9 +2776,11 @@ fun SearchChatsDialog(
                                         if (conv.workspaceUri.isNotBlank()) {
                                             val clean = conv.workspaceUri.removePrefix("file://").trimEnd('/')
                                             val name = java.io.File(clean).name.ifBlank { L.common.workspace }
+                                            val wsBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                            val wsFg = accessibleMutedColor(0.75f, wsBg, surfaceFallback = dialogBg)
                                             Surface(
                                                 shape = RoundedCornerShape(4.dp),
-                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                                color = wsBg
                                             ) {
                                                 Row(
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -2501,27 +2791,29 @@ fun SearchChatsDialog(
                                                         imageVector = Icons.Default.Folder,
                                                         contentDescription = null,
                                                         modifier = Modifier.size(11.dp),
-                                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                        tint = wsFg
                                                     )
                                                     Text(
                                                         text = name,
                                                         fontSize = 10.5.sp,
-                                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                                        color = wsFg
                                                     )
                                                 }
                                             }
                                         }
 
                                         if (conv.modelId.isNotBlank()) {
+                                            val modelBg = ClaudeTerracotta.copy(alpha = 0.1f)
+                                            val modelFg = ensureAccessibleContrast(ClaudeTerracotta, modelBg, 4.5f, dialogBg)
                                             Surface(
                                                 shape = RoundedCornerShape(4.dp),
-                                                color = ClaudeTerracotta.copy(alpha = 0.1f)
+                                                color = modelBg
                                             ) {
                                                 Text(
                                                     text = conv.modelId.substringAfterLast('/'),
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Medium,
-                                                    color = ClaudeTerracotta,
+                                                    color = modelFg,
                                                     modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                                                 )
                                             }
@@ -2531,7 +2823,7 @@ fun SearchChatsDialog(
                                             Text(
                                                 text = "${conv.stepCount} turns",
                                                 fontSize = 10.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                                color = cardMuted
                                             )
                                         }
                                     }
@@ -2566,26 +2858,32 @@ private fun JarvisNewChatRow(
     onNew: (ai.antigem.domain.model.AgentKind?) -> Unit
 ) {
     val accent = ai.antigem.ui.jarvis.Cyan
+    val rowBg = accent.copy(alpha = 0.09f)
+    val drawerBg = MaterialTheme.colorScheme.surface
+    val accessibleAccent = ensureAccessibleContrast(accent, rowBg, 3.0f, drawerBg)
+    val subtitleColor = accessibleMutedColor(alpha = 0.72f, background = rowBg, surfaceFallback = drawerBg)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
+            .minTouchTarget(48.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(accent.copy(alpha = 0.09f))
+            .background(rowBg)
             .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
-            .clickable { onNew(null) }
+            .clickable(role = Role.Button) { onNew(null) }
+            .semantics(mergeDescendants = true) {}
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ai.antigem.ui.jarvis.JarvisBotIcon(26.dp, accent, animated = true)
+        ai.antigem.ui.jarvis.JarvisBotIcon(26.dp, accessibleAccent, animated = true)
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(L.drawer.chatHistoryDrawer.newJarvisChat, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
             Text(
                 L.drawer.chatHistoryDrawer.anyAgentAndModelGiveIt,
-                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), maxLines = 2
+                fontSize = 11.sp, color = subtitleColor, maxLines = 2
             )
         }
-        Icon(Icons.Filled.Add, contentDescription = L.drawer.chatHistoryDrawer.newJarvisChat, tint = accent)
+        Icon(Icons.Filled.Add, contentDescription = null, tint = accessibleAccent)
     }
 }

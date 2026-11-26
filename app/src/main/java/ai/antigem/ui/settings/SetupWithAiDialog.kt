@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -42,12 +43,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.components.AgyAccent
 import ai.antigem.ui.components.ClaudeAccent
@@ -173,34 +181,55 @@ fun SetupWithAiDialog(source: String, agent: AgentKind, reason: String?, onDismi
             shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth(0.94f).fillMaxHeight(0.9f)
         ) {
+            val surface = MaterialTheme.colorScheme.surface
+            val accentOnSurface = ensureAccessibleContrast(accent, surface, minRatio = 4.5f)
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.AutoAwesome, null, tint = accent, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Outlined.AutoAwesome, null, tint = accentOnSurface, modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(L.settings.setupWithAi.setUpWithAi, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(L.settings.setupWithAi.setUpWithAi, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.semantics { heading() })
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
                     L.settings.setupWithAi.antigemCouldntAddSourceByItself(source.trim(), (reason?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ".")),
-                    fontSize = 12.5.sp, lineHeight = 17.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                    fontSize = 12.5.sp, lineHeight = 17.sp, color = accessibleMutedColor(alpha = 0.78f)
                 )
 
                 Spacer(Modifier.height(12.dp))
                 Text(L.settings.setupWithAi.installItFor, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     AgentKind.entries.forEach { a ->
+                        val chipColor = ensureAccessibleContrast(agentAccent(a), surface, minRatio = 4.5f)
                         FilterChip(
-                            selected = target == a, onClick = { target = a }, label = { Text(agentName(a), fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = agentAccent(a).copy(alpha = 0.18f), selectedLabelColor = agentAccent(a))
+                            selected = target == a,
+                            onClick = { target = a },
+                            label = { Text(agentName(a), fontSize = 12.sp) },
+                            modifier = Modifier.minTouchTarget(48.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = agentAccent(a).copy(alpha = 0.18f),
+                                selectedLabelColor = chipColor
+                            )
                         )
                     }
                 }
                 Text(L.settings.setupWithAi.whatToInstall, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
-                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     RepoSetupKind.entries.forEach { k ->
                         FilterChip(
-                            selected = kind == k, onClick = { kind = k }, label = { Text(k.label, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accent.copy(alpha = 0.18f), selectedLabelColor = accent)
+                            selected = kind == k,
+                            onClick = { kind = k },
+                            label = { Text(k.label, fontSize = 12.sp) },
+                            modifier = Modifier.minTouchTarget(48.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = accent.copy(alpha = 0.18f),
+                                selectedLabelColor = accentOnSurface
+                            )
                         )
                     }
                 }
@@ -208,7 +237,7 @@ fun SetupWithAiDialog(source: String, agent: AgentKind, reason: String?, onDismi
                 Spacer(Modifier.height(10.dp))
                 Text(
                     L.settings.setupWithAi.copyThisAndPasteItInto(agentName(target)),
-                    fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    fontSize = 12.sp, lineHeight = 16.sp, color = accessibleMutedColor(alpha = 0.75f)
                 )
                 Spacer(Modifier.height(6.dp))
                 Surface(
@@ -219,7 +248,7 @@ fun SetupWithAiDialog(source: String, agent: AgentKind, reason: String?, onDismi
                         SelectionContainer {
                             Text(
                                 prompt, fontSize = 11.5.sp, lineHeight = 16.sp, fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                                color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 12.dp, top = 12.dp, bottom = 12.dp, end = 44.dp)
                             )
                         }
@@ -230,24 +259,29 @@ fun SetupWithAiDialog(source: String, agent: AgentKind, reason: String?, onDismi
                             androidx.compose.material3.IconButton(onClick = {
                                 copyText(context, prompt)
                                 copied = true
-                            }, modifier = Modifier.size(36.dp)) {
-                                Icon(if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy, L.common.copy, tint = accent, modifier = Modifier.size(18.dp))
+                            }, modifier = Modifier.minTouchTarget(48.dp)) {
+                                Icon(if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy, L.common.copy, tint = accentOnSurface, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
                 }
 
                 Spacer(Modifier.height(10.dp))
+                val btnFg = ensureAccessibleContrast(Color.White, accent, minRatio = 4.5f, surfaceFallback = accent)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onDismiss) { Text(L.common.close) }
+                    TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) }
                     Spacer(Modifier.weight(1f))
                     Button(
                         onClick = { copyText(context, prompt); copied = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = accent)
+                        modifier = Modifier.minTouchTarget(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = btnFg)
                     ) {
-                        Icon(if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy, null, Modifier.size(16.dp), tint = Color.White)
+                        Icon(if (copied) Icons.Outlined.Check else Icons.Outlined.ContentCopy, null, Modifier.size(16.dp), tint = btnFg)
                         Spacer(Modifier.width(6.dp))
-                        Text(if (copied) L.common.copied else L.settings.setupWithAi.copyPrompt)
+                        Text(
+                            if (copied) L.common.copied else L.settings.setupWithAi.copyPrompt,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                        )
                     }
                 }
             }
@@ -263,9 +297,14 @@ private fun copyText(context: Context, text: String) {
 /** A small "Set up with AI" link under an error, to open [SetupWithAiDialog] again. */
 @Composable
 fun SetupWithAiLink(accent: Color, onClick: () -> Unit) {
-    TextButton(onClick = onClick, contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp)) {
-        Icon(Icons.Outlined.AutoAwesome, null, tint = accent, modifier = Modifier.size(16.dp))
+    val safeAccent = ensureAccessibleContrast(accent, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier.minTouchTarget(48.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Icon(Icons.Outlined.AutoAwesome, null, tint = safeAccent, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
-        Text(L.settings.setupWithAi.setUpWithAi, fontSize = 12.5.sp, color = accent)
+        Text(L.settings.setupWithAi.setUpWithAi, fontSize = 12.5.sp, color = safeAccent)
     }
 }

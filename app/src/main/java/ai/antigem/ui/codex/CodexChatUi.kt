@@ -54,6 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -72,6 +77,9 @@ import ai.antigem.ui.agents.ApprovalChoice
 import ai.antigem.ui.agents.ApprovalItem
 import ai.antigem.ui.claude.ControlChip
 import ai.antigem.ui.components.CodexAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -217,10 +225,13 @@ fun CodexControlsStrip(backend: CodexChatBackend) {
     var modeSheet by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 2.dp)) {
         notice?.let {
-            Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 4.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 CircularProgressIndicator(Modifier.size(11.dp), strokeWidth = 1.5.dp, color = CodexAccent)
                 Spacer(Modifier.width(6.dp))
-                Text(it, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(it, fontSize = 11.sp, color = accessibleMutedColor(alpha = 0.72f), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -249,7 +260,7 @@ fun CodexControlsStrip(backend: CodexChatBackend) {
                 text = codexModeLabel(mode),
                 icon = codexModeIcon(mode),
                 highlighted = mode == CodexPreferences.MODE_FULL,
-                color = if (mode == CodexPreferences.MODE_FULL) codexModeColor(mode) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                color = if (mode == CodexPreferences.MODE_FULL) codexModeColor(mode) else MaterialTheme.colorScheme.onSurface,
                 onClick = { modeSheet = true }
             )
         }
@@ -293,10 +304,11 @@ fun CodexControlsStrip(backend: CodexChatBackend) {
 
 @Composable
 private fun SheetNote(text: String) {
+    val muted = accessibleMutedColor(alpha = 0.72f)
     Row(Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp), verticalAlignment = Alignment.Top) {
-        Icon(Icons.Outlined.Info, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), modifier = Modifier.size(15.dp))
+        Icon(Icons.Outlined.Info, null, tint = muted, modifier = Modifier.size(15.dp))
         Spacer(Modifier.width(6.dp))
-        Text(text, fontSize = 11.5.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+        Text(text, fontSize = 11.5.sp, lineHeight = 15.sp, color = muted)
     }
 }
 
@@ -363,29 +375,39 @@ fun CodexModelSheet(backend: CodexChatBackend, onOpenSettings: () -> Unit, onDis
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
                 items(models, key = { it.id }) { m ->
                     val isOn = m.id == selected
+                    val accentOnCard = ensureAccessibleContrast(CodexAccent, MaterialTheme.colorScheme.surface, minRatio = 4.5f)
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = if (isOn) CodexAccent.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface,
                         border = BorderStroke(1.dp, if (isOn) CodexAccent.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(14.dp)).clickable {
-                            backend.selectModel(m.id)
-                            onDismiss()
-                        }
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minTouchTarget(48.dp)
+                            .padding(vertical = 3.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable(role = Role.RadioButton) {
+                                backend.selectModel(m.id)
+                                onDismiss()
+                            }
+                            .semantics { this.selected = isOn }
                     ) {
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(m.displayName + if (m.isDefault) " · default" else "", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 if (m.description.isNotBlank()) Text(
-                                    m.description, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f), maxLines = 2, overflow = TextOverflow.Ellipsis
+                                    m.description, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f), maxLines = 2, overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            if (isOn) Icon(Icons.Outlined.Check, null, tint = CodexAccent, modifier = Modifier.size(20.dp))
+                            if (isOn) Icon(Icons.Outlined.Check, null, tint = accentOnCard, modifier = Modifier.size(20.dp))
                         }
                     }
                 }
             }
             Spacer(Modifier.height(6.dp))
-            TextButton(onClick = { onDismiss(); onOpenSettings() }) {
+            TextButton(
+                onClick = { onDismiss(); onOpenSettings() },
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.Outlined.Settings, null, Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(L.codex.chatUi.codexAccountAndSettings)

@@ -2,6 +2,7 @@ package ai.antigem.ui.settings
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -18,6 +19,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -28,7 +37,11 @@ import ai.antigem.data.androiddev.AndroidDevManager
 import ai.antigem.data.androiddev.AndroidDevManager.Component
 import ai.antigem.data.androiddev.AndroidDevManager.Framework
 import ai.antigem.theme.QuotaGreen
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.delay
 import ai.antigem.i18n.L
 
@@ -79,10 +92,18 @@ fun AndroidDevScreen(
         IntroCard(state, cardBg, cardBorder)
 
         state.message?.let { msg ->
-            Surface(shape = RoundedCornerShape(12.dp), color = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)) {
+            val msgBg = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)
+            val msgFg = ensureAccessibleContrast(if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, msgBg, 4.5f, MaterialTheme.colorScheme.surface)
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = msgBg,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            ) {
                 Row(Modifier.fillMaxWidth().padding(start = 14.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(msg, fontSize = 12.5.sp, color = if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, modifier = Modifier.weight(1f))
-                    IconButton(onClick = AndroidDevManager::clearMessage) { Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp)) }
+                    Text(msg, fontSize = 12.5.sp, color = msgFg, modifier = Modifier.weight(1f))
+                    IconButton(onClick = AndroidDevManager::clearMessage, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp))
+                    }
                 }
             }
         }
@@ -111,18 +132,25 @@ fun AndroidDevScreen(
         ) {
             Hint(L.settings.androidDev.theSetupScriptAndroidSetupSh)
             DevSourceRow(state.source, enabled = !busy)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 when {
-                    state.filesVersion == null -> Button(enabled = !busy, onClick = AndroidDevManager::downloadSetupFiles) {
+                    state.filesVersion == null -> Button(enabled = !busy, onClick = AndroidDevManager::downloadSetupFiles, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.androidDev.getSetupFiles)
                     }
-                    state.filesUpdate != null -> Button(enabled = !busy, onClick = AndroidDevManager::downloadSetupFiles) {
+                    state.filesUpdate != null -> Button(enabled = !busy, onClick = AndroidDevManager::downloadSetupFiles, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.androidDev.updateToVFilesupdate(state.filesUpdate))
                     }
-                    else -> OutlinedButton(enabled = !busy, onClick = AndroidDevManager::downloadSetupFiles) { Text(L.settings.androidDev.downloadAgain) }
+                    else -> OutlinedButton(enabled = !busy, onClick = AndroidDevManager::downloadSetupFiles, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Text(L.settings.androidDev.downloadAgain)
+                    }
                 }
                 if (state.filesVersion != null && state.filesUpdate == null) {
-                    TextButton(enabled = !busy, onClick = AndroidDevManager::checkForUpdate) { Text(L.common.checkForUpdate) }
+                    TextButton(enabled = !busy, onClick = AndroidDevManager::checkForUpdate, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Text(L.common.checkForUpdate)
+                    }
                 }
             }
             TaskOutput(state, "files")
@@ -150,13 +178,18 @@ fun AndroidDevScreen(
         DevInfoCard(L.settings.androidDev.installOnThisPhone, cardBg, cardBorder, pill = if (adb.connectedDevice != null) "adb connected" to QuotaGreen else L.common.optional to MaterialTheme.colorScheme.primary) {
             Hint(L.settings.androidDev.theInstallButtonsAboveOpenAndroids)
             val device = adb.connectedDevice
-            if (device != null) Mono("adb connected: ${device.serial}") else OutlinedButton(onClick = onOpenAdbConnect) { Text(L.common.setUpAdbConnect) }
+            if (device != null) Mono("adb connected: ${device.serial}")
+            else OutlinedButton(onClick = onOpenAdbConnect, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.setUpAdbConnect) }
         }
 
         // Check
         DevInfoCard(L.settings.androidDev.checkTheTools, cardBg, cardBorder) {
             Hint(L.settings.androidDev.printsTheVersionOfEveryTool)
-            OutlinedButton(enabled = !busy && Component.CONTAINER in state.installed && state.filesReady, onClick = AndroidDevManager::runDoctor) {
+            OutlinedButton(
+                enabled = !busy && Component.CONTAINER in state.installed && state.filesReady,
+                onClick = AndroidDevManager::runDoctor,
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.Outlined.HealthAndSafety, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.common.check)
             }
             TaskOutput(state, "doctor")
@@ -183,9 +216,11 @@ fun AndroidDevScreen(
             title = { Text(title) },
             text = { Text(text) },
             confirmButton = {
-                TextButton(onClick = { action(); confirm = null }) { Text(L.common.delete, color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { action(); confirm = null }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(L.common.delete, color = MaterialTheme.colorScheme.error)
+                }
             },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { confirm = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -197,7 +232,11 @@ private fun IntroCard(state: AndroidDevManager.State, cardBg: Color, cardBorder:
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Android, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(L.settings.androidDev.buildAndroidAppsOnThisPhone, fontSize = 15.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(
+                    L.settings.androidDev.buildAndroidAppsOnThisPhone,
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).semantics { heading() }
+                )
                 when {
                     state.anyReady -> Pill(L.common.ready, QuotaGreen)
                     state.installed.isNotEmpty() -> Pill(L.common.partlySetUp, Amber)
@@ -217,8 +256,8 @@ private fun DevSourceRow(source: String, enabled: Boolean) {
     var error by remember { mutableStateOf<String?>(null) }
     if (!editing) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(L.settings.androidDev.fromSource(source), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.weight(1f))
-            TextButton(enabled = enabled, onClick = { editing = true }) { Text(L.common.change, fontSize = 12.sp) }
+            Text(L.settings.androidDev.fromSource(source), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = accessibleMutedColor(alpha = 0.72f), modifier = Modifier.weight(1f))
+            TextButton(enabled = enabled, onClick = { editing = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.change, fontSize = 12.sp) }
         }
         return
     }
@@ -228,14 +267,20 @@ private fun DevSourceRow(source: String, enabled: Boolean) {
         supportingText = { Text(error ?: L.settings.androidDev.aForkOfTheAntigemPlugins) },
         modifier = Modifier.fillMaxWidth()
     )
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = {
-            runCatching { AndroidDevManager.setSource(text) }
-                .onSuccess { editing = false; AndroidDevManager.checkForUpdate() }
-                .onFailure { error = it.message }
-        }) { Text(L.common.save) }
-        TextButton(onClick = { text = AndroidDevManager.DEFAULT_SOURCE }) { Text(L.common.default) }
-        TextButton(onClick = { editing = false; text = source }) { Text(L.common.cancel) }
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Button(
+            onClick = {
+                runCatching { AndroidDevManager.setSource(text) }
+                    .onSuccess { editing = false; AndroidDevManager.checkForUpdate() }
+                    .onFailure { error = it.message }
+            },
+            modifier = Modifier.minTouchTarget(48.dp)
+        ) { Text(L.common.save) }
+        TextButton(onClick = { text = AndroidDevManager.DEFAULT_SOURCE }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.default) }
+        TextButton(onClick = { editing = false; text = source }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
     }
 }
 
@@ -265,13 +310,13 @@ private fun InstallStep(state: AndroidDevManager.State, cardBg: Color, cardBorde
         )
         if (facts.isNotEmpty()) Mono(facts.joinToString("\n"))
 
-        Text(L.settings.androidDev.whatWillYouBuild, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(L.settings.androidDev.whatWillYouBuild, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
         Framework.entries.forEach { f ->
             FrameworkRow(f, state, f in frameworks, busy) { on ->
                 if (on) frameworks.add(f) else frameworks.remove(f)
             }
         }
-        Text(L.settings.androidDev.extras, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Text(L.settings.androidDev.extras, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp).semantics { heading() })
         listOf(Component.ADB, Component.NDK).forEach { c ->
             PartRow(c, state, checked = c in extras, busy = busy) { on -> if (on) extras.add(c) else extras.remove(c) }
         }
@@ -280,7 +325,7 @@ private fun InstallStep(state: AndroidDevManager.State, cardBg: Color, cardBorde
         if (!busy) {
             if (plan.isNotEmpty()) Hint(L.settings.androidDev.installsPlancountPartValueValue2(plan.size, if (plan.size == 1) "" else "s", plan.joinToString(", ") { it.label }))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Button(enabled = plan.isNotEmpty(), onClick = { AndroidDevManager.installAll(plan) }) {
+                Button(enabled = plan.isNotEmpty(), onClick = { AndroidDevManager.installAll(plan) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                     Text(if (plan.isEmpty()) L.settings.androidDev.nothingToInstall else "Install selected (${plan.size})")
                 }
@@ -288,13 +333,17 @@ private fun InstallStep(state: AndroidDevManager.State, cardBg: Color, cardBorde
             if (!state.filesReady) Hint(L.settings.androidDev.theSetupFilesAreDownloadedFirst)
         } else if (isInstallTask(state.task)) {
             Hint(L.settings.androidDev.keepAntigemOpenTheScreenStays)
-            OutlinedButton(onClick = AndroidDevManager::stop, colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+            OutlinedButton(
+                onClick = AndroidDevManager::stop,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.Outlined.StopCircle, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.common.stop)
             }
         }
 
         var showParts by remember { mutableStateOf(false) }
-        TextButton(onClick = { showParts = !showParts }, contentPadding = PaddingValues(0.dp)) {
+        TextButton(onClick = { showParts = !showParts }, contentPadding = PaddingValues(0.dp), modifier = Modifier.minTouchTarget(48.dp)) {
             Text(if (showParts) L.settings.androidDev.hideTheParts else L.settings.androidDev.allPartsInstallRepairOrUpdate, fontSize = 12.5.sp)
         }
         if (showParts) {
@@ -307,17 +356,29 @@ private fun InstallStep(state: AndroidDevManager.State, cardBg: Color, cardBorde
 private fun FrameworkRow(f: Framework, state: AndroidDevManager.State, checked: Boolean, busy: Boolean, onCheck: (Boolean) -> Unit) {
     val ready = state.ready(f)
     val missing = AndroidDevManager.componentsFor(f).filter { it !in state.installed }
-    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)) {
-        Row(Modifier.fillMaxWidth().clickable(enabled = !busy && !ready) { onCheck(!checked) }.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
-            if (ready) Icon(Icons.Outlined.CheckCircle, L.common.ready, tint = QuotaGreen, modifier = Modifier.padding(12.dp).size(22.dp))
-            else Checkbox(checked = checked, enabled = !busy, onCheckedChange = onCheck)
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val rowBg = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = rowBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, rowBg, 4.5f, surfaceBg)
+    Surface(shape = RoundedCornerShape(10.dp), color = rowBg) {
+        val rowModifier = when {
+            ready -> Modifier.fillMaxWidth().minTouchTarget(48.dp).semantics(mergeDescendants = true) {}
+            !busy -> Modifier.fillMaxWidth().accessibleToggleRow(checked = checked, role = Role.Checkbox) { onCheck(!checked) }
+            else -> Modifier.fillMaxWidth().minTouchTarget(48.dp).semantics(mergeDescendants = true) {
+                toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                disabled()
+            }
+        }
+        Row(rowModifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.Top) {
+            if (ready) Icon(Icons.Outlined.CheckCircle, L.common.ready, tint = accessibleGreen, modifier = Modifier.padding(12.dp).size(22.dp))
+            else Checkbox(checked = checked, enabled = !busy, onCheckedChange = null)
             Column(Modifier.weight(1f).padding(top = 10.dp, end = 8.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(f.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
                 Text(
                     if (ready) L.common.ready else "${f.size} · needs ${missing.joinToString(", ") { it.label }}",
-                    fontSize = 11.5.sp, color = if (ready) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    fontSize = 11.5.sp, color = if (ready) accessibleGreen else muted
                 )
-                Text(f.description, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                Text(f.description, fontSize = 11.5.sp, color = muted)
             }
         }
     }
@@ -329,40 +390,59 @@ private fun PartRow(c: Component, state: AndroidDevManager.State, checked: Boole
     val installed = c in state.installed
     val running = state.installing == c
     var expanded by remember { mutableStateOf(false) }
-    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (running) 0.08f else 0.03f)) {
-        Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 6.dp, vertical = 4.dp)) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val rowBg = MaterialTheme.colorScheme.onSurface.copy(alpha = if (running) 0.08f else 0.03f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = rowBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, rowBg, 4.5f, surfaceBg)
+    val accessibleAmber = ensureAccessibleContrast(Amber, rowBg, 4.5f, surfaceBg)
+    Surface(shape = RoundedCornerShape(10.dp), color = rowBg) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                when {
-                    installed -> Icon(Icons.Outlined.CheckCircle, L.common.installed, tint = QuotaGreen, modifier = Modifier.padding(12.dp).size(22.dp))
-                    onCheck != null -> Checkbox(checked = checked, enabled = !busy, onCheckedChange = onCheck)
-                    else -> Icon(Icons.Outlined.RadioButtonUnchecked, L.common.notInstalled, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.padding(12.dp).size(22.dp))
+                val mainModifier = if (!installed && onCheck != null) {
+                    if (!busy) {
+                        Modifier.weight(1f).accessibleToggleRow(checked = checked, role = Role.Checkbox) { onCheck(!checked) }
+                    } else {
+                        Modifier.weight(1f).minTouchTarget(48.dp).semantics(mergeDescendants = true) {
+                            toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                            disabled()
+                        }
+                    }
+                } else {
+                    Modifier.weight(1f).minTouchTarget(48.dp).clickable(role = Role.Button) { expanded = !expanded }
                 }
-                Column(Modifier.weight(1f)) {
-                    Text(c.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
-                    Text(
-                        if (state.chroot && c == Component.CONTAINER) L.settings.androidDev.thisPhonesRuntime else c.size + when {
-                            running -> " · installing…"
-                            installed -> " · installed"
-                            else -> ""
-                        },
-                        fontSize = 11.5.sp,
-                        color = if (running) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                    )
+                Row(modifier = mainModifier, verticalAlignment = Alignment.CenterVertically) {
+                    when {
+                        installed -> Icon(Icons.Outlined.CheckCircle, L.common.installed, tint = accessibleGreen, modifier = Modifier.padding(12.dp).size(22.dp))
+                        onCheck != null -> Checkbox(checked = checked, enabled = !busy, onCheckedChange = null)
+                        else -> Icon(Icons.Outlined.RadioButtonUnchecked, L.common.notInstalled, tint = muted, modifier = Modifier.padding(12.dp).size(22.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(c.label, fontSize = 13.5.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (state.chroot && c == Component.CONTAINER) L.settings.androidDev.thisPhonesRuntime else c.size + when {
+                                running -> " · installing…"
+                                installed -> " · installed"
+                                else -> ""
+                            },
+                            fontSize = 11.5.sp,
+                            color = if (running) MaterialTheme.colorScheme.primary else muted
+                        )
+                    }
                 }
                 if (running) {
                     CircularProgressIndicator(Modifier.padding(end = 12.dp).size(18.dp), strokeWidth = 2.dp)
                 } else if (!(state.chroot && c == Component.CONTAINER)) {
                     // the Ubuntu chroot is the phone's runtime: nothing to install or reinstall here
-                    TextButton(enabled = !busy, onClick = { AndroidDevManager.install(c) }) {
+                    TextButton(enabled = !busy, onClick = { AndroidDevManager.install(c) }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Text(if (installed) (if (c == Component.FLUTTER) L.common.update else L.common.reinstall) else L.common.install, fontSize = 12.5.sp)
                     }
                 }
             }
             if (expanded || running) {
-                Text(c.description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f), modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
+                Text(c.description, fontSize = 12.sp, color = muted, modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp))
                 val missing = c.needs.filter { it !in state.installed }
                 if (missing.isNotEmpty() && !installed) {
-                    Text(L.settings.androidDev.alsoInstallsValue(missing.joinToString(", ") { it.label }), fontSize = 11.5.sp, color = Amber, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+                    Text(L.settings.androidDev.alsoInstallsValue(missing.joinToString(", ") { it.label }), fontSize = 11.5.sp, color = accessibleAmber, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
                 }
             }
         }
@@ -374,7 +454,11 @@ private fun TestBuildRow(f: Framework, state: AndroidDevManager.State, busy: Boo
     val running = state.task == "test-${f.key}"
     val apk = state.testApks[f.key]
     val ready = state.ready(f)
-    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (running) 0.08f else 0.03f)) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val rowBg = MaterialTheme.colorScheme.onSurface.copy(alpha = if (running) 0.08f else 0.03f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = rowBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, rowBg, 4.5f, surfaceBg)
+    Surface(shape = RoundedCornerShape(10.dp), color = rowBg) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(f.label, fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -385,14 +469,18 @@ private fun TestBuildRow(f: Framework, state: AndroidDevManager.State, busy: Boo
                         !ready -> L.settings.androidDev.installItFirst
                         else -> "~/${AndroidDevManager.PROJECTS_DIR}/hello-${f.key}"
                     },
-                    fontSize = 11.5.sp, color = if (apk != null && !running) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    fontSize = 11.5.sp, color = if (apk != null && !running) accessibleGreen else muted
                 )
             }
             if (running) {
                 CircularProgressIndicator(Modifier.padding(end = 12.dp).size(18.dp), strokeWidth = 2.dp)
             } else {
-                if (apk != null) TextButton(onClick = { AndroidDevManager.installApk(apk) }) { Text(L.common.install, fontSize = 12.5.sp) }
-                TextButton(enabled = !busy && ready, onClick = { AndroidDevManager.testBuild(f) }) { Text(if (apk != null) L.settings.androidDev.rebuild else L.settings.androidDev.build, fontSize = 12.5.sp) }
+                if (apk != null) TextButton(onClick = { AndroidDevManager.installApk(apk) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(L.common.install, fontSize = 12.5.sp)
+                }
+                TextButton(enabled = !busy && ready, onClick = { AndroidDevManager.testBuild(f) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(if (apk != null) L.settings.androidDev.rebuild else L.settings.androidDev.build, fontSize = 12.5.sp)
+                }
             }
         }
     }
@@ -411,7 +499,12 @@ private fun BatchProgress(state: AndroidDevManager.State) {
             )
         }
         LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
-        Hint(state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting)
+        Text(
+            state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting,
+            fontSize = 12.sp,
+            color = accessibleMutedColor(alpha = 0.72f),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
     }
     if (isInstallTask(state.logTask) && state.log.isNotEmpty()) LogBox(state.log)
 }
@@ -421,8 +514,13 @@ private fun BatchProgress(state: AndroidDevManager.State) {
 private fun TaskOutput(state: AndroidDevManager.State, task: String) {
     if (state.task == task) {
         LinearProgressIndicator(Modifier.fillMaxWidth().clip(CircleShape))
-        Hint(state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting)
-        OutlinedButton(onClick = AndroidDevManager::stop) { Text(L.common.stop) }
+        Text(
+            state.progress ?: state.log.lastOrNull { !it.startsWith("$") } ?: L.common.starting,
+            fontSize = 12.sp,
+            color = accessibleMutedColor(alpha = 0.72f),
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        OutlinedButton(onClick = AndroidDevManager::stop, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.stop) }
     }
     if (state.logTask == task && state.log.isNotEmpty()) LogBox(state.log)
 }
@@ -435,7 +533,7 @@ private fun UseGuide(state: AndroidDevManager.State) {
     DevCopyLine(L.settings.androidDev.adevNewComposeProjectsDirMy(AndroidDevManager.PROJECTS_DIR), mono = true)
     DevCopyLine("cd ~/${AndroidDevManager.PROJECTS_DIR}/my-app && adev ./gradlew assembleDebug", mono = true)
     Hint(L.settings.androidDev.adevRunsACommandWithJava)
-    Text(L.settings.androidDev.tryInChat, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    Text(L.settings.androidDev.tryInChat, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
     listOf(
         L.settings.androidDev.createAJetpackComposeAppCalled,
         L.settings.androidDev.makeAFlutterCounterAppIn,
@@ -450,12 +548,15 @@ private fun SkillCard(state: AndroidDevManager.State, busy: Boolean, cardBg: Col
         pill = if (state.pluginInstalled) "v${state.pluginVersion ?: "?"}" to QuotaGreen else L.common.recommended to MaterialTheme.colorScheme.primary
     ) {
         Hint(L.settings.androidDev.aSkillsOnlyPluginFromThe)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = !busy, onClick = AndroidDevManager::installSkillPlugin) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(enabled = !busy, onClick = AndroidDevManager::installSkillPlugin, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Extension, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp))
                 Text(if (state.pluginInstalled) L.settings.androidDev.updateSkill else L.settings.androidDev.installSkill)
             }
-            TextButton(onClick = onOpenPlugins) { Text(L.common.plugins) }
+            TextButton(onClick = onOpenPlugins, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.plugins) }
         }
         TaskOutput(state, "plugin")
         if (state.pluginInstalled) {
@@ -488,8 +589,14 @@ private fun TerminalCard(state: AndroidDevManager.State, cardBg: Color, cardBord
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.settings.androidDev.setUpInTheTerminal, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { open = !open }) { Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp) }
+                Text(
+                    L.settings.androidDev.setUpInTheTerminal,
+                    fontSize = 14.5.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).semantics { heading() }
+                )
+                TextButton(onClick = { open = !open }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp)
+                }
             }
             if (!open) {
                 Hint(L.settings.androidDev.preferTheTerminalTheseAreThe)
@@ -512,19 +619,30 @@ private fun RemoveCard(state: AndroidDevManager.State, busy: Boolean, cardBg: Co
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.settings.androidDev.freeSpaceRemove, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                TextButton(onClick = { open = !open }) { Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp) }
+                Text(
+                    L.settings.androidDev.freeSpaceRemove,
+                    fontSize = 14.5.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).semantics { heading() }
+                )
+                TextButton(onClick = { open = !open }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(if (open) L.common.hide else L.common.show, fontSize = 12.5.sp)
+                }
             }
             if (!open) return@Column
             Hint(if (state.chroot) L.settings.androidDev.yourProjectsAreNeverDeletedThe
                 else L.settings.androidDev.yourProjectsAreNeverDeletedThe2)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                OutlinedButton(enabled = !busy && state.filesReady, onClick = { onConfirm("clean-cache") }) { Text(L.settings.androidDev.cleanGradleCache) }
-                if (Component.FLUTTER in state.installed) OutlinedButton(enabled = !busy && state.filesReady, onClick = { onConfirm("uninstall-flutter") }) { Text(L.settings.androidDev.removeFlutter2) }
+                OutlinedButton(enabled = !busy && state.filesReady, onClick = { onConfirm("clean-cache") }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(L.settings.androidDev.cleanGradleCache)
+                }
+                if (Component.FLUTTER in state.installed) OutlinedButton(enabled = !busy && state.filesReady, onClick = { onConfirm("uninstall-flutter") }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Text(L.settings.androidDev.removeFlutter2)
+                }
                 OutlinedButton(
                     enabled = !busy && state.filesReady,
                     onClick = { onConfirm("uninstall") },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.settings.androidDev.removeAll) }
             }
             TaskOutput(state, "clean-cache")
@@ -545,7 +663,7 @@ private fun DevInfoCard(
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                 pill?.let { Pill(it.first, it.second) }
             }
             content()
@@ -560,6 +678,8 @@ private fun DevCopyLine(text: String, mono: Boolean = false) {
         Box(Modifier.weight(1f)) {
             if (mono) Mono(text) else Text(text, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
         }
-        IconButton(onClick = { clipboard.setText(AnnotatedString(text)) }) { Icon(Icons.Outlined.ContentCopy, L.common.copy, Modifier.size(18.dp)) }
+        IconButton(onClick = { clipboard.setText(AnnotatedString(text)) }, modifier = Modifier.minTouchTarget(48.dp)) {
+            Icon(Icons.Outlined.ContentCopy, L.common.copy, Modifier.size(18.dp))
+        }
     }
 }

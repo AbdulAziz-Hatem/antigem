@@ -1,13 +1,19 @@
 package ai.antigem.ui.settings
 
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,6 +30,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,13 +78,14 @@ private fun ModePicker(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: Borde
     val su = if (AdbConnectManager.inChroot) "android-su -c" else "su -c"
     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(L.settings.adbConnect.howAntigemReachesThisPhone, fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            Text(L.settings.adbConnect.howAntigemReachesThisPhone, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().selectableGroup()) {
                 modes.forEachIndexed { i, m ->
                     SegmentedButton(
                         selected = m == mode,
                         onClick = { DeviceAccess.setMode(m) },
-                        shape = SegmentedButtonDefaults.itemShape(i, modes.size)
+                        shape = SegmentedButtonDefaults.itemShape(i, modes.size),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) { Text(m.label) }
                 }
             }
@@ -115,18 +127,27 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
 
     val installed = state.adbInstalled == true
     val connected = state.connectedDevice
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, surfaceBg)
+    val accessibleAmber = ensureAccessibleContrast(Amber, cardBg, 4.5f, surfaceBg)
 
     run {
         StatusCard(state, cardBg, cardBorder)
 
         state.message?.let { msg ->
+            val msgBg = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)
+            val msgFg = ensureAccessibleContrast(if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, msgBg, 4.5f, surfaceBg)
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = (if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen).copy(alpha = 0.1f)
+                color = msgBg,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             ) {
                 Row(Modifier.fillMaxWidth().padding(start = 14.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(msg, fontSize = 12.5.sp, color = if (state.isError) MaterialTheme.colorScheme.error else QuotaGreen, modifier = Modifier.weight(1f))
-                    IconButton(onClick = AdbConnectManager::clearMessage) { Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp)) }
+                    Text(msg, fontSize = 12.5.sp, color = msgFg, modifier = Modifier.weight(1f))
+                    IconButton(onClick = AdbConnectManager::clearMessage, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Default.Close, L.common.dismiss, Modifier.size(18.dp))
+                    }
                 }
             }
         }
@@ -141,20 +162,20 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
                     Text("adb is installed but can't start:", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
                     Mono(state.adbBroken!!)
                     Hint(L.settings.adbConnect.usuallyALibraryItNeedsSuch)
-                    Button(onClick = AdbConnectManager::installAdb) {
+                    Button(onClick = AdbConnectManager::installAdb, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Build, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.adbConnect.repairAdb)
                     }
                 }
                 !state.installing && AdbConnectManager.inChroot -> {
                     // the Ubuntu chroot is the phone's runtime: its agents use Ubuntu's adb
                     Hint("adb isn't installed in the Ubuntu chroot yet. This installs Ubuntu's adb and fastboot packages: they run as your user, no sudo needed (also for USB / OTG devices).")
-                    Button(onClick = AdbConnectManager::installAdb) {
+                    Button(onClick = AdbConnectManager::installAdb, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.adbConnect.installAdbAndFastboot)
                     }
                 }
                 !state.installing -> {
                     Hint("adb isn't installed in the terminal yet. This installs the android-tools package (adb, fastboot).")
-                    Button(onClick = AdbConnectManager::installAdb) {
+                    Button(onClick = AdbConnectManager::installAdb, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.adbConnect.installAndroidTools)
                     }
                 }
@@ -164,7 +185,9 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
                 Hint(state.installLog.lastOrNull { !it.startsWith("$") } ?: L.common.starting)
             }
             if (state.installLog.isNotEmpty()) LogBox(state.installLog)
-            state.installError?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error) }
+            state.installError?.let {
+                Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            }
         }
 
         // Step 2: Wireless debugging
@@ -183,7 +206,7 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
                     else -> L.settings.adbConnect.readyWirelessDebuggingUsesANew
                 }
             )
-            if (!wirelessReady) OutlinedButton(onClick = { AdbConnectManager.openWirelessDebuggingSettings(context) }) {
+            if (!wirelessReady) OutlinedButton(onClick = { AdbConnectManager.openWirelessDebuggingSettings(context) }, modifier = Modifier.minTouchTarget(48.dp)) {
                 Text(if (devOptionsOn) L.settings.adbConnect.openWirelessDebugging else L.settings.adbConnect.openAboutPhone)
             }
         }
@@ -195,28 +218,36 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
                 Surface(shape = RoundedCornerShape(10.dp), color = Amber.copy(alpha = 0.12f)) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(L.settings.adbConnect.notificationsAreOffForAntigemThe, fontSize = 12.sp)
-                        TextButton(onClick = {
-                            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                            else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null))
-                            runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                        }, contentPadding = PaddingValues(0.dp)) { Text(L.settings.adbConnect.allowNotifications) }
+                        TextButton(
+                            onClick = {
+                                val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.fromParts("package", context.packageName, null))
+                                runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            },
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.minTouchTarget(48.dp)
+                        ) { Text(L.settings.adbConnect.allowNotifications) }
                     }
                 }
             }
             PairingStatus(state.pairing, state.host)
             val pairingActive = state.pairing !is Pairing.Idle && state.pairing !is Pairing.Paired
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 if (pairingActive) {
-                    OutlinedButton(onClick = { AdbConnectManager.stopPairing(context) }) { Text(L.common.stop) }
-                    Button(onClick = { AdbConnectManager.openWirelessDebuggingSettings(context) }) { Text(L.settings.adbConnect.openWirelessDebugging) }
+                    OutlinedButton(onClick = { AdbConnectManager.stopPairing(context) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.stop) }
+                    Button(onClick = { AdbConnectManager.openWirelessDebuggingSettings(context) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.adbConnect.openWirelessDebugging) }
                 } else {
                     Button(
                         enabled = installed && wirelessReady,
                         onClick = {
                             AdbConnectManager.startPairing(context)
                             AdbConnectManager.openWirelessDebuggingSettings(context)
-                        }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) { Text(if (state.pairedOnce) L.settings.adbConnect.pairAgain else L.settings.adbConnect.startPairing) }
                 }
             }
@@ -240,54 +271,95 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
                 )
             }
             Hint(L.settings.adbConnect.leaveThePortEmptyToFind)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Button(
                     enabled = installed && state.busy == null,
-                    onClick = { AdbConnectManager.setHost(host); AdbConnectManager.connect(port.toIntOrNull()) }
+                    onClick = { AdbConnectManager.setHost(host); AdbConnectManager.connect(port.toIntOrNull()) },
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) { Text(L.common.connect) }
                 if (state.busy != null) {
-                    OutlinedButton(onClick = AdbConnectManager::cancelConnect) { Text(L.common.cancel) }
+                    OutlinedButton(onClick = AdbConnectManager::cancelConnect, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
                 } else if (connected != null) {
-                    OutlinedButton(onClick = AdbConnectManager::disconnectAll) { Text(L.common.disconnect) }
+                    OutlinedButton(onClick = AdbConnectManager::disconnectAll, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.disconnect) }
                 }
                 if (state.busy != null) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Text(state.busy!!, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.weight(1f))
+                    Text(
+                        state.busy!!,
+                        fontSize = 12.sp,
+                        color = cardMuted,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
                 }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .accessibleToggleRow(checked = state.autoReconnect, role = Role.Switch) {
+                        AdbConnectManager.setAutoReconnect(!state.autoReconnect)
+                    },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(L.settings.adbConnect.reconnectAutomatically, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
                     Hint(L.settings.adbConnect.whenWirelessDebuggingTurnsOnAgain)
                 }
                 Spacer(Modifier.width(8.dp))
-                Switch(checked = state.autoReconnect, onCheckedChange = AdbConnectManager::setAutoReconnect)
+                Switch(checked = state.autoReconnect, onCheckedChange = null)
             }
             if (AdbConnectManager.isWirelessDebuggingSupported()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                val autoWirelessChecked = state.autoWireless && state.secureSettings
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (!state.grantingSecureSettings) {
+                                Modifier.accessibleToggleRow(checked = autoWirelessChecked, role = Role.Switch) {
+                                    AdbConnectManager.setAutoWireless(!autoWirelessChecked)
+                                }
+                            } else {
+                                Modifier.minTouchTarget(48.dp)
+                            }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text(L.settings.adbConnect.turnWirelessDebuggingOnByItself, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
                         Hint(L.settings.adbConnect.afterARebootOrWhenWi)
                     }
                     Spacer(Modifier.width(8.dp))
                     if (state.grantingSecureSettings) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Switch(checked = state.autoWireless && state.secureSettings, onCheckedChange = { AdbConnectManager.setAutoWireless(it) })
+                    else Switch(checked = autoWirelessChecked, onCheckedChange = null)
                 }
                 if (state.autoWireless && !state.secureSettings) {
-                    Text(L.settings.adbConnect.thePermissionIsGoneItIs,
-                        fontSize = 12.sp, color = Amber)
+                    Text(
+                        L.settings.adbConnect.thePermissionIsGoneItIs,
+                        fontSize = 12.sp,
+                        color = accessibleAmber,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                    )
                 }
             }
             if (state.devices.isNotEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Text(L.settings.adbConnect.devices, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Text(
+                    L.settings.adbConnect.devices,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = cardMuted,
+                    modifier = Modifier.semantics { heading() }
+                )
                 state.devices.forEach { device ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(device.serial, fontFamily = FontFamily.Monospace, fontSize = 12.5.sp, modifier = Modifier.weight(1f))
                         Pill(device.state, if (device.state == "device") QuotaGreen else Amber)
-                        IconButton(onClick = { AdbConnectManager.disconnect(device.serial) }) {
+                        IconButton(onClick = { AdbConnectManager.disconnect(device.serial) }, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(Icons.Outlined.LinkOff, L.common.disconnect, Modifier.size(18.dp))
                         }
                     }
@@ -298,7 +370,7 @@ private fun AdbSection(cardBg: Color, cardBorder: BorderStroke) {
         if (connected != null) {
             Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(L.settings.adbConnect.useItInTheTerminal, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(L.settings.adbConnect.useItInTheTerminal, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
                     Mono("adb devices\nadb shell\nadb install app.apk")
                 }
             }
@@ -329,19 +401,25 @@ private fun ShizukuSection(cardBg: Color, cardBorder: BorderStroke) {
 
     StepCard(1, L.settings.adbConnect.installShizuku, if (status.installed) L.common.installed else null, cardBg, cardBorder) {
         Hint(L.settings.adbConnect.shizukuIsAFreeAppThat)
-        if (!status.installed) Button(onClick = { ShizukuShell.openShizuku(context) }) {
+        if (!status.installed) Button(onClick = { ShizukuShell.openShizuku(context) }, modifier = Modifier.minTouchTarget(48.dp)) {
             Icon(Icons.Outlined.Download, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(L.settings.adbConnect.getShizuku)
         }
     }
     StepCard(2, L.settings.adbConnect.startShizuku, if (status.running) L.common.running else null, cardBg, cardBorder) {
         Hint(L.settings.adbConnect.inTheShizukuAppStartIt)
-        if (status.installed && !status.running) OutlinedButton(onClick = { ShizukuShell.openShizuku(context) }) { Text(L.settings.adbConnect.openShizuku) }
+        if (status.installed && !status.running) OutlinedButton(onClick = { ShizukuShell.openShizuku(context) }, modifier = Modifier.minTouchTarget(48.dp)) {
+            Text(L.settings.adbConnect.openShizuku)
+        }
     }
     StepCard(3, L.settings.adbConnect.allowAntigem, if (status.granted) L.common.allowed else null, cardBg, cardBorder) {
         Hint(L.settings.adbConnect.shizukuAsksYouOnceWhetherAntigem)
-        if (status.denied) Text(L.settings.adbConnect.deniedTapAllowAgainOrAllow, fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.error)
-        if (!status.granted) Button(enabled = status.running && !status.tooOld, onClick = { ShizukuShell.requestPermission() }) {
+        if (status.denied) Text(
+            L.settings.adbConnect.deniedTapAllowAgainOrAllow,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+        )
+        if (!status.granted) Button(enabled = status.running && !status.tooOld, onClick = { ShizukuShell.requestPermission() }, modifier = Modifier.minTouchTarget(48.dp)) {
             Text(L.settings.adbConnect.allowAntigem)
         }
     }
@@ -359,12 +437,15 @@ private fun ShizukuSection(cardBg: Color, cardBorder: BorderStroke) {
 private fun RootSection(cardBg: Color, cardBorder: BorderStroke) {
     val scope = rememberCoroutineScope()
     val state by RootShell.state.collectAsState()
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val unknownTint = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, surfaceBg)
     val (icon, tint, title, subtitle) = when (state.check) {
         RootShell.Check.GRANTED -> Quad(Icons.Outlined.PhonelinkSetup, QuotaGreen, L.settings.adbConnect.rootGranted, L.settings.adbConnect.commandsRunAsRootThroughSu)
         RootShell.Check.CHECKING -> Quad(Icons.Outlined.Sync, MaterialTheme.colorScheme.primary, L.common.checking, L.settings.adbConnect.answerYourRootManagersPrompt)
         RootShell.Check.DENIED -> Quad(Icons.Outlined.Block, MaterialTheme.colorScheme.error, L.settings.adbConnect.rootDenied, L.settings.adbConnect.allowAntigemInYourRootManager)
         RootShell.Check.NO_SU -> Quad(Icons.Outlined.ErrorOutline, MaterialTheme.colorScheme.error, L.settings.adbConnect.noSu, L.settings.adbConnect.thisPhoneIsntRooted)
-        RootShell.Check.UNKNOWN -> Quad(Icons.Outlined.Lock, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), L.settings.adbConnect.notChecked, L.settings.adbConnect.checkRootBelow)
+        RootShell.Check.UNKNOWN -> Quad(Icons.Outlined.Lock, unknownTint, L.settings.adbConnect.notChecked, L.settings.adbConnect.checkRootBelow)
     }
     HeaderCard(icon, tint, title, subtitle, cardBg, cardBorder, refreshing = state.check == RootShell.Check.CHECKING) {
         scope.launch { RootShell.check() }
@@ -374,15 +455,25 @@ private fun RootSection(cardBg: Color, cardBorder: BorderStroke) {
         Row(Modifier.padding(14.dp)) {
             Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
-            Text(L.settings.adbConnect.rootGivesTheAgentsFullControl,
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+            Text(
+                L.settings.adbConnect.rootGivesTheAgentsFullControl,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 
     StepCard(1, L.settings.adbConnect.allowAntigemRoot, if (state.check == RootShell.Check.GRANTED) L.settings.adbConnect.granted else null, cardBg, cardBorder) {
         Hint(L.settings.adbConnect.tapCheckRootYourRootManager)
-        state.message?.let { Text(it, fontSize = 12.sp, color = if (state.check == RootShell.Check.GRANTED) QuotaGreen else MaterialTheme.colorScheme.error) }
-        Button(enabled = state.check != RootShell.Check.CHECKING, onClick = { scope.launch { RootShell.check() } }) {
+        state.message?.let {
+            Text(
+                it,
+                fontSize = 12.sp,
+                color = if (state.check == RootShell.Check.GRANTED) accessibleGreen else MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
+        Button(enabled = state.check != RootShell.Check.CHECKING, onClick = { scope.launch { RootShell.check() } }, modifier = Modifier.minTouchTarget(48.dp)) {
             Text(if (state.check == RootShell.Check.GRANTED) L.common.checkAgain else L.settings.adbConnect.checkRoot)
         }
     }
@@ -407,7 +498,7 @@ private fun TestCard(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: BorderS
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(L.settings.adbConnect.test, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(L.settings.adbConnect.test, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                 OutlinedButton(enabled = !running, onClick = {
                     running = true
                     scope.launch {
@@ -415,7 +506,7 @@ private fun TestCard(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: BorderS
                         result = r.output.trim().ifBlank { "exit code ${r.exitCode}" }
                         running = false
                     }
-                }) { Text(if (running) L.settings.adbConnect.running else L.settings.adbConnect.runId) }
+                }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (running) L.settings.adbConnect.running else L.settings.adbConnect.runId) }
             }
             result?.let { Mono(it) }
         }
@@ -426,7 +517,7 @@ private fun TestCard(mode: DeviceAccess.Mode, cardBg: Color, cardBorder: BorderS
 private fun TerminalCard(commands: String, hint: String, cardBg: Color, cardBorder: BorderStroke) {
     Card(shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(L.settings.adbConnect.useItInTheTerminal, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(L.settings.adbConnect.useItInTheTerminal, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
             Mono(commands)
             Hint(hint)
         }
@@ -444,18 +535,21 @@ private fun HeaderCard(
     refreshing: Boolean = false,
     onRefresh: () -> Unit
 ) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val iconTint = ensureAccessibleContrast(tint, tint.copy(alpha = 0.12f), 3.0f, cardBg)
     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = tint, modifier = Modifier.size(26.dp))
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(26.dp))
             }
             Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Column(Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
+                Text(subtitle, fontSize = 12.sp, color = cardMuted)
             }
             if (refreshing) CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
-            else IconButton(onClick = onRefresh) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+            else IconButton(onClick = onRefresh, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
         }
     }
 }
@@ -463,27 +557,36 @@ private fun HeaderCard(
 @Composable
 private fun StatusCard(state: AdbConnectManager.State, cardBg: Color, cardBorder: BorderStroke) {
     val connected = state.connectedDevice
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardMuted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
     val (icon, tint, title, subtitle) = when {
         state.adbBroken != null -> Quad(Icons.Outlined.ErrorOutline, MaterialTheme.colorScheme.error, L.settings.adbConnect.adbCantStart, L.settings.adbConnect.tapRepairAdbBelow)
         state.adbInstalled == false -> Quad(Icons.Outlined.Download, Amber, L.settings.adbConnect.adbNotInstalled, L.settings.adbConnect.installItBelowToGetStarted)
         connected != null -> Quad(Icons.Outlined.PhonelinkSetup, QuotaGreen, L.settings.adbConnect.connected, connected.serial)
         state.busy != null -> Quad(Icons.Outlined.Sync, MaterialTheme.colorScheme.primary, L.common.connecting, state.busy)
-        else -> Quad(Icons.Outlined.PhonelinkErase, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f), L.settings.adbConnect.notConnected,
+        else -> Quad(Icons.Outlined.PhonelinkErase, cardMuted, L.settings.adbConnect.notConnected,
             if (state.pairedOnce) L.settings.adbConnect.turnOnWirelessDebuggingToConnect else L.settings.adbConnect.pairOnceThenConnect)
     }
+    val iconTint = ensureAccessibleContrast(tint, tint.copy(alpha = 0.12f), 3.0f, cardBg)
     Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = cardBg), border = cardBorder) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(tint.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, tint = tint, modifier = Modifier.size(26.dp))
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(26.dp))
             }
             Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(subtitle, fontSize = 12.sp, fontFamily = if (connected != null) FontFamily.Monospace else null,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            Column(Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
+                Text(
+                    subtitle,
+                    fontSize = 12.sp,
+                    fontFamily = if (connected != null) FontFamily.Monospace else null,
+                    color = cardMuted
+                )
             }
             if (state.refreshing) CircularProgressIndicator(Modifier.padding(12.dp).size(24.dp), strokeWidth = 2.dp)
-            else IconButton(onClick = { AdbConnectManager.refreshAndConnect(quiet = false) }) { Icon(Icons.Outlined.Refresh, L.settings.adbConnect.refreshAndConnect) }
+            else IconButton(onClick = { AdbConnectManager.refreshAndConnect(quiet = false) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                Icon(Icons.Outlined.Refresh, L.settings.adbConnect.refreshAndConnect)
+            }
         }
     }
 }
@@ -513,7 +616,7 @@ internal fun StepCard(
                     else Text("$number", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
                 Spacer(Modifier.width(12.dp))
-                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(title, fontSize = 14.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
                 badge?.let { Pill(it, badgeColor) }
             }
             content()
@@ -523,6 +626,7 @@ internal fun StepCard(
 
 @Composable
 private fun PairingSteps() {
+    val accessibleAmber = ensureAccessibleContrast(Amber, MaterialTheme.colorScheme.surfaceContainerLow, 4.5f, MaterialTheme.colorScheme.surface)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         listOf(
             L.settings.adbConnect.tapStartPairingANotificationAppears,
@@ -531,7 +635,7 @@ private fun PairingSteps() {
         ).forEachIndexed { i, text -> Hint("${i + 1}. $text") }
         Text(
             L.settings.adbConnect.stayInSettingsWhileYouDo,
-            fontSize = 12.sp, color = Amber, fontWeight = FontWeight.Medium
+            fontSize = 12.sp, color = accessibleAmber, fontWeight = FontWeight.Medium
         )
     }
 }
@@ -546,13 +650,15 @@ private fun PairingStatus(pairing: Pairing, host: String) {
         Pairing.Paired -> L.settings.adbConnect.pairedYouWontNeedToDo to QuotaGreen
         is Pairing.Failed -> pairing.message to MaterialTheme.colorScheme.error
     }
-    Surface(shape = RoundedCornerShape(10.dp), color = color.copy(alpha = 0.1f)) {
+    val bg = color.copy(alpha = 0.1f)
+    val fg = ensureAccessibleContrast(color, bg, 4.5f, MaterialTheme.colorScheme.surface)
+    Surface(shape = RoundedCornerShape(10.dp), color = bg, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             if (pairing is Pairing.Searching || pairing is Pairing.InProgress) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = color)
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = fg)
                 Spacer(Modifier.width(10.dp))
             }
-            Text(text, fontSize = 12.5.sp, color = color)
+            Text(text, fontSize = 12.5.sp, color = fg)
         }
     }
 }
@@ -563,7 +669,11 @@ private fun ManualPairing(enabled: Boolean) {
     var open by remember { mutableStateOf(false) }
     var port by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
-    TextButton(onClick = { open = !open }, contentPadding = PaddingValues(0.dp)) {
+    TextButton(
+        onClick = { open = !open },
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier.minTouchTarget(48.dp)
+    ) {
         Text(if (open) L.settings.adbConnect.hideManualPairing else L.settings.adbConnect.pairManuallyInstead, fontSize = 12.5.sp)
     }
     if (!open) return
@@ -580,33 +690,43 @@ private fun ManualPairing(enabled: Boolean) {
     }
     Button(
         enabled = enabled && port.isNotEmpty() && code.length == 6,
-        onClick = { AdbConnectManager.pairManually(context, port.toInt(), code) }
+        onClick = { AdbConnectManager.pairManually(context, port.toInt(), code) },
+        modifier = Modifier.minTouchTarget(48.dp)
     ) { Text(L.settings.adbConnect.pair) }
 }
 
 @Composable
 internal fun CheckRow(label: String, on: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, surfaceBg)
+    Row(
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Icon(
             if (on) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, null,
-            tint = if (on) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f), modifier = Modifier.size(18.dp)
+            tint = if (on) accessibleGreen else muted, modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(8.dp))
         Text(label, fontSize = 13.sp, modifier = Modifier.weight(1f))
-        Text(if (on) L.common.on else L.common.off, fontSize = 12.sp, color = if (on) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        Text(if (on) L.common.on else L.common.off, fontSize = 12.sp, color = if (on) accessibleGreen else muted)
     }
 }
 
 @Composable
 internal fun Pill(text: String, color: Color) {
-    Surface(shape = RoundedCornerShape(6.dp), color = color.copy(alpha = 0.12f)) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
+    val bg = color.copy(alpha = 0.12f)
+    val textColor = ensureAccessibleContrast(color, bg, 4.5f, MaterialTheme.colorScheme.surface)
+    Surface(shape = RoundedCornerShape(6.dp), color = bg) {
+        Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = textColor, modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp))
     }
 }
 
 @Composable
 internal fun Hint(text: String) =
-    Text(text, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+    Text(text, fontSize = 12.sp, color = accessibleMutedColor(alpha = 0.72f))
 
 @Composable
 internal fun Mono(text: String) = Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)) {

@@ -143,6 +143,27 @@ object ThemeTokens {
     /** Text color for a fill: whichever of near-black and white reads better on it. */
     fun on(c: Color): Color = if (contrast(c, Black) >= contrast(c, White)) Black else White
 
+    /** Shifts [fg] smoothly toward white or black until it meets [minRatio] contrast on [bg]. */
+    fun readableOn(fg: Color, bg: Color, minRatio: Float = 4.5f): Color {
+        if (contrast(fg, bg) >= minRatio) return fg
+        val target = if (bg.luminance() < 0.25f) White else Black
+        if (contrast(target, bg) < minRatio) return target
+        var lo = 0f
+        var hi = 1f
+        var best = target
+        repeat(18) {
+            val mid = (lo + hi) / 2f
+            val cand = lerp(fg, target, mid)
+            if (contrast(cand, bg) >= minRatio) {
+                best = cand
+                hi = mid
+            } else {
+                lo = mid
+            }
+        }
+        return best
+    }
+
     private class Rule(val key: String, val sources: List<String>, val compute: (Map<String, Long>, Boolean) -> Color)
 
     private fun Map<String, Long>.c(key: String) = Color(getValue(key).toInt())
@@ -150,14 +171,23 @@ object ThemeTokens {
     private val rules = listOf(
         Rule("on_primary", listOf("primary")) { m, _ -> on(m.c("primary")) },
         Rule("primary_container", listOf("primary", "surface")) { m, d -> lerp(m.c("surface"), m.c("primary"), if (d) 0.30f else 0.18f) },
-        Rule("on_primary_container", listOf("primary")) { m, d -> lerp(m.c("primary"), if (d) White else Black, if (d) 0.35f else 0.45f) },
+        Rule("on_primary_container", listOf("primary", "surface")) { m, d ->
+            val bg = m["primary_container"]?.let { Color(it.toInt()) } ?: lerp(m.c("surface"), m.c("primary"), if (d) 0.30f else 0.18f)
+            readableOn(lerp(m.c("primary"), if (d) White else Black, if (d) 0.35f else 0.45f), bg)
+        },
         Rule("inverse_primary", listOf("primary")) { m, _ -> m.c("primary") },
         Rule("on_secondary", listOf("secondary")) { m, _ -> on(m.c("secondary")) },
         Rule("secondary_container", listOf("secondary", "surface")) { m, d -> lerp(m.c("surface"), m.c("secondary"), if (d) 0.30f else 0.18f) },
-        Rule("on_secondary_container", listOf("secondary")) { m, d -> lerp(m.c("secondary"), if (d) White else Black, if (d) 0.35f else 0.45f) },
+        Rule("on_secondary_container", listOf("secondary", "surface")) { m, d ->
+            val bg = m["secondary_container"]?.let { Color(it.toInt()) } ?: lerp(m.c("surface"), m.c("secondary"), if (d) 0.30f else 0.18f)
+            readableOn(lerp(m.c("secondary"), if (d) White else Black, if (d) 0.35f else 0.45f), bg)
+        },
         Rule("on_tertiary", listOf("tertiary")) { m, _ -> on(m.c("tertiary")) },
         Rule("tertiary_container", listOf("tertiary", "surface")) { m, d -> lerp(m.c("surface"), m.c("tertiary"), if (d) 0.30f else 0.18f) },
-        Rule("on_tertiary_container", listOf("tertiary")) { m, d -> lerp(m.c("tertiary"), if (d) White else Black, if (d) 0.35f else 0.45f) },
+        Rule("on_tertiary_container", listOf("tertiary", "surface")) { m, d ->
+            val bg = m["tertiary_container"]?.let { Color(it.toInt()) } ?: lerp(m.c("surface"), m.c("tertiary"), if (d) 0.30f else 0.18f)
+            readableOn(lerp(m.c("tertiary"), if (d) White else Black, if (d) 0.35f else 0.45f), bg)
+        },
         Rule("on_surface", listOf("on_background")) { m, _ -> m.c("on_background") },
         Rule("text_secondary", listOf("on_surface_variant")) { m, _ -> m.c("on_surface_variant") },
         Rule("outline", listOf("on_surface_variant", "background")) { m, _ -> lerp(m.c("on_surface_variant"), m.c("background"), 0.25f) },
@@ -172,7 +202,10 @@ object ThemeTokens {
         Rule("error", listOf("danger")) { m, _ -> m.c("danger") },
         Rule("on_error", listOf("danger")) { m, _ -> on(m.c("danger")) },
         Rule("error_container", listOf("danger", "surface")) { m, d -> lerp(m.c("surface"), m.c("danger"), if (d) 0.28f else 0.15f) },
-        Rule("on_error_container", listOf("danger")) { m, d -> lerp(m.c("danger"), if (d) White else Black, if (d) 0.3f else 0.4f) },
+        Rule("on_error_container", listOf("danger", "surface")) { m, d ->
+            val bg = m["error_container"]?.let { Color(it.toInt()) } ?: lerp(m.c("surface"), m.c("danger"), if (d) 0.28f else 0.15f)
+            readableOn(lerp(m.c("danger"), if (d) White else Black, if (d) 0.3f else 0.4f), bg)
+        },
         Rule("user_bubble", listOf("surface_variant")) { m, _ -> m.c("surface_variant") },
         Rule("thinking_bg", listOf("surface_variant", "background")) { m, _ -> lerp(m.c("surface_variant"), m.c("background"), 0.45f) },
         Rule("code_text", listOf("code_bg")) { m, _ -> if (m.c("code_bg").luminance() < 0.5f) Color(0xFFE6E6E6) else Color(0xFF1F2328) },
@@ -194,14 +227,23 @@ object ThemeTokens {
         Rule("editor_panel", listOf("editor_bg", "editor_text")) { m, _ -> lerp(m.c("editor_bg"), m.c("editor_text"), 0.05f) },
         Rule("editor_line", listOf("editor_bg", "editor_text")) { m, _ -> lerp(m.c("editor_bg"), m.c("editor_text"), 0.08f) },
         Rule("editor_border", listOf("editor_bg", "editor_text")) { m, _ -> lerp(m.c("editor_bg"), m.c("editor_text"), 0.15f) },
-        Rule("editor_muted", listOf("editor_bg", "editor_text")) { m, _ -> lerp(m.c("editor_bg"), m.c("editor_text"), 0.5f) },
+        Rule("editor_muted", listOf("editor_bg", "editor_text")) { m, _ -> readableOn(lerp(m.c("editor_bg"), m.c("editor_text"), 0.56f), m.c("editor_bg")) },
         Rule("editor_selection", listOf("editor_bg", "primary")) { m, _ -> lerp(m.c("editor_bg"), m.c("primary"), 0.32f) },
         Rule("editor_added_bg", listOf("editor_bg", "success")) { m, _ -> lerp(m.c("editor_bg"), m.c("success"), 0.22f) },
-        Rule("editor_added_text", listOf("editor_text", "success")) { m, _ -> lerp(m.c("success"), m.c("editor_text"), 0.5f) },
+        Rule("editor_added_text", listOf("editor_bg", "editor_text", "success")) { m, _ ->
+            val bg = m["editor_added_bg"]?.let { Color(it.toInt()) } ?: lerp(m.c("editor_bg"), m.c("success"), 0.22f)
+            readableOn(lerp(m.c("success"), m.c("editor_text"), 0.5f), bg)
+        },
         Rule("editor_removed_bg", listOf("editor_bg", "danger")) { m, _ -> lerp(m.c("editor_bg"), m.c("danger"), 0.22f) },
-        Rule("editor_removed_text", listOf("editor_text", "danger")) { m, _ -> lerp(m.c("danger"), m.c("editor_text"), 0.5f) },
+        Rule("editor_removed_text", listOf("editor_bg", "editor_text", "danger")) { m, _ ->
+            val bg = m["editor_removed_bg"]?.let { Color(it.toInt()) } ?: lerp(m.c("editor_bg"), m.c("danger"), 0.22f)
+            readableOn(lerp(m.c("danger"), m.c("editor_text"), 0.5f), bg)
+        },
         Rule("editor_info_bg", listOf("editor_bg", "info")) { m, _ -> lerp(m.c("editor_bg"), m.c("info"), 0.18f) },
-        Rule("editor_info_text", listOf("editor_text", "info")) { m, _ -> lerp(m.c("info"), m.c("editor_text"), 0.3f) },
+        Rule("editor_info_text", listOf("editor_bg", "editor_text", "info")) { m, _ ->
+            val bg = m["editor_info_bg"]?.let { Color(it.toInt()) } ?: lerp(m.c("editor_bg"), m.c("info"), 0.18f)
+            readableOn(lerp(m.c("info"), m.c("editor_text"), 0.3f), bg)
+        },
         Rule("terminal_bg", listOf("code_bg")) { m, _ -> m.c("code_bg") },
         Rule("terminal_fg", listOf("code_text")) { m, _ -> m.c("code_text") },
         Rule("terminal_cursor", listOf("primary")) { m, _ -> m.c("primary") },
@@ -278,13 +320,13 @@ object ThemeTokens {
         fun c(k: String) = colors[k]?.let { Color(it.toInt()) }
         val pairs = listOf(
             Triple("on_background", "background", 4.5f), Triple("on_surface", "surface", 4.5f),
-            Triple("on_surface", "card", 4.5f), Triple("on_surface_variant", "surface", 3f),
-            Triple("text_secondary", "background", 3f), Triple("on_primary", "primary", 3f),
-            Triple("primary", "background", 2.5f), Triple("on_surface", "user_bubble", 4.5f),
-            Triple("code_text", "code_bg", 4.5f), Triple("syntax_comment", "code_bg", 2.5f),
-            Triple("danger", "background", 2.5f), Triple("success", "background", 2.5f),
-            Triple("editor_text", "editor_bg", 4.5f), Triple("editor_muted", "editor_bg", 2.5f),
-            Triple("editor_added_text", "editor_added_bg", 4f), Triple("editor_removed_text", "editor_removed_bg", 4f),
+            Triple("on_surface", "card", 4.5f), Triple("on_surface_variant", "surface", 4.5f),
+            Triple("text_secondary", "background", 4.5f), Triple("on_primary", "primary", 4.5f),
+            Triple("primary", "background", 4.5f), Triple("on_surface", "user_bubble", 4.5f),
+            Triple("code_text", "code_bg", 4.5f), Triple("syntax_comment", "code_bg", 4.5f),
+            Triple("danger", "background", 4.5f), Triple("success", "background", 4.5f),
+            Triple("editor_text", "editor_bg", 4.5f), Triple("editor_muted", "editor_bg", 4.5f),
+            Triple("editor_added_text", "editor_added_bg", 4.5f), Triple("editor_removed_text", "editor_removed_bg", 4.5f),
             Triple("terminal_fg", "terminal_bg", 4.5f), Triple("on_background", "fill", 4.5f)
         )
         return pairs.mapNotNull { (fg, bg, min) ->
@@ -316,28 +358,34 @@ object BuiltInThemes {
     /** How many themes at the top of each side's list are marked as recommended (the first is the default). */
     const val RECOMMENDED_COUNT = 3
 
-    private val oneDarkSyntax = listOf(0xFFC678DD, 0xFFE5C07B, 0xFF98C379, 0xFFD19A66, 0xFF7F848E, 0xFF61AFEF, 0xFFE5C07B, 0xFFABB2BF)
+    private val oneDarkSyntax = listOf(0xFFC678DD, 0xFFE5C07B, 0xFF98C379, 0xFFD19A66, 0xFF848992, 0xFF61AFEF, 0xFFE5C07B, 0xFFABB2BF)
     private val syntaxKeys = listOf("syntax_keyword", "syntax_type", "syntax_string", "syntax_number", "syntax_comment", "syntax_function", "syntax_annotation", "syntax_punctuation")
 
-    /** The original AntiGem look, exactly as before themes existed (other Material slots stay at Material's defaults). */
+    /** The original AntiGem look, updated to meet WCAG 2.0 AA contrast across surfaces and interactive accents. */
     private fun antigem(dark: Boolean) = AppTheme(
         id = if (dark) ANTIGEM_DARK else LIGHT_DEFAULT,
         name = if (dark) L.theme.appTheme.amberNight else L.theme.appTheme.porcelain,
         dark = dark, builtIn = true,
         about = if (dark) L.theme.appTheme.antigemsOriginalWarmDarkLookWith else L.theme.appTheme.antigemsOriginalCleanLightLookWith,
         colors = buildMap {
-            put("primary", 0xFFD97706); put("secondary", 0xFFB45309); put("on_primary", 0xFFFFFFFF)
             if (dark) {
+                put("primary", 0xFFD97706); put("secondary", 0xFFB45309); put("on_primary", 0xFF111111); put("on_secondary", 0xFFFFFFFF)
                 put("background", 0xFF181816); put("surface", 0xFF181816); put("on_background", 0xFFF5F5F4); put("on_surface", 0xFFF5F5F4)
-                put("surface_variant", 0xFF32312D)
+                put("surface_variant", 0xFF32312D); put("on_surface_variant", 0xFFA8A29E)
                 put("card", 0xFF232320); put("text_secondary", 0xFFA8A29E); put("user_bubble", 0xFF32312D); put("thinking_bg", 0xFF282724)
             } else {
+                put("primary", 0xFFAB5E06); put("secondary", 0xFF92400E); put("on_primary", 0xFFFFFFFF); put("on_secondary", 0xFFFFFFFF)
                 put("background", 0xFFF9F9FB); put("surface", 0xFFF9F9FB); put("on_background", 0xFF1C1917); put("on_surface", 0xFF1C1917)
-                put("surface_variant", 0xFFE8EAED)
-                put("card", 0xFFFFFFFF); put("text_secondary", 0xFF78716C); put("user_bubble", 0xFFE8EAED); put("thinking_bg", 0xFFF1F3F5)
+                put("surface_variant", 0xFFE8EAED); put("on_surface_variant", 0xFF57534E)
+                put("card", 0xFFFFFFFF); put("text_secondary", 0xFF57534E); put("user_bubble", 0xFFE8EAED); put("thinking_bg", 0xFFF1F3F5)
             }
             put("code_bg", 0xFF1E1E1C); put("code_text", 0xFFF5F5F4)
-            put("success", 0xFF16A34A); put("warning", 0xFFD97706); put("danger", 0xFFDC2626); put("info", 0xFF3B82F6); put("accent_alt", 0xFF8B5CF6)
+            if (dark) {
+                put("success", 0xFF22C55E); put("warning", 0xFFD97706); put("danger", 0xFFE86464); put("info", 0xFF4C8DF6)
+            } else {
+                put("success", 0xFF13833C); put("warning", 0xFFAB5E06); put("danger", 0xFFDB2626); put("info", 0xFF2563EB)
+            }
+            put("accent_alt", if (dark) 0xFFA78BFA else 0xFF6D28D9)
             syntaxKeys.zip(oneDarkSyntax).forEach { (k, v) -> put(k, v) }
             put("syntax_control", 0xFFC678DD); put("syntax_tag", 0xFFE06C75); put("syntax_attribute", 0xFFD19A66)
             if (dark) {
@@ -364,8 +412,8 @@ object BuiltInThemes {
         id = "midnight_aurora", name = L.theme.appTheme.midnightAurora, dark = true, builtIn = true,
         about = L.theme.appTheme.deepInkBlueMidnightWithLuminous,
         colors = linkedMapOf(
-            "primary" to 0xFFA78BFA, "on_primary" to 0xFF14102B, "primary_container" to 0xFF373256, "on_primary_container" to 0xFFC4B5FE,
-            "secondary" to 0xFF7C6AE6, "on_secondary" to 0xFF111111, "secondary_container" to 0xFF2C2A52, "on_secondary_container" to 0xFFA6A0F2,
+            "primary" to 0xFFA78BFA, "on_primary" to 0xFF111111, "primary_container" to 0xFF373256, "on_primary_container" to 0xFFC4B5FE,
+            "secondary" to 0xFF7D6BE6, "on_secondary" to 0xFF111111, "secondary_container" to 0xFF2C2A52, "on_secondary_container" to 0xFFA6A0F2,
             "tertiary" to 0xFF5EEAD4, "on_tertiary" to 0xFF111111, "tertiary_container" to 0xFF28494D, "on_tertiary_container" to 0xFFA2F2E3,
             "background" to 0xFF0A0B14, "on_background" to 0xFFE8EAF6, "surface" to 0xFF0F111C, "on_surface" to 0xFFE8EAF6,
             "surface_variant" to 0xFF1C2033, "on_surface_variant" to 0xFF9AA1BF, "surface_container_lowest" to 0xFF030408,
@@ -375,12 +423,12 @@ object BuiltInThemes {
             "inverse_on_surface" to 0xFF0A0B14, "inverse_primary" to 0xFFA78BFA, "card" to 0xFF151826, "text_secondary" to 0xFF9AA1BF,
             "user_bubble" to 0xFF252A47, "thinking_bg" to 0xFF12152A, "code_bg" to 0xFF0C0E19, "code_text" to 0xFFD6DBF5, "success" to 0xFF4ADE80,
             "warning" to 0xFFFBBF24, "danger" to 0xFFFB7185, "info" to 0xFF60A5FA, "accent_alt" to 0xFFC084FC, "syntax_keyword" to 0xFFC4A7FF,
-            "syntax_type" to 0xFF5EEAD4, "syntax_string" to 0xFF9AE6B4, "syntax_number" to 0xFFFFB86B, "syntax_comment" to 0xFF5B6285,
+            "syntax_type" to 0xFF5EEAD4, "syntax_string" to 0xFF9AE6B4, "syntax_number" to 0xFFFFB86B, "syntax_comment" to 0xFF757B98,
             "syntax_function" to 0xFF7DB5FF, "syntax_annotation" to 0xFFF4A9D8, "syntax_punctuation" to 0xFF8991B3, "syntax_control" to 0xFFC4A7FF,
             "syntax_tag" to 0xFF7DB5FF, "syntax_attribute" to 0xFF5EEAD4, "border" to 0xFF2D313F, "fill" to 0xFF212432,
             "success_container" to 0xFF1C302E, "warning_container" to 0xFF322D27, "danger_container" to 0xFF34222E, "info_container" to 0xFF1D283E,
             "accent_indigo" to 0xFF818CF8, "accent_teal" to 0xFF2DD4BF, "accent_pink" to 0xFFF472B6, "editor_bg" to 0xFF0C0E19,
-            "editor_panel" to 0xFF141622, "editor_text" to 0xFFD6DBF5, "editor_muted" to 0xFF676B7E, "editor_border" to 0xFF252735,
+            "editor_panel" to 0xFF141622, "editor_text" to 0xFFD6DBF5, "editor_muted" to 0xFF787C8C, "editor_border" to 0xFF252735,
             "editor_selection" to 0xFF373258, "editor_line" to 0xFF191B27, "editor_added_bg" to 0xFF1C3530, "editor_added_text" to 0xFF9CDEBD,
             "editor_removed_bg" to 0xFF39232F, "editor_removed_text" to 0xFFEFAABD, "editor_info_bg" to 0xFF1A253B, "editor_info_text" to 0xFF86B6FA,
             "terminal_bg" to 0xFF0C0E19, "terminal_fg" to 0xFFD6DBF5, "terminal_cursor" to 0xFFA78BFA, "ansi_0" to 0xFF2A2D3A,
@@ -399,10 +447,10 @@ object BuiltInThemes {
         val m = mutableMapOf(
             "background" to 0xFF121214, "surface" to 0xFF1A1A1E, "card" to 0xFF222327, "surface_variant" to 0xFF26272C,
             "on_background" to 0xFFFFFFFF, "on_surface" to 0xFFFFFFFF, "on_surface_variant" to 0xFFB5B6BC, "text_secondary" to 0xFFB5B6BC,
-            "primary" to 0xFF5865F2, "on_primary" to 0xFFFFFFFF, "primary_container" to 0xFF2D305E, "on_primary_container" to 0xFFE0E3FF,
-            "secondary" to 0xFF4752C4, "on_secondary" to 0xFFFFFFFF, "tertiary" to 0xFF1ABC9C,
+            "primary" to 0xFF7680F4, "on_primary" to 0xFF111111, "primary_container" to 0xFF2D305E, "on_primary_container" to 0xFFE0E3FF,
+            "secondary" to 0xFF4752C4, "on_secondary" to 0xFFFFFFFF, "tertiary" to 0xFF1ABC9C, "on_tertiary" to 0xFF111111,
             "accent_alt" to 0xFF94A8FF, "inverse_primary" to 0xFF94A8FF,
-            "success" to 0xFF23A55A, "warning" to 0xFFF0B232, "danger" to 0xFFF23F43, "info" to 0xFF00A8FC,
+            "success" to 0xFF23A55A, "warning" to 0xFFF0B232, "danger" to 0xFFF35356, "info" to 0xFF00A8FC,
             "surface_container_lowest" to 0xFF0E0E10, "surface_container_low" to 0xFF121214, "surface_container" to 0xFF222327,
             "surface_container_high" to 0xFF28292E, "surface_container_highest" to 0xFF2E2F35,
             "outline" to 0xFF4E5058, "outline_variant" to 0xFF2A2B30, "border" to 0xFF2E2F35, "fill" to 0xFF2A2B30,
@@ -444,47 +492,47 @@ object BuiltInThemes {
             antigem(false),
             seeded("lavender", L.theme.appTheme.lavender, L.theme.appTheme.softLilacWithAVioletAccent, false,
                 0xFFF8F6FD, 0xFFF8F6FD, 0xFFFFFFFF, 0xFFECE7F8, 0xFF241B3A, 0xFF655B7F,
-                0xFF7C3AED, 0xFFA855F7, 0xFFDB2777, 0xFF15803D, 0xFFB45309, 0xFFDC2626, 0xFF2563EB,
-                0xFF1E1830, listOf(0xFFD8B4FE, 0xFFFDE68A, 0xFFA7F3D0, 0xFFFDBA74, 0xFF7E7396, 0xFF93C5FD, 0xFFFDE68A, 0xFFE4DDF5)),
+                0xFF7C3AED, 0xFFA855F7, 0xFFDA2777, 0xFF15803D, 0xFFB45309, 0xFFD92626, 0xFF2563EB,
+                0xFF1E1830, listOf(0xFFD8B4FE, 0xFFFDE68A, 0xFFA7F3D0, 0xFFFDBA74, 0xFF8A809F, 0xFF93C5FD, 0xFFFDE68A, 0xFFE4DDF5)),
             seeded("sky", L.theme.appTheme.sky, L.theme.appTheme.crispAiryLightBlue, false,
                 0xFFF5F8FC, 0xFFF5F8FC, 0xFFFFFFFF, 0xFFE3EBF5, 0xFF0F1B2D, 0xFF52637A,
-                0xFF2563EB, 0xFF0EA5E9, 0xFF7C3AED, 0xFF16A34A, 0xFFB45309, 0xFFDC2626, 0xFF0284C7,
-                0xFF0F172A, listOf(0xFFC792EA, 0xFFFFCB6B, 0xFFA3E4A1, 0xFFF9A87A, 0xFF64748B, 0xFF82AAFF, 0xFFFFCB6B, 0xFFCBD5E1)),
+                0xFF2563EB, 0xFF0EA5E9, 0xFF7C3AED, 0xFF12823C, 0xFFB45309, 0xFFD92626, 0xFF0277B2,
+                0xFF0F172A, listOf(0xFFC792EA, 0xFFFFCB6B, 0xFFA3E4A1, 0xFFF9A87A, 0xFF748397, 0xFF82AAFF, 0xFFFFCB6B, 0xFFCBD5E1)),
             seeded("sakura", L.theme.appTheme.sakura, L.theme.appTheme.softCherryBlossomPinkWithA, false,
                 0xFFFFF7F9, 0xFFFFF7F9, 0xFFFFFFFF, 0xFFFBE4EA, 0xFF3B1F2B, 0xFF7F5A68,
-                0xFFDB2777, 0xFFC026D3, 0xFF7C3AED, 0xFF15803D, 0xFFB45309, 0xFFDC2626, 0xFF2563EB,
-                0xFF2A1520, listOf(0xFFF472B6, 0xFFFCD34D, 0xFF86EFAC, 0xFFFDBA74, 0xFF9C7B88, 0xFF93C5FD, 0xFFFCD34D, 0xFFF3E8EE)),
+                0xFFD42674, 0xFFC026D3, 0xFF7C3AED, 0xFF15803D, 0xFFB45309, 0xFFDB2626, 0xFF2563EB,
+                0xFF2A1520, listOf(0xFFF472B6, 0xFFFCD34D, 0xFF86EFAC, 0xFFFDBA74, 0xFF9C7C88, 0xFF93C5FD, 0xFFFCD34D, 0xFFF3E8EE)),
             seeded("mint", L.theme.appTheme.mint, L.theme.appTheme.freshCleanLightGreen, false,
                 0xFFF4FBF8, 0xFFF4FBF8, 0xFFFFFFFF, 0xFFDDF2EA, 0xFF10231B, 0xFF4B6858,
-                0xFF059669, 0xFF0D9488, 0xFF7C3AED, 0xFF15803D, 0xFFB45309, 0xFFDC2626, 0xFF0369A1,
-                0xFF0F1E19, listOf(0xFFC4B5FD, 0xFFFDE68A, 0xFFA7F3D0, 0xFFFDBA74, 0xFF6B8A7A, 0xFF7DD3FC, 0xFFFDE68A, 0xFFD1E7DD)),
+                0xFF05815B, 0xFF0D9488, 0xFF7C3AED, 0xFF15803D, 0xFFB45309, 0xFFDB2626, 0xFF0369A1,
+                0xFF0F1E19, listOf(0xFFC4B5FD, 0xFFFDE68A, 0xFFA7F3D0, 0xFFFDBA74, 0xFF6C8B7B, 0xFF7DD3FC, 0xFFFDE68A, 0xFFD1E7DD)),
             seeded("linen", L.theme.appTheme.linen, L.theme.appTheme.warmMinimalOffWhiteWithA, false,
                 0xFFFBF8F3, 0xFFFBF8F3, 0xFFFFFFFF, 0xFFF0EBE3, 0xFF26211C, 0xFF6F6861,
-                0xFFC2410C, 0xFFEA580C, 0xFF7C3AED, 0xFF15803D, 0xFFB45309, 0xFFDC2626, 0xFF1D4ED8,
-                0xFF1F1B18, listOf(0xFFE4A7F0, 0xFFF2CC8F, 0xFFB7D99A, 0xFFF5A97F, 0xFF8A8078, 0xFF8FC2F0, 0xFFF2CC8F, 0xFFE6DED5)),
+                0xFFC2410C, 0xFFEA580C, 0xFF7C3AED, 0xFF15803D, 0xFFB45309, 0xFFDA2626, 0xFF1D4ED8,
+                0xFF1F1B18, listOf(0xFFE4A7F0, 0xFFF2CC8F, 0xFFB7D99A, 0xFFF5A97F, 0xFF8D837B, 0xFF8FC2F0, 0xFFF2CC8F, 0xFFE6DED5)),
             seeded("paper", L.theme.appTheme.paper, L.theme.appTheme.warmSepiaPaperWithARust, false,
                 0xFFF7F1E3, 0xFFF7F1E3, 0xFFFFFAEF, 0xFFECE3CE, 0xFF2B2418, 0xFF6E6250,
-                0xFF9A3412, 0xFFB45309, 0xFF4D7C0F, 0xFF4D7C0F, 0xFFB45309, 0xFFB91C1C, 0xFF1D4ED8,
-                0xFF2B2418, listOf(0xFFF0A6CA, 0xFFF2D58A, 0xFFB5D49A, 0xFFF4B183, 0xFF8C7F67, 0xFF9CC3E6, 0xFFF2D58A, 0xFFE8DFCC)),
+                0xFF9A3412, 0xFFB45309, 0xFF4D7C0F, 0xFF4B790F, 0xFFB15109, 0xFFB91C1C, 0xFF1D4ED8,
+                0xFF2B2418, listOf(0xFFF0A6CA, 0xFFF2D58A, 0xFFB5D49A, 0xFFF4B183, 0xFF978C76, 0xFF9CC3E6, 0xFFF2D58A, 0xFFE8DFCC)),
             seeded("solarized_light", L.theme.appTheme.solarizedLight, L.theme.appTheme.theClassicLowGlareCreamPalette, false,
-                0xFFFDF6E3, 0xFFFDF6E3, 0xFFFFFBEF, 0xFFEEE8D5, 0xFF073642, 0xFF586E75,
-                0xFF268BD2, 0xFF2AA198, 0xFF6C71C4, 0xFF859900, 0xFFB58900, 0xFFDC322F, 0xFF268BD2,
-                0xFF002B36, listOf(0xFF859900, 0xFFB58900, 0xFF2AA198, 0xFFD33682, 0xFF657B83, 0xFF268BD2, 0xFFCB4B16, 0xFF93A1A1)),
+                0xFFFDF6E3, 0xFFFDF6E3, 0xFFFFFBEF, 0xFFEEE8D5, 0xFF073642, 0xFF556A71,
+                0xFF2074B0, 0xFF2AA198, 0xFF696DBE, 0xFF687701, 0xFF8C6B01, 0xFFD3302D, 0xFF2074B0,
+                0xFF002B36, listOf(0xFF859900, 0xFFB58900, 0xFF2AA198, 0xFFD33682, 0xFF7F9298, 0xFF268BD2, 0xFFCB4B16, 0xFF93A1A1)),
             // dark: the same
             discord(),
             seeded("obsidian", L.theme.appTheme.obsidian, L.theme.appTheme.refinedDeepBlackWithLayeredSurfaces, true,
                 0xFF0D0E12, 0xFF0D0E12, 0xFF16181D, 0xFF1F2229, 0xFFECEDF0, 0xFF9297A3,
                 0xFF8B9CFF, 0xFF6E7FF3, 0xFFC4A1FF, 0xFF4ADE80, 0xFFF5B454, 0xFFF87171, 0xFF60A5FA,
-                0xFF111318, listOf(0xFFC4A1FF, 0xFF7DD3FC, 0xFF9FE2B0, 0xFFF9B98A, 0xFF5E6573, 0xFF8BB4FF, 0xFFF5D08A, 0xFFB8BDC8)),
+                0xFF111318, listOf(0xFFC4A1FF, 0xFF7DD3FC, 0xFF9FE2B0, 0xFFF9B98A, 0xFF797F8A, 0xFF8BB4FF, 0xFFF5D08A, 0xFFB8BDC8)),
             midnightAurora(),
             seeded("graphite", L.theme.appTheme.graphite, L.theme.appTheme.warmCharcoalWithAGlowingAmber, true,
                 0xFF121212, 0xFF121212, 0xFF1B1B1C, 0xFF262628, 0xFFEDEBE8, 0xFFA29E98,
                 0xFFF0A04B, 0xFFD9822B, 0xFFB794F4, 0xFF5BD18A, 0xFFF4C152, 0xFFEF6B6B, 0xFF6CB4F2,
-                0xFF161616, listOf(0xFFC678DD, 0xFFE5C07B, 0xFF98C379, 0xFFD19A66, 0xFF6B717D, 0xFF61AFEF, 0xFFE5C07B, 0xFFABB2BF)),
+                0xFF161616, listOf(0xFFC678DD, 0xFFE5C07B, 0xFF98C379, 0xFFD19A66, 0xFF7B818B, 0xFF61AFEF, 0xFFE5C07B, 0xFFABB2BF)),
             seeded("midnight", L.theme.appTheme.midnight, L.theme.appTheme.pureBlackForOledScreensWith, true,
                 0xFF000000, 0xFF000000, 0xFF0F1115, 0xFF1A1D24, 0xFFECEFF4, 0xFF9AA3B2,
                 0xFF22D3EE, 0xFF0891B2, 0xFFA78BFA, 0xFF22C55E, 0xFFF59E0B, 0xFFF43F5E, 0xFF60A5FA,
-                0xFF0A0C10, listOf(0xFFC792EA, 0xFFFFCB6B, 0xFFC3E88D, 0xFFF78C6C, 0xFF5C6370, 0xFF82AAFF, 0xFFFFCB6B, 0xFFA6ACCD)),
+                0xFF0A0C10, listOf(0xFFC792EA, 0xFFFFCB6B, 0xFFC3E88D, 0xFFF78C6C, 0xFF767B86, 0xFF82AAFF, 0xFFFFCB6B, 0xFFA6ACCD)),
             seeded("high_contrast", L.theme.appTheme.highContrast, L.theme.appTheme.maximumReadabilityWhiteOnBlackWith, true,
                 0xFF000000, 0xFF000000, 0xFF0D0D0D, 0xFF1F1F1F, 0xFFFFFFFF, 0xFFD4D4D4,
                 0xFFFFD60A, 0xFF00E5FF, 0xFFFF6EFF, 0xFF00E676, 0xFFFFC400, 0xFFFF5252, 0xFF40C4FF,
@@ -495,32 +543,32 @@ object BuiltInThemes {
                 0xFFCBA6F7, 0xFFF5C2E7, 0xFF89B4FA, 0xFFA6E3A1, 0xFFF9E2AF, 0xFFF38BA8, 0xFF89DCEB,
                 0xFF181825, listOf(0xFFCBA6F7, 0xFFF9E2AF, 0xFFA6E3A1, 0xFFFAB387, 0xFF7F849C, 0xFF89B4FA, 0xFFF5C2E7, 0xFFBAC2DE)),
             seeded("neon_city", L.theme.appTheme.neonCity, L.theme.appTheme.nightTimeCityBluesWithElectric, true,
-                0xFF1A1B26, 0xFF1A1B26, 0xFF1F2335, 0xFF292E42, 0xFFC0CAF5, 0xFF8B93B8,
+                0xFF1A1B26, 0xFF1A1B26, 0xFF1F2335, 0xFF292E42, 0xFFC0CAF5, 0xFF8E96BA,
                 0xFF7AA2F7, 0xFFBB9AF7, 0xFF7DCFFF, 0xFF9ECE6A, 0xFFE0AF68, 0xFFF7768E, 0xFF7DCFFF,
-                0xFF16161E, listOf(0xFFBB9AF7, 0xFF2AC3DE, 0xFF9ECE6A, 0xFFFF9E64, 0xFF6A72A0, 0xFF7AA2F7, 0xFFE0AF68, 0xFFA9B1D6)),
+                0xFF16161E, listOf(0xFFBB9AF7, 0xFF2AC3DE, 0xFF9ECE6A, 0xFFFF9E64, 0xFF777FA8, 0xFF7AA2F7, 0xFFE0AF68, 0xFFA9B1D6)),
             seeded("aurora", L.theme.appTheme.aurora, L.theme.appTheme.northernLightsTealAndVioletOver, true,
                 0xFF0B1118, 0xFF0B1118, 0xFF121A23, 0xFF1A2530, 0xFFE3ECF2, 0xFF8DA2B3,
                 0xFF2DD4BF, 0xFF34D399, 0xFFA78BFA, 0xFF4ADE80, 0xFFFBBF24, 0xFFFB7185, 0xFF67E8F9,
-                0xFF0A1016, listOf(0xFFA78BFA, 0xFFFDE68A, 0xFF86EFAC, 0xFFFDBA74, 0xFF5B6F80, 0xFF67E8F9, 0xFFFDE68A, 0xFFCBD9E3)),
+                0xFF0A1016, listOf(0xFFA78BFA, 0xFFFDE68A, 0xFF86EFAC, 0xFFFDBA74, 0xFF6D7F8E, 0xFF67E8F9, 0xFFFDE68A, 0xFFCBD9E3)),
             seeded("nord", L.theme.appTheme.nord, L.theme.appTheme.calmArcticBlueGrey, true,
-                0xFF2E3440, 0xFF2E3440, 0xFF3B4252, 0xFF434C5E, 0xFFECEFF4, 0xFFA3ADC2,
-                0xFF88C0D0, 0xFF81A1C1, 0xFFB48EAD, 0xFFA3BE8C, 0xFFEBCB8B, 0xFFBF616A, 0xFF5E81AC,
-                0xFF272C36, listOf(0xFF81A1C1, 0xFF8FBCBB, 0xFFA3BE8C, 0xFFB48EAD, 0xFF6E7A94, 0xFF88C0D0, 0xFFD08770, 0xFFECEFF4)),
+                0xFF2E3440, 0xFF2E3440, 0xFF3B4252, 0xFF434C5E, 0xFFECEFF4, 0xFFB6BECE,
+                0xFF88C0D0, 0xFF81A1C1, 0xFFB48EAD, 0xFFA3BE8C, 0xFFEBCB8B, 0xFFD9A1A7, 0xFF9CB2CC,
+                0xFF272C36, listOf(0xFF81A1C1, 0xFF8FBCBB, 0xFFA3BE8C, 0xFFB48EAD, 0xFF8B94A9, 0xFF88C0D0, 0xFFD08770, 0xFFECEFF4)),
             seeded("dracula", L.theme.appTheme.dracula, L.theme.appTheme.darkPurpleWithVividPinkGreen, true,
-                0xFF282A36, 0xFF282A36, 0xFF303241, 0xFF44475A, 0xFFF8F8F2, 0xFFA9ADCB,
-                0xFFBD93F9, 0xFFFF79C6, 0xFF8BE9FD, 0xFF50FA7B, 0xFFFFB86C, 0xFFFF5555, 0xFF8BE9FD,
-                0xFF21222C, listOf(0xFFFF79C6, 0xFF8BE9FD, 0xFFF1FA8C, 0xFFBD93F9, 0xFF7282B5, 0xFF50FA7B, 0xFFFFB86C, 0xFFF8F8F2)),
+                0xFF282A36, 0xFF282A36, 0xFF303241, 0xFF44475A, 0xFFF8F8F2, 0xFFB3B7D1,
+                0xFFBD93F9, 0xFFFF79C6, 0xFF8BE9FD, 0xFF50FA7B, 0xFFFFB86C, 0xFFFF6D6D, 0xFF8BE9FD,
+                0xFF21222C, listOf(0xFFFF79C6, 0xFF8BE9FD, 0xFFF1FA8C, 0xFFBD93F9, 0xFF7A8AB9, 0xFF50FA7B, 0xFFFFB86C, 0xFFF8F8F2)),
             seeded("velvet", L.theme.appTheme.velvet, L.theme.appTheme.duskyRoseAndSoftVioletOn, true,
                 0xFF191724, 0xFF191724, 0xFF1F1D2E, 0xFF26233A, 0xFFE0DEF4, 0xFF9A96B5,
                 0xFFEBBCBA, 0xFFC4A7E7, 0xFF9CCFD8, 0xFF95D5A7, 0xFFF6C177, 0xFFEB6F92, 0xFF9CCFD8,
-                0xFF16141F, listOf(0xFFC4A7E7, 0xFF9CCFD8, 0xFFF6C177, 0xFFEBBCBA, 0xFF6E6A86, 0xFFEA9A97, 0xFFF6C177, 0xFFBDB9D6)),
+                0xFF16141F, listOf(0xFFC4A7E7, 0xFF9CCFD8, 0xFFF6C177, 0xFFEBBCBA, 0xFF817E96, 0xFFEA9A97, 0xFFF6C177, 0xFFBDB9D6)),
             seeded("ocean", L.theme.appTheme.deepOcean, L.theme.appTheme.deepNavyWithASkyBlue, true,
                 0xFF0B1426, 0xFF0B1426, 0xFF111D33, 0xFF1A2942, 0xFFE2E8F0, 0xFF94A3B8,
-                0xFF38BDF8, 0xFF6366F1, 0xFFF472B6, 0xFF34D399, 0xFFFBBF24, 0xFFFB7185, 0xFF38BDF8,
-                0xFF070E1C, listOf(0xFFC084FC, 0xFFFCD34D, 0xFF86EFAC, 0xFFFDBA74, 0xFF64748B, 0xFF7DD3FC, 0xFFFCD34D, 0xFFCBD5E1)),
+                0xFF38BDF8, 0xFF6B6EF2, 0xFFF472B6, 0xFF34D399, 0xFFFBBF24, 0xFFFB7185, 0xFF38BDF8,
+                0xFF070E1C, listOf(0xFFC084FC, 0xFFFCD34D, 0xFF86EFAC, 0xFFFDBA74, 0xFF6E7D92, 0xFF7DD3FC, 0xFFFCD34D, 0xFFCBD5E1)),
             seeded("ember", L.theme.appTheme.ember, L.theme.appTheme.retroWarmDarkToastedBrownsWith, true,
                 0xFF1D2021, 0xFF1D2021, 0xFF282828, 0xFF32302F, 0xFFEBDBB2, 0xFFA89984,
-                0xFFFE8019, 0xFFFABD2F, 0xFFD3869B, 0xFFB8BB26, 0xFFFABD2F, 0xFFFB4934, 0xFF83A598,
+                0xFFFE8019, 0xFFFABD2F, 0xFFD3869B, 0xFFB8BB26, 0xFFFABD2F, 0xFFFB5844, 0xFF83A598,
                 0xFF1A1C1D, listOf(0xFFFB4934, 0xFFFABD2F, 0xFFB8BB26, 0xFFD3869B, 0xFF928374, 0xFF8EC07C, 0xFFFE8019, 0xFFEBDBB2)),
             seeded("forest", L.theme.appTheme.forest, L.theme.appTheme.darkPineGreenWithAFresh, true,
                 0xFF0F1A14, 0xFF0F1A14, 0xFF16241C, 0xFF1E3127, 0xFFE6F0E9, 0xFF9DB5A6,
@@ -529,11 +577,11 @@ object BuiltInThemes {
             seeded("sunset", L.theme.appTheme.sunset, L.theme.appTheme.warmPlumDuskWithAnOrange, true,
                 0xFF1C1020, 0xFF1C1020, 0xFF26162B, 0xFF342036, 0xFFF6E7EF, 0xFFC2A3B4,
                 0xFFFB923C, 0xFFF472B6, 0xFFC084FC, 0xFF4ADE80, 0xFFFBBF24, 0xFFF43F5E, 0xFF818CF8,
-                0xFF140A17, listOf(0xFFF472B6, 0xFFFDE047, 0xFFBEF264, 0xFFFB923C, 0xFF8A7083, 0xFF93C5FD, 0xFFFDE047, 0xFFE5D4DE)),
+                0xFF140A17, listOf(0xFFF472B6, 0xFFFDE047, 0xFFBEF264, 0xFFFB923C, 0xFF8E7487, 0xFF93C5FD, 0xFFFDE047, 0xFFE5D4DE)),
             seeded("solarized_dark", L.theme.appTheme.solarizedDark, L.theme.appTheme.theClassicLowGlareTealBlack, true,
-                0xFF002B36, 0xFF002B36, 0xFF073642, 0xFF0B4452, 0xFFEEE8D5, 0xFF93A1A1,
-                0xFF268BD2, 0xFF2AA198, 0xFF6C71C4, 0xFF859900, 0xFFB58900, 0xFFDC322F, 0xFF2AA198,
-                0xFF00212B, listOf(0xFF859900, 0xFFB58900, 0xFF2AA198, 0xFFD33682, 0xFF6C8288, 0xFF268BD2, 0xFFCB4B16, 0xFF93A1A1))
+                0xFF002B36, 0xFF002B36, 0xFF073642, 0xFF0B4452, 0xFFEEE8D5, 0xFFA0ADAD,
+                0xFF4EA1DA, 0xFF2AA198, 0xFF7276C6, 0xFF90A318, 0xFFBC9519, 0xFFE87977, 0xFF3DAAA1,
+                0xFF00212B, listOf(0xFF859900, 0xFFB58900, 0xFF2AA198, 0xFFD33682, 0xFF758A8F, 0xFF268BD2, 0xFFCB4B16, 0xFF93A1A1))
         )
     }
 

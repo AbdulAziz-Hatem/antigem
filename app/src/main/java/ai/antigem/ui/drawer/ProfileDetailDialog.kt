@@ -29,6 +29,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,7 +41,10 @@ import androidx.compose.ui.window.Dialog
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import ai.antigem.data.remote.AgyHubClient
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.theme.ClaudeTerracotta
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.i18n.L
@@ -81,15 +88,25 @@ fun ProfileDetailDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
+        val surfaceBg = MaterialTheme.colorScheme.surface
+        val mutedText = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
+        val mutedIcon = accessibleMutedColor(alpha = 0.72f, background = surfaceBg, minRatio = 3.0f)
+        val badgeBg = ClaudeTerracotta.copy(alpha = 0.12f)
+        val accessibleTerracottaText = ensureAccessibleContrast(ClaudeTerracotta, surfaceBg, 4.5f, surfaceBg)
+        val accessibleBadgeText = ensureAccessibleContrast(ClaudeTerracotta, badgeBg, 4.5f, surfaceBg)
+        val accessibleTerracottaIcon = ensureAccessibleContrast(ClaudeTerracotta, surfaceBg, 3.0f, surfaceBg)
+        val accessibleError = ensureAccessibleContrast(MaterialTheme.colorScheme.error, surfaceBg, 4.5f, surfaceBg)
+
         Card(
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = surfaceBg
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
+                .semantics { isTraversalGroup = true }
         ) {
             Column(
                 modifier = Modifier
@@ -104,12 +121,12 @@ fun ProfileDetailDialog(
                 ) {
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Close,
                             contentDescription = L.common.close,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            tint = mutedIcon
                         )
                     }
                 }
@@ -169,7 +186,8 @@ fun ProfileDetailDialog(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 if (authInfo.email.isNotBlank()) {
@@ -177,7 +195,7 @@ fun ProfileDetailDialog(
                     Text(
                         text = authInfo.email,
                         fontSize = 12.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        color = mutedText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -189,7 +207,7 @@ fun ProfileDetailDialog(
                     Spacer(modifier = Modifier.height(10.dp))
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = ClaudeTerracotta.copy(alpha = 0.12f),
+                        color = badgeBg,
                         border = androidx.compose.foundation.BorderStroke(1.dp, ClaudeTerracotta.copy(alpha = 0.35f))
                     ) {
                         Row(
@@ -199,7 +217,7 @@ fun ProfileDetailDialog(
                             Icon(
                                 imageVector = Icons.Outlined.WorkspacePremium,
                                 contentDescription = null,
-                                tint = ClaudeTerracotta,
+                                tint = accessibleBadgeText,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
@@ -207,7 +225,7 @@ fun ProfileDetailDialog(
                                 text = tierName,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = ClaudeTerracotta
+                                color = accessibleBadgeText
                             )
                             if (authInfo.planName.isNotBlank() && authInfo.planName != tierName) {
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -215,7 +233,7 @@ fun ProfileDetailDialog(
                                     text = "•  ${authInfo.planName}",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
-                                    color = ClaudeTerracotta.copy(alpha = 0.8f)
+                                    color = accessibleBadgeText
                                 )
                             }
                         }
@@ -225,10 +243,14 @@ fun ProfileDetailDialog(
                 // Credits Section (if prompt or flow credits available)
                 if (authInfo.availablePromptCredits != null || authInfo.availableFlowCredits != null) {
                     Spacer(modifier = Modifier.height(14.dp))
+                    val creditsBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    val creditsMuted = accessibleMutedColor(alpha = 0.72f, background = creditsBg, surfaceFallback = surfaceBg)
+                    val creditsQuotaGreen = ensureAccessibleContrast(QuotaGreen, creditsBg, 3.0f, surfaceBg)
+                    val creditsTerracotta = ensureAccessibleContrast(ClaudeTerracotta, creditsBg, 3.0f, surfaceBg)
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        color = creditsBg,
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     ) {
                         Row(
@@ -239,19 +261,22 @@ fun ProfileDetailDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             if (authInfo.availablePromptCredits != null) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Column(
+                                    modifier = Modifier.semantics(mergeDescendants = true) {},
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Outlined.Token,
                                             contentDescription = null,
-                                            tint = QuotaGreen,
+                                            tint = creditsQuotaGreen,
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             text = L.drawer.profileDetail.promptCredits,
                                             fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                            color = creditsMuted
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
@@ -274,19 +299,22 @@ fun ProfileDetailDialog(
                             }
 
                             if (authInfo.availableFlowCredits != null) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Column(
+                                    modifier = Modifier.semantics(mergeDescendants = true) {},
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Outlined.Speed,
                                             contentDescription = null,
-                                            tint = ClaudeTerracotta,
+                                            tint = creditsTerracotta,
                                             modifier = Modifier.size(14.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             text = L.drawer.profileDetail.flowCredits,
                                             fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                            color = creditsMuted
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(2.dp))
@@ -311,13 +339,14 @@ fun ProfileDetailDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .semantics(mergeDescendants = true) {}
                             .padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Email,
-                            contentDescription = L.drawer.profileDetail.email,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            contentDescription = null,
+                            tint = mutedIcon,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -325,7 +354,7 @@ fun ProfileDetailDialog(
                             Text(
                                 text = L.drawer.profileDetail.accountEmail,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                color = mutedText
                             )
                             Text(
                                 text = authInfo.email,
@@ -343,13 +372,14 @@ fun ProfileDetailDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {}
                         .padding(vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.VerifiedUser,
-                        contentDescription = L.drawer.profileDetail.status,
-                        tint = ClaudeTerracotta,
+                        contentDescription = null,
+                        tint = accessibleTerracottaIcon,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
@@ -357,7 +387,7 @@ fun ProfileDetailDialog(
                         Text(
                             text = L.drawer.profileDetail.status,
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            color = mutedText
                         )
                         Text(
                             text = if (authInfo.isOffline) L.drawer.profileDetail.connectedOfflineVerification else L.drawer.profileDetail.activeAuthenticatedAgyRpc,
@@ -374,20 +404,22 @@ fun ProfileDetailDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .minTouchTarget(48.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable {
+                            .clickable(role = Role.Button) {
                                 try {
                                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authInfo.upgradeSubscriptionUri))
                                     context.startActivity(intent)
                                 } catch (_: Exception) {}
                             }
+                            .semantics(mergeDescendants = true) {}
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
-                            contentDescription = L.drawer.profileDetail.upgrade,
-                            tint = ClaudeTerracotta,
+                            contentDescription = null,
+                            tint = accessibleTerracottaIcon,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(10.dp))
@@ -395,12 +427,12 @@ fun ProfileDetailDialog(
                             Text(
                                 text = L.drawer.profileDetail.subscription,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                color = mutedText
                             )
                             Text(
                                 text = if (authInfo.upgradeSubscriptionText.isNotBlank()) authInfo.upgradeSubscriptionText else L.drawer.profileDetail.manageUpgradePlan,
                                 fontSize = 12.sp,
-                                color = ClaudeTerracotta,
+                                color = accessibleTerracottaText,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -415,14 +447,16 @@ fun ProfileDetailDialog(
                     onClick = { confirmSignOut = true },
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
+                        contentColor = accessibleError
                     ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
+                    border = androidx.compose.foundation.BorderStroke(1.dp, accessibleError.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.Logout,
-                        contentDescription = L.drawer.profileDetail.signOut,
+                        contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))

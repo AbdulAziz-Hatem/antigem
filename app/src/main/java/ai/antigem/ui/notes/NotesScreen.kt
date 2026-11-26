@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -32,6 +33,12 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +54,10 @@ import ai.antigem.data.notes.NoteKind
 import ai.antigem.data.notes.NotesRepository
 import ai.antigem.data.notes.TodoItem
 import ai.antigem.theme.ClaudeTerracotta
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import ai.antigem.i18n.L
 
@@ -176,10 +187,16 @@ private fun NotesList(
         Surface(color = MaterialTheme.colorScheme.background, shadowElevation = 1.dp) {
             Column(Modifier.fillMaxWidth().statusBarsPadding()) {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                        .semantics { isTraversalGroup = true },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { if (searching) { searching = false; query = "" } else onClose() }) {
+                    IconButton(
+                        onClick = { if (searching) { searching = false; query = "" } else onClose() },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.common.back)
                     }
                     if (searching) {
@@ -192,15 +209,21 @@ private fun NotesList(
                             singleLine = true,
                             modifier = Modifier.weight(1f).focusRequester(searchFocus)
                         )
-                        if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, contentDescription = L.notes.screen.clearSearch) }
+                        if (query.isNotEmpty()) IconButton(onClick = { query = "" }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, contentDescription = L.notes.screen.clearSearch) }
                     } else {
-                        Text(L.common.notes, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 4.dp))
-                        IconButton(onClick = { searching = true }) { Icon(Icons.Outlined.Search, contentDescription = L.common.search) }
+                        Text(
+                            L.common.notes,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f).padding(start = 4.dp).semantics { heading() }
+                        )
+                        IconButton(onClick = { searching = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Search, contentDescription = L.common.search) }
                     }
                 }
                 Row(
                     Modifier.fillMaxWidth()
                         .horizontalScroll(rememberScrollState(), overscrollEffect = chipsBounce)
+                        .selectableGroup()
                         .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -213,7 +236,8 @@ private fun NotesList(
                         FilterChip(
                             selected = filter == f,
                             onClick = { filter = f },
-                            label = { Text(if (count > 0) "${f.label} $count" else f.label) }
+                            label = { Text(if (count > 0) "${f.label} $count" else f.label) },
+                            modifier = Modifier.minTouchTarget(48.dp)
                         )
                     }
                 }
@@ -277,38 +301,46 @@ private fun SectionHeader(label: String) {
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.8.sp,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+        color = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.background),
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp).semantics { heading() }
     )
 }
 
 @Composable
 private fun EmptyState(message: String) {
+    val bg = MaterialTheme.colorScheme.background
     Column(
         Modifier.fillMaxSize().padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(Icons.Outlined.EditNote, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), modifier = Modifier.size(56.dp))
+        Icon(
+            Icons.Outlined.EditNote,
+            null,
+            tint = accessibleMutedColor(alpha = 0.6f, background = bg, minRatio = 3f),
+            modifier = Modifier.size(56.dp).clearAndSetSemantics {}
+        )
         Spacer(Modifier.height(12.dp))
-        Text(message, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Text(message, fontSize = 15.sp, color = accessibleMutedColor(alpha = 0.75f, background = bg))
         Spacer(Modifier.height(4.dp))
         Text(
             L.notes.screen.tapToAddOneOrAsk,
             fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+            color = accessibleMutedColor(alpha = 0.72f, background = bg)
         )
     }
 }
 
 @Composable
 private fun NoteCard(note: Note, onClick: () -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
+    val accentColor = ensureAccessibleContrast(ClaudeTerracotta, surfaceBg)
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = surfaceBg,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp).clickable(onClick = onClick)
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -325,7 +357,7 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                if (note.pinned) Icon(Icons.Outlined.PushPin, L.notes.screen.pinned, tint = ClaudeTerracotta, modifier = Modifier.size(16.dp))
+                if (note.pinned) Icon(Icons.Outlined.PushPin, L.notes.screen.pinned, tint = accentColor, modifier = Modifier.size(16.dp))
             }
             if (note.kind == NoteKind.TODO) {
                 note.items.filter { it.text.isNotBlank() }.take(4).forEach { item ->
@@ -333,7 +365,7 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
                         Icon(
                             if (item.done) Icons.Outlined.CheckBox else Icons.Outlined.CheckBoxOutlineBlank,
                             null,
-                            tint = if (item.done) ClaudeTerracotta else muted,
+                            tint = if (item.done) accentColor else muted,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
@@ -342,7 +374,7 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
                             fontSize = 13.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            color = if (item.done) muted else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                            color = if (item.done) muted else ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f), surfaceBg),
                             textDecoration = if (item.done) TextDecoration.LineThrough else null
                         )
                     }
@@ -350,15 +382,21 @@ private fun NoteCard(note: Note, onClick: () -> Unit) {
                 val hidden = note.items.count { it.text.isNotBlank() } - 4
                 if (hidden > 0) Text("+$hidden more", fontSize = 12.sp, color = muted)
             } else if (note.text.isNotBlank()) {
-                Text(note.text.trim(), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f), maxLines = 4, overflow = TextOverflow.Ellipsis)
+                Text(
+                    note.text.trim(),
+                    fontSize = 13.sp,
+                    color = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f), surfaceBg),
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(relativeTime(note.updatedAt), fontSize = 11.sp, color = muted.copy(alpha = 0.5f), modifier = Modifier.weight(1f))
+                Text(relativeTime(note.updatedAt), fontSize = 11.sp, color = muted, modifier = Modifier.weight(1f))
                 if (note.kind == NoteKind.TODO && note.items.isNotEmpty()) {
                     Text(
                         "${note.doneCount}/${note.items.size} done",
                         fontSize = 11.sp,
-                        color = if (note.doneCount == note.items.size) ClaudeTerracotta else muted.copy(alpha = 0.5f)
+                        color = if (note.doneCount == note.items.size) accentColor else muted
                     )
                 }
             }
@@ -373,7 +411,8 @@ private fun NoteEditor(note: Note, onBack: () -> Unit, onDelete: () -> Unit) {
     val id = note.id
     var showMenu by remember { mutableStateOf(false) }
     var pendingFocusItemId by remember(id) { mutableStateOf<String?>(null) }
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val bg = MaterialTheme.colorScheme.background
+    val muted = accessibleMutedColor(alpha = 0.72f, background = bg)
 
     fun insertItem(at: Int) {
         val item = TodoItem()
@@ -382,22 +421,29 @@ private fun NoteEditor(note: Note, onBack: () -> Unit, onDelete: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Surface(color = MaterialTheme.colorScheme.background) {
+        Surface(color = bg) {
             Row(
-                Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 4.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                    .semantics { isTraversalGroup = true },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.common.back) }
+                IconButton(onClick = onBack, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = L.common.back) }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = { NotesRepository.update(id) { it.copy(pinned = !it.pinned) } }) {
+                IconButton(
+                    onClick = { NotesRepository.update(id) { it.copy(pinned = !it.pinned) } },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
                     Icon(
                         Icons.Outlined.PushPin,
                         contentDescription = if (note.pinned) L.notes.screen.unpin else L.notes.screen.pin,
-                        tint = if (note.pinned) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        tint = if (note.pinned) ensureAccessibleContrast(ClaudeTerracotta, bg, 3f) else accessibleMutedColor(alpha = 0.75f, background = bg, minRatio = 3f)
                     )
                 }
                 Box {
-                    IconButton(onClick = { showMenu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = L.common.more) }
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.MoreVert, contentDescription = L.common.more) }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         if (note.kind == NoteKind.TODO) {
                             DropdownMenuItem(
@@ -478,7 +524,11 @@ private fun NoteEditor(note: Note, onBack: () -> Unit, onDelete: () -> Unit) {
                     onValueChange = { v -> NotesRepository.update(id) { it.copy(text = v) } },
                     placeholder = if (note.kind == NoteKind.TODO) L.common.details else L.notes.screen.note,
                     textStyle = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minTouchTarget(48.dp)
+                        .padding(vertical = 6.dp)
+                        .semantics { contentDescription = L.notes.screen.noteContent }
                 )
             }
 
@@ -499,6 +549,7 @@ private fun NoteEditor(note: Note, onBack: () -> Unit, onDelete: () -> Unit) {
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .minTouchTarget(48.dp)
                         .clickable { insertItem(note.items.size) }
                         .padding(vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -507,12 +558,12 @@ private fun NoteEditor(note: Note, onBack: () -> Unit, onDelete: () -> Unit) {
                     Text(L.notes.screen.addItem, fontSize = 15.sp, color = muted)
                 }
                 if (note.items.isNotEmpty()) {
-                    Text(L.notes.screen.donecountOfItemscountDone(note.doneCount, note.items.size), fontSize = 12.sp, color = muted.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
+                    Text(L.notes.screen.donecountOfItemscountDone(note.doneCount, note.items.size), fontSize = 12.sp, color = muted, modifier = Modifier.padding(top = 4.dp))
                 }
             }
 
             Spacer(Modifier.height(16.dp))
-            Text(L.notes.screen.editedRelativetime(relativeTime(note.updatedAt)), fontSize = 11.sp, color = muted.copy(alpha = 0.5f))
+            Text(L.notes.screen.editedRelativetime(relativeTime(note.updatedAt)), fontSize = 11.sp, color = muted)
         }
     }
 }
@@ -527,7 +578,7 @@ private fun TodoRow(
     onRemove: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
-    val muted = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+    val muted = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.background)
     LaunchedEffect(requestFocus) {
         if (requestFocus) {
             runCatching { focusRequester.requestFocus() }
@@ -535,13 +586,23 @@ private fun TodoRow(
         }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = item.done,
-            onCheckedChange = { checked ->
-                NotesRepository.update(noteId) { n -> n.copy(items = n.items.map { if (it.id == item.id) it.copy(done = checked) else it }) }
-            },
-            colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta)
-        )
+        Box(
+            modifier = Modifier
+                .accessibleToggleRow(checked = item.done, role = Role.Checkbox) {
+                    val checked = !item.done
+                    NotesRepository.update(noteId) { n -> n.copy(items = n.items.map { if (it.id == item.id) it.copy(done = checked) else it }) }
+                }
+                .semantics {
+                    contentDescription = item.text.ifBlank { L.notes.screen.listItem }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Checkbox(
+                checked = item.done,
+                onCheckedChange = null,
+                colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta)
+            )
+        }
         SyncedField(
             key = item.id,
             remoteValue = item.text,
@@ -560,7 +621,7 @@ private fun TodoRow(
             onImeAction = onNext,
             modifier = Modifier.weight(1f).focusRequester(focusRequester)
         )
-        IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+        IconButton(onClick = onRemove, modifier = Modifier.minTouchTarget(48.dp)) {
             Icon(Icons.Outlined.Close, contentDescription = L.notes.screen.removeItem, tint = muted, modifier = Modifier.size(18.dp))
         }
     }
@@ -621,10 +682,13 @@ private fun PlainField(
     onImeAction: (() -> Unit)? = null
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val bg = MaterialTheme.colorScheme.background
+    val textColor = ensureAccessibleContrast(onSurface.copy(alpha = textAlpha), bg)
+    val placeholderColor = accessibleMutedColor(alpha = 0.65f, background = bg)
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        textStyle = textStyle.copy(color = onSurface.copy(alpha = textAlpha)),
+        textStyle = textStyle.copy(color = textColor),
         cursorBrush = SolidColor(ClaudeTerracotta),
         singleLine = singleLine,
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = imeAction),
@@ -632,7 +696,7 @@ private fun PlainField(
         modifier = modifier,
         decorationBox = { inner ->
             Box {
-                if (value.isEmpty()) Text(placeholder, style = textStyle.copy(color = onSurface.copy(alpha = 0.35f), textDecoration = null))
+                if (value.isEmpty()) Text(placeholder, style = textStyle.copy(color = placeholderColor, textDecoration = null))
                 inner()
             }
         }
@@ -656,6 +720,9 @@ private fun PlainField(
     onImeAction: (() -> Unit)? = null
 ) {
     val onSurface = MaterialTheme.colorScheme.onSurface
+    val bg = MaterialTheme.colorScheme.background
+    val textColor = ensureAccessibleContrast(onSurface.copy(alpha = textAlpha), bg)
+    val placeholderColor = accessibleMutedColor(alpha = 0.65f, background = bg)
     val caretInView = remember { BringIntoViewRequester() }
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
     var focused by remember { mutableStateOf(false) }
@@ -672,7 +739,7 @@ private fun PlainField(
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        textStyle = textStyle.copy(color = onSurface.copy(alpha = textAlpha)),
+        textStyle = textStyle.copy(color = textColor),
         cursorBrush = SolidColor(ClaudeTerracotta),
         singleLine = singleLine,
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = imeAction),
@@ -681,7 +748,7 @@ private fun PlainField(
         modifier = modifier.bringIntoViewRequester(caretInView).onFocusChanged { focused = it.isFocused },
         decorationBox = { inner ->
             Box {
-                if (value.text.isEmpty()) Text(placeholder, style = textStyle.copy(color = onSurface.copy(alpha = 0.35f), textDecoration = null))
+                if (value.text.isEmpty()) Text(placeholder, style = textStyle.copy(color = placeholderColor, textDecoration = null))
                 inner()
             }
         }

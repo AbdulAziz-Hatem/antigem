@@ -43,6 +43,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -57,7 +65,10 @@ import ai.antigem.data.remote.SystemConnectionState
 import ai.antigem.data.remote.SystemStatus
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.components.accent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** One agent's health: drives the split status dot, its popup, the accounts dialog and the new-chat picker. */
@@ -278,7 +289,7 @@ fun AgentStatusDot(colors: List<Color>, modifier: Modifier = Modifier, size: Dp 
         transition.animateFloat(1f, 0.4f, infiniteRepeatable(tween(850), RepeatMode.Reverse), label = "agent_dot_alpha").value
     } else 1f
     val slices = colors.ifEmpty { listOf(SystemStatus.OFFLINE.dotColor) }
-    Canvas(modifier.size(size).graphicsLayer { this.alpha = alpha }) {
+    Canvas(modifier.size(size).clearAndSetSemantics {}.graphicsLayer { this.alpha = alpha }) {
         when {
             slices.distinct().size == 1 -> drawCircle(slices.first())
             slices.size == 2 -> {
@@ -298,7 +309,7 @@ fun AgentStatusDot(colors: List<Color>, modifier: Modifier = Modifier, size: Dp 
 @Composable
 fun AgentMark(agent: AgentKind, modifier: Modifier = Modifier, size: Dp = 32.dp, statusColor: Color? = null) {
     val accent = agent.accent()
-    Box(modifier.size(size)) {
+    Box(modifier.size(size).clearAndSetSemantics {}) {
         Box(
             Modifier.size(size).clip(CircleShape).background(accent.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center
@@ -328,6 +339,9 @@ fun AgentMark(agent: AgentKind, modifier: Modifier = Modifier, size: Dp = 32.dp,
 /** One agent row: mark, name, state, detail and its action. */
 @Composable
 fun AgentStatusRow(entry: AgentStatusEntry, modifier: Modifier = Modifier, onActionDone: () -> Unit = {}) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val stateColor = ensureAccessibleContrast(entry.color, surfaceBg, 4.5f)
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         AgentMark(entry.agent, size = 34.dp, statusColor = entry.color)
         Spacer(Modifier.width(10.dp))
@@ -335,14 +349,14 @@ fun AgentStatusRow(entry: AgentStatusEntry, modifier: Modifier = Modifier, onAct
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(entry.agent.label(), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.width(6.dp))
-                Text(entry.label, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = entry.color, maxLines = 1)
+                Text(entry.label, fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = stateColor, maxLines = 1)
             }
             entry.detail?.let {
                 Text(
                     it,
                     fontSize = 11.5.sp,
                     lineHeight = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = muted,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -360,19 +374,23 @@ fun AgentStatusRow(entry: AgentStatusEntry, modifier: Modifier = Modifier, onAct
 
 @Composable
 fun AgentActionPill(text: String, color: Color, onClick: () -> Unit) {
+    val pillTextColor = ensureAccessibleContrast(color, MaterialTheme.colorScheme.surface, 4.5f)
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         color = color.copy(alpha = 0.14f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.35f))
+        border = BorderStroke(1.dp, color.copy(alpha = 0.35f)),
+        modifier = Modifier.minTouchTarget(48.dp)
     ) {
-        Text(
-            text,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = color,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = pillTextColor,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+            )
+        }
     }
 }
 
@@ -393,8 +411,18 @@ fun AgentStatusIndicator(
     val codex = entries.find { it.agent == AgentKind.CODEX }
     // one slice per enabled agent
     val colors = listOfNotNull(agy, claude, openCode, codex).map { it.color }
+    val statusSummary = listOfNotNull(agy, claude, openCode, codex)
+        .joinToString(", ") { "${it.agent.label()} ${it.label}" }
+        .let { if (it.isBlank()) L.agents.agentStatusUi.agents else "${L.agents.agentStatusUi.agents}: $it" }
     Box(
-        modifier = modifier.size(36.dp).clip(CircleShape).clickable { open = true },
+        modifier = modifier
+            .minTouchTarget(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = L.agents.agentStatusUi.agents) { open = true }
+            .semantics(mergeDescendants = true) {
+                contentDescription = statusSummary
+                liveRegion = LiveRegionMode.Polite
+            },
         contentAlignment = Alignment.Center
     ) {
         AgentStatusDot(
@@ -418,6 +446,7 @@ fun AgentStatusMenu(
     onOpenServerLogs: () -> Unit,
     onRestartServer: (() -> Unit)? = null
 ) {
+    val muted = accessibleMutedColor(alpha = 0.72f)
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
@@ -432,8 +461,8 @@ fun AgentStatusMenu(
             fontSize = 10.5.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 8.dp)
+            color = muted,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 8.dp).semantics { heading() }
         )
         Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             entries.forEach { AgentStatusRow(it) { onDismiss() } }
@@ -445,30 +474,32 @@ fun AgentStatusMenu(
         Row(
             Modifier
                 .fillMaxWidth()
-                .clickable {
+                .minTouchTarget(48.dp)
+                .clickable(role = Role.Button) {
                     onDismiss()
                     onOpenServerLogs()
                 }
                 .padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Outlined.Terminal, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(17.dp))
+            Icon(Icons.Outlined.Terminal, null, tint = muted, modifier = Modifier.size(17.dp))
             Spacer(Modifier.width(10.dp))
             Text(L.common.serverLogs, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = muted, modifier = Modifier.size(18.dp))
         }
         if (onRestartServer != null) {
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .clickable {
+                    .minTouchTarget(48.dp)
+                    .clickable(role = Role.Button) {
                         onDismiss()
                         onRestartServer()
                     }
                     .padding(horizontal = 16.dp, vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Outlined.RestartAlt, null, tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(17.dp))
+                Icon(Icons.Outlined.RestartAlt, null, tint = muted, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(L.common.restartServer, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
             }
@@ -490,18 +521,20 @@ fun AgentSetupPrompt(
     onSecondary: () -> Unit = {}
 ) {
     val accent = agent.accent()
+    val buttonBg = ensureAccessibleContrast(accent, Color.White, 4.5f)
+    val muted = accessibleMutedColor(alpha = 0.72f)
     Column(
         modifier.fillMaxWidth().padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AgentMark(agent, size = 60.dp, statusColor = statusColor)
         Spacer(Modifier.height(16.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(8.dp))
         Text(
             message,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+            color = muted,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             lineHeight = 20.sp
         )
@@ -510,13 +543,14 @@ fun AgentSetupPrompt(
             androidx.compose.material3.Button(
                 onClick = onAction,
                 shape = RoundedCornerShape(12.dp),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = buttonBg, contentColor = Color.White),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp),
+                modifier = Modifier.minTouchTarget(48.dp)
             ) { Text(actionLabel, fontSize = 14.sp, fontWeight = FontWeight.Medium) }
         }
         if (secondaryLabel != null) {
-            androidx.compose.material3.TextButton(onClick = onSecondary) {
-                Text(secondaryLabel, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+            androidx.compose.material3.TextButton(onClick = onSecondary, modifier = Modifier.minTouchTarget(48.dp)) {
+                Text(secondaryLabel, fontSize = 13.sp, color = muted)
             }
         }
     }

@@ -1,7 +1,12 @@
 package ai.antigem.ui.settings
 
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
 import ai.antigem.ui.components.ClaudeAccent
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import android.Manifest
 import android.content.ComponentName
 import android.content.Context
@@ -21,9 +26,19 @@ import ai.antigem.theme.isAppInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.Icons
@@ -394,7 +409,12 @@ fun SettingsDialog(
     // every list in settings bounces at its ends like iOS instead of Android's stretch
     ai.antigem.ui.components.ProvideBouncyOverscroll {
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .semantics {
+                paneTitle = L.common.settings
+                isTraversalGroup = true
+            },
         color = MaterialTheme.colorScheme.background
     ) {
         Column(
@@ -419,14 +439,15 @@ fun SettingsDialog(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { heading() }
                         )
                         if (currentSection != SettingsSection.MAIN) {
                             Text(
                                 text = if (isClaudePage) claudePage.subtitle else if (isOpenCodePage) openCodePage.subtitle
                                     else if (isCodexPage) codexPage.subtitle else currentSection.subtitle,
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                color = accessibleMutedColor(background = MaterialTheme.colorScheme.background),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -434,13 +455,16 @@ fun SettingsDialog(
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        if (currentSection != SettingsSection.MAIN) {
-                            currentSection = currentSection.parent
-                        } else {
-                            onDismiss()
-                        }
-                    }) {
+                    IconButton(
+                        onClick = {
+                            if (currentSection != SettingsSection.MAIN) {
+                                currentSection = currentSection.parent
+                            } else {
+                                onDismiss()
+                            }
+                        },
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = L.common.back,
@@ -449,7 +473,10 @@ fun SettingsDialog(
                     }
                 },
                 actions = {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Text(
                             text = L.common.done,
                             color = ClaudeTerracotta,
@@ -1349,27 +1376,33 @@ private fun TermuxApiSubScreen(cardBg: Color, cardBorder: BorderStroke) {
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                TermuxApiModeOption(
-                    selected = mode == env.TERMUX_API_PROVIDER_BUILTIN,
-                    title = L.common.builtIn,
-                    tag = "No app needed",
-                    description = L.settings.dialog.antigemHandlesClipboardToastTorch,
-                    enabled = true,
-                    onClick = { choose(env.TERMUX_API_PROVIDER_BUILTIN) }
-                )
-                TermuxApiModeOption(
-                    selected = mode == env.TERMUX_API_PROVIDER_EXTERNAL,
-                    title = L.settings.dialog.antigemsTermuxApiApp,
-                    tag = if (appInstalled) null else "Install it first",
-                    description = "Every termux-* command goes to the app ($apiApp), all of them supported.",
-                    enabled = appInstalled || mode == env.TERMUX_API_PROVIDER_EXTERNAL,
-                    onClick = { choose(env.TERMUX_API_PROVIDER_EXTERNAL) }
-                )
+                Column(
+                    modifier = Modifier.selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    TermuxApiModeOption(
+                        selected = mode == env.TERMUX_API_PROVIDER_BUILTIN,
+                        title = L.common.builtIn,
+                        tag = "No app needed",
+                        description = L.settings.dialog.antigemHandlesClipboardToastTorch,
+                        enabled = true,
+                        onClick = { choose(env.TERMUX_API_PROVIDER_BUILTIN) }
+                    )
+                    TermuxApiModeOption(
+                        selected = mode == env.TERMUX_API_PROVIDER_EXTERNAL,
+                        title = L.settings.dialog.antigemsTermuxApiApp,
+                        tag = if (appInstalled) null else "Install it first",
+                        description = "Every termux-* command goes to the app ($apiApp), all of them supported.",
+                        enabled = appInstalled || mode == env.TERMUX_API_PROVIDER_EXTERNAL,
+                        onClick = { choose(env.TERMUX_API_PROVIDER_EXTERNAL) }
+                    )
+                }
                 if (mode == env.TERMUX_API_PROVIDER_EXTERNAL && !appInstalled) {
                     Text(
                         text = L.settings.dialog.theAppIsntInstalledTermuxCommands,
                         fontSize = 11.5.sp,
-                        color = ai.antigem.theme.AppColors.warning
+                        color = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, cardBg, 4.5f, MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
             }
@@ -1390,6 +1423,7 @@ private fun TermuxApiSubScreen(cardBg: Color, cardBorder: BorderStroke) {
                     if (envInstalled) {
                         OutlinedButton(
                             onClick = { activeCommandExecution = L.settings.dialog.installTermuxApi to "pkg install -y termux-api" },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                         ) { Text(L.common.install, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
@@ -1400,7 +1434,7 @@ private fun TermuxApiSubScreen(cardBg: Color, cardBorder: BorderStroke) {
                             fontSize = 11.5.sp,
                             lineHeight = 15.sp,
                             textAlign = TextAlign.End,
-                            color = ai.antigem.theme.AppColors.warning
+                            color = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, cardBg, 4.5f, MaterialTheme.colorScheme.surface)
                         )
                     }
                 }
@@ -1415,6 +1449,7 @@ private fun TermuxApiSubScreen(cardBg: Color, cardBorder: BorderStroke) {
                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/santoshkurmi/termux-api/releases")))
                             } catch (_: Exception) {}
                         },
+                        modifier = Modifier.minTouchTarget(48.dp),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                     ) { Text(L.settings.dialog.getTheApp, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
@@ -1446,18 +1481,28 @@ private fun TermuxApiModeOption(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
+    val selectionModifier = if (enabled) {
+        Modifier.accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onClick)
+    } else {
+        Modifier
+            .minTouchTarget(48.dp)
+            .semantics(mergeDescendants = true) {
+                this.selected = selected
+                disabled()
+            }
+    }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .alpha(if (enabled) 1f else 0.55f)
-            .clickable(enabled = enabled, onClick = onClick),
+            .then(selectionModifier),
         shape = RoundedCornerShape(10.dp),
         color = if (selected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, if (selected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
     ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            RadioButton(selected = selected, onClick = onClick, enabled = enabled, colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta))
+            RadioButton(selected = selected, onClick = null, enabled = enabled, colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta))
             Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1516,12 +1561,15 @@ private fun ThemesSubScreen(
             text = L.settings.dialog.colorTheme,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() }
         )
 
         // 3 Theme Options Cards
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val themes = listOf(
@@ -1536,7 +1584,7 @@ private fun ThemesSubScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { onSetThemeMode(mode) },
+                        .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { onSetThemeMode(mode) },
                     shape = RoundedCornerShape(12.dp),
                     color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else cardBg,
                     border = BorderStroke(
@@ -1551,8 +1599,8 @@ private fun ThemesSubScreen(
                     ) {
                         Icon(
                             imageVector = icon,
-                            contentDescription = label,
-                            tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            contentDescription = null,
+                            tint = if (isSelected) ClaudeTerracotta else accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
@@ -1617,12 +1665,13 @@ private fun AppearanceSubScreen(
                     text = L.settings.dialog.chatTextScalingValue((chatFontScale * 100).toInt()),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Text(
                     text = L.settings.dialog.scalesMessagesMarkdownAndCodeBlocks,
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = accessibleMutedColor(background = MaterialTheme.colorScheme.background)
                 )
             }
         }
@@ -1638,7 +1687,7 @@ private fun AppearanceSubScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("A", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Text("A", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = accessibleMutedColor(background = cardBg))
                     Spacer(modifier = Modifier.width(10.dp))
                     Slider(
                         value = chatFontScale,
@@ -1659,7 +1708,9 @@ private fun AppearanceSubScreen(
 
                 val presets = listOf(0.85f to L.settings.dialog.small, 1.00f to L.settings.dialog.normal, 1.15f to L.settings.dialog.medium, 1.30f to L.settings.dialog.large, 1.50f to L.settings.dialog.huge)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     presets.forEach { (scale, label) ->
@@ -1668,7 +1719,7 @@ private fun AppearanceSubScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onSetChatFontScale(scale) },
+                                .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { onSetChatFontScale(scale) },
                             shape = RoundedCornerShape(8.dp),
                             color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
                             border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
@@ -1695,7 +1746,8 @@ private fun AppearanceSubScreen(
             text = L.settings.dialog.livePreview,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+            color = accessibleMutedColor(alpha = 0.8f, background = MaterialTheme.colorScheme.background),
+            modifier = Modifier.semantics { heading() }
         )
 
         Surface(
@@ -1760,7 +1812,11 @@ private fun AppearanceSubScreen(
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .accessibleToggleRow(checked = groupAgentSteps, role = Role.Switch) {
+                            onToggleGroupAgentSteps(!groupAgentSteps)
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1775,12 +1831,12 @@ private fun AppearanceSubScreen(
                         Text(
                             text = L.settings.dialog.runsOfThinkingAndToolCalls,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = accessibleMutedColor(background = cardBg)
                         )
                     }
                     Switch(
                         checked = groupAgentSteps,
-                        onCheckedChange = onToggleGroupAgentSteps,
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ClaudeTerracotta
@@ -1793,11 +1849,13 @@ private fun AppearanceSubScreen(
                     Text(
                         text = L.settings.dialog.foldAfterStepsInARow,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         (1..6).forEach { n ->
@@ -1806,7 +1864,7 @@ private fun AppearanceSubScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onSetGroupStepsMin(n) },
+                                    .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { onSetGroupStepsMin(n) },
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
                                 border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
@@ -1839,6 +1897,9 @@ private fun AppearanceSubScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .accessibleToggleRow(checked = showMessageStats, role = Role.Switch) {
+                        onToggleShowMessageStats(!showMessageStats)
+                    }
                     .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -1854,12 +1915,12 @@ private fun AppearanceSubScreen(
                     Text(
                         text = L.settings.dialog.tokenCountsCachePercentageAndTime,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                 }
                 Switch(
                     checked = showMessageStats,
-                    onCheckedChange = onToggleShowMessageStats,
+                    onCheckedChange = null,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = ClaudeTerracotta
@@ -1889,13 +1950,14 @@ private fun AppearanceSubScreen(
                         text = L.settings.dialog.floatingAppSwitcher,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = L.settings.dialog.theFloatingPillAcrossTheWhole,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                 }
 
@@ -1922,7 +1984,9 @@ private fun AppearanceSubScreen(
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val isVert = floatingSwitcherOrientation.equals("VERTICAL", ignoreCase = true)
@@ -1930,7 +1994,7 @@ private fun AppearanceSubScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .clickable { onSetFloatingSwitcherOrientation("VERTICAL") },
+                                .accessibleSelectionRow(selected = isVert, role = Role.RadioButton) { onSetFloatingSwitcherOrientation("VERTICAL") },
                             shape = RoundedCornerShape(10.dp),
                             color = if (isVert) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
                             border = BorderStroke(1.dp, if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
@@ -1940,7 +2004,7 @@ private fun AppearanceSubScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                Icon(Icons.Outlined.ExpandLess, contentDescription = null, tint = if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Outlined.ExpandLess, contentDescription = null, tint = if (isVert) ClaudeTerracotta else accessibleMutedColor(background = MaterialTheme.colorScheme.surface, minRatio = 3.0f), modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(L.settings.dialog.vertical, fontSize = 12.sp, fontWeight = if (isVert) FontWeight.Bold else FontWeight.Normal, color = if (isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface)
                             }
@@ -1950,7 +2014,7 @@ private fun AppearanceSubScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(10.dp))
-                                .clickable { onSetFloatingSwitcherOrientation("HORIZONTAL") },
+                                .accessibleSelectionRow(selected = !isVert, role = Role.RadioButton) { onSetFloatingSwitcherOrientation("HORIZONTAL") },
                             shape = RoundedCornerShape(10.dp),
                             color = if (!isVert) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
                             border = BorderStroke(1.dp, if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
@@ -1960,7 +2024,7 @@ private fun AppearanceSubScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.Center
                             ) {
-                                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (!isVert) ClaudeTerracotta else accessibleMutedColor(background = MaterialTheme.colorScheme.surface, minRatio = 3.0f), modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(L.settings.dialog.horizontal, fontSize = 12.sp, fontWeight = if (!isVert) FontWeight.Bold else FontWeight.Normal, color = if (!isVert) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface)
                             }
@@ -1981,43 +2045,45 @@ private fun AppearanceSubScreen(
                 Text(
                     text = L.settings.dialog.theIconOnTheSmallHandle,
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                    color = accessibleMutedColor(background = cardBg)
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 val handleIcons = ai.antigem.ui.components.FloatingSwitcherHandleIcons
                 // an unknown saved id shows the default icon, so mark that one
                 val selectedHandleIcon = handleIcons.firstOrNull { it.first == floatingSwitcherHandleIcon }?.first
                     ?: handleIcons.first().first
-                handleIcons.chunked(4).forEach { rowIcons ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 3.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowIcons.forEach { (iconId, icon) ->
-                            val isSelected = iconId == selectedHandleIcon
-                            Surface(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable { onSetFloatingSwitcherHandleIcon(iconId) },
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                            ) {
-                                Box(
+                Column(modifier = Modifier.selectableGroup()) {
+                    handleIcons.chunked(4).forEach { rowIcons ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            rowIcons.forEach { (iconId, icon) ->
+                                val isSelected = iconId == selectedHandleIcon
+                                Surface(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 10.dp),
-                                    contentAlignment = Alignment.Center
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { onSetFloatingSwitcherHandleIcon(iconId) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                                 ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = iconId.replaceFirstChar { it.uppercase() },
-                                        tint = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = iconId.replaceFirstChar { it.uppercase() },
+                                            tint = if (isSelected) ClaudeTerracotta else accessibleMutedColor(background = MaterialTheme.colorScheme.surface, minRatio = 3.0f),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2038,12 +2104,14 @@ private fun AppearanceSubScreen(
                     Text(
                         text = L.settings.dialog.automaticallyCollapsesIntoASmallHandle,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     val timeouts = listOf(0 to L.common.never, 3 to "3s", 5 to "5s", 10 to "10s", 15 to "15s")
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         timeouts.forEach { (sec, label) ->
@@ -2052,7 +2120,7 @@ private fun AppearanceSubScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onSetFloatingSwitcherAutoCollapseSec(sec) },
+                                    .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { onSetFloatingSwitcherAutoCollapseSec(sec) },
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
                                 border = BorderStroke(1.dp, if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f))
@@ -2122,31 +2190,37 @@ private fun AppearanceSubScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = isEnabled,
-                                    onCheckedChange = { checked ->
-                                        val updated = if (checked) {
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .accessibleToggleRow(checked = isEnabled, role = Role.Checkbox) {
+                                        val updated = if (!isEnabled) {
                                             currentItems + itemId
                                         } else {
                                             if (currentItems.size > 1) currentItems.filter { it != itemId } else currentItems
                                         }
                                         onSetFloatingSwitcherItems(updated)
                                     },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isEnabled,
+                                    onCheckedChange = null,
                                     colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta),
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Icon(itemIcon, contentDescription = null, tint = if (isEnabled) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
+                                Icon(itemIcon, contentDescription = null, tint = if (isEnabled) ClaudeTerracotta else accessibleMutedColor(background = cardBg, minRatio = 3.0f), modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = itemLabel,
                                     fontSize = 12.sp,
-                                    color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                    color = if (isEnabled) MaterialTheme.colorScheme.onSurface else accessibleMutedColor(background = cardBg)
                                 )
                             }
 
@@ -2164,7 +2238,7 @@ private fun AppearanceSubScreen(
                                             }
                                         },
                                         enabled = itemOrderIndex > 0,
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.minTouchTarget(48.dp)
                                     ) {
                                         Icon(Icons.Outlined.ExpandLess, contentDescription = L.settings.dialog.moveUp, modifier = Modifier.size(16.dp))
                                     }
@@ -2179,7 +2253,7 @@ private fun AppearanceSubScreen(
                                             }
                                         },
                                         enabled = itemOrderIndex < currentItems.size - 1,
-                                        modifier = Modifier.size(26.dp)
+                                        modifier = Modifier.minTouchTarget(48.dp)
                                     ) {
                                         Icon(Icons.Outlined.ExpandMore, contentDescription = L.settings.dialog.moveDown, modifier = Modifier.size(16.dp))
                                     }
@@ -2194,7 +2268,9 @@ private fun AppearanceSubScreen(
                 // Reset Position Button
                 OutlinedButton(
                     onClick = onResetFloatingSwitcherPosition,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minTouchTarget(48.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = ClaudeTerracotta)
                 ) {
@@ -2219,6 +2295,13 @@ private fun AppearanceSubScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .accessibleToggleRow(checked = isGemmyEnabled, role = Role.Switch) {
+                        val enable = !isGemmyEnabled
+                        gemmyScope.launch {
+                            gemmyPrefs.setGemmyEnabled(enable)
+                            gemmyPrefs.setHasSeenGemmyIntro(true) // decided here: no need for the intro dialog anymore
+                        }
+                    }
                     .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -2237,17 +2320,12 @@ private fun AppearanceSubScreen(
                     Text(
                         text = L.settings.dialog.aFloatingCartoonBuddyAcrossThe,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                 }
                 Switch(
                     checked = isGemmyEnabled,
-                    onCheckedChange = { enable ->
-                        gemmyScope.launch {
-                            gemmyPrefs.setGemmyEnabled(enable)
-                            gemmyPrefs.setHasSeenGemmyIntro(true) // decided here: no need for the intro dialog anymore
-                        }
-                    },
+                    onCheckedChange = null,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color.White,
                         checkedTrackColor = ClaudeTerracotta
@@ -2279,7 +2357,20 @@ private fun AppearanceSubScreen(
                     .padding(16.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .accessibleToggleRow(checked = isTerminalLauncherEnabled, role = Role.Switch) {
+                            val enable = !isTerminalLauncherEnabled
+                            isTerminalLauncherEnabled = enable
+                            ai.antigem.data.preferences.TerminalLauncherManager.applyLauncherSetting(
+                                context = context,
+                                enabled = enable,
+                                style = terminalLauncherStyle
+                            )
+                            coroutineScope.launch {
+                                authPrefs.setTerminalLauncherEnabled(enable)
+                            }
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2294,22 +2385,12 @@ private fun AppearanceSubScreen(
                         Text(
                             text = L.settings.dialog.showADedicatedTerminalIconOn,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = accessibleMutedColor(background = cardBg)
                         )
                     }
                     Switch(
                         checked = isTerminalLauncherEnabled,
-                        onCheckedChange = { enable ->
-                            isTerminalLauncherEnabled = enable
-                            ai.antigem.data.preferences.TerminalLauncherManager.applyLauncherSetting(
-                                context = context,
-                                enabled = enable,
-                                style = terminalLauncherStyle
-                            )
-                            coroutineScope.launch {
-                                authPrefs.setTerminalLauncherEnabled(enable)
-                            }
-                        },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ClaudeTerracotta
@@ -2326,6 +2407,7 @@ private fun AppearanceSubScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp)
+                            .selectableGroup()
                     ) {
                         HorizontalDivider(
                             modifier = Modifier.padding(vertical = 8.dp),
@@ -2336,7 +2418,7 @@ private fun AppearanceSubScreen(
                             text = L.settings.dialog.launcherIconNameStyle,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                            color = accessibleMutedColor(alpha = 0.75f, background = cardBg),
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
@@ -2351,7 +2433,8 @@ private fun AppearanceSubScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clip(RoundedCornerShape(10.dp))
+                                .accessibleSelectionRow(selected = isAntiTerm, role = Role.RadioButton) {
                                     terminalLauncherStyle = ai.antigem.data.preferences.TerminalLauncherManager.STYLE_ANTITERM
                                     ai.antigem.data.preferences.TerminalLauncherManager.applyLauncherSetting(
                                         context = context,
@@ -2376,7 +2459,7 @@ private fun AppearanceSubScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     ai.antigem.ui.components.AppIconImage(
-                                        contentDescription = "AntiTerm",
+                                        contentDescription = L.common.antiTerm,
                                         modifier = Modifier.matchParentSize()
                                     )
                                 }
@@ -2385,7 +2468,7 @@ private fun AppearanceSubScreen(
 
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "AntiTerm",
+                                        text = L.common.antiTerm,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -2393,23 +2476,13 @@ private fun AppearanceSubScreen(
                                     Text(
                                         text = L.settings.dialog.modernAntigemStyledIconName,
                                         fontSize = 10.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        color = accessibleMutedColor(background = cardBg)
                                     )
                                 }
 
                                 RadioButton(
                                     selected = isAntiTerm,
-                                    onClick = {
-                                        terminalLauncherStyle = ai.antigem.data.preferences.TerminalLauncherManager.STYLE_ANTITERM
-                                        ai.antigem.data.preferences.TerminalLauncherManager.applyLauncherSetting(
-                                            context = context,
-                                            enabled = true,
-                                            style = ai.antigem.data.preferences.TerminalLauncherManager.STYLE_ANTITERM
-                                        )
-                                        coroutineScope.launch {
-                                            authPrefs.setTerminalLauncherStyle(ai.antigem.data.preferences.TerminalLauncherManager.STYLE_ANTITERM)
-                                        }
-                                    },
+                                    onClick = null,
                                     colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                 )
                             }
@@ -2428,7 +2501,8 @@ private fun AppearanceSubScreen(
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
+                                .clip(RoundedCornerShape(10.dp))
+                                .accessibleSelectionRow(selected = isTermux, role = Role.RadioButton) {
                                     terminalLauncherStyle = ai.antigem.data.preferences.TerminalLauncherManager.STYLE_TERMUX
                                     ai.antigem.data.preferences.TerminalLauncherManager.applyLauncherSetting(
                                         context = context,
@@ -2473,23 +2547,13 @@ private fun AppearanceSubScreen(
                                     Text(
                                         text = L.settings.dialog.classicPromptIconName,
                                         fontSize = 10.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        color = accessibleMutedColor(background = cardBg)
                                     )
                                 }
 
                                 RadioButton(
                                     selected = isTermux,
-                                    onClick = {
-                                        terminalLauncherStyle = ai.antigem.data.preferences.TerminalLauncherManager.STYLE_TERMUX
-                                        ai.antigem.data.preferences.TerminalLauncherManager.applyLauncherSetting(
-                                            context = context,
-                                            enabled = true,
-                                            style = ai.antigem.data.preferences.TerminalLauncherManager.STYLE_TERMUX
-                                        )
-                                        coroutineScope.launch {
-                                            authPrefs.setTerminalLauncherStyle(ai.antigem.data.preferences.TerminalLauncherManager.STYLE_TERMUX)
-                                        }
-                                    },
+                                    onClick = null,
                                     colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta)
                                 )
                             }
@@ -2532,7 +2596,10 @@ internal fun McpPresetTile(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
         border = BorderStroke(1.dp, if (added) accent.copy(alpha = 0.45f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
-        modifier = modifier.clip(RoundedCornerShape(12.dp)).clickable(enabled = enabled, onClick = onClick)
+        modifier = modifier
+            .minTouchTarget(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -2562,7 +2629,7 @@ internal fun McpPresetTile(
                     if (added) addedLabel else subtitle,
                     fontSize = 10.5.sp,
                     lineHeight = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    color = accessibleMutedColor(background = MaterialTheme.colorScheme.surfaceVariant),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -2590,13 +2657,14 @@ private fun ChatHeaderIconsCard(
                 text = L.settings.dialog.chatHeaderIcons,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = L.settings.dialog.shortcutButtonsInTheChatsTop,
                 fontSize = 11.5.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                color = accessibleMutedColor(background = cardBg)
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -2641,26 +2709,32 @@ private fun ChatHeaderIconsCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleToggleRow(checked = isEnabled, role = Role.Checkbox) {
+                                    onSetItems(if (!isEnabled) currentItems + itemId else currentItems.filter { it != itemId })
+                                },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Checkbox(
                                 checked = isEnabled,
-                                onCheckedChange = { checked ->
-                                    onSetItems(if (checked) currentItems + itemId else currentItems.filter { it != itemId })
-                                },
+                                onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta),
                                 modifier = Modifier.size(24.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Icon(itemIcon, contentDescription = null, tint = if (isEnabled) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), modifier = Modifier.size(18.dp))
+                            Icon(itemIcon, contentDescription = null, tint = if (isEnabled) ClaudeTerracotta else accessibleMutedColor(background = cardBg, minRatio = 3.0f), modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
                                 text = itemLabel,
                                 fontSize = 12.sp,
-                                color = if (isEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                color = if (isEnabled) MaterialTheme.colorScheme.onSurface else accessibleMutedColor(background = cardBg)
                             )
                         }
 
@@ -2676,7 +2750,7 @@ private fun ChatHeaderIconsCard(
                                         }
                                     },
                                     enabled = index > 0,
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(Icons.Outlined.ExpandLess, contentDescription = L.settings.dialog.moveUp, modifier = Modifier.size(16.dp))
                                 }
@@ -2689,7 +2763,7 @@ private fun ChatHeaderIconsCard(
                                         }
                                     },
                                     enabled = index < currentItems.size - 1,
-                                    modifier = Modifier.size(26.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(Icons.Outlined.ExpandMore, contentDescription = L.settings.dialog.moveDown, modifier = Modifier.size(16.dp))
                                 }
@@ -2761,7 +2835,9 @@ private fun McpSubScreen(
             // Error banner when servers are already loaded in the list
             if (!errorMessage.isNullOrBlank() && mcpServers.isNotEmpty()) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { liveRegion = LiveRegionMode.Polite },
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
@@ -2787,12 +2863,12 @@ private fun McpSubScreen(
                         )
                         IconButton(
                             onClick = onClearStatus,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = L.common.dismiss,
-                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.6f),
+                                tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -2836,13 +2912,14 @@ private fun McpSubScreen(
                             text = L.settings.dialog.modelContextProtocolMcp,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = L.settings.dialog.globalConfigGeminiConfigMcpConfig,
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            color = accessibleMutedColor(background = cardBg),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -2932,7 +3009,8 @@ private fun McpSubScreen(
             text = L.settings.dialog.quickPresetsTemplates,
             fontSize = 12.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            color = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.background),
+            modifier = Modifier.semantics { heading() }
         )
 
         run {
@@ -3012,14 +3090,17 @@ private fun McpSubScreen(
                 fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(end = 8.dp)
+                    .semantics { heading() }
             )
             if (mcpServers.isNotEmpty()) {
                 val totalTools = mcpServers.sumOf { it.tools.size }
                 Text(
                     text = L.settings.dialog.totaltoolsToolsAvailable(totalTools),
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    color = accessibleMutedColor(background = MaterialTheme.colorScheme.background)
                 )
             }
         }
@@ -3089,7 +3170,7 @@ private fun McpSubScreen(
                         Text(
                             text = L.settings.dialog.couldNotRetrieveMcpServerStates,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            color = accessibleMutedColor(background = cardBg),
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -3126,7 +3207,7 @@ private fun McpSubScreen(
                         Icon(
                             imageVector = Icons.Outlined.Extension,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            tint = accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                             modifier = Modifier.size(44.dp)
                         )
                         Text(
@@ -3139,7 +3220,7 @@ private fun McpSubScreen(
                             text = L.settings.dialog.addAnMcpServerToConnect,
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            color = accessibleMutedColor(background = cardBg),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -3154,7 +3235,7 @@ private fun McpSubScreen(
             val isSse = server.spec?.serverUrl?.isNotBlank() == true
 
             val statusColor = when {
-                !server.isEnabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                !server.isEnabled -> accessibleMutedColor(background = cardBg)
                 server.status.contains("RUNNING", ignoreCase = true) || server.status.contains("OK", ignoreCase = true) || server.tools.isNotEmpty() -> QuotaGreen
                 server.status.contains("ERROR", ignoreCase = true) || !server.error.isNullOrBlank() -> Color.Red
                 else -> ai.antigem.theme.AppColors.warning
@@ -3181,7 +3262,12 @@ private fun McpSubScreen(
                 ) {
                     // Title and toggle row
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .accessibleToggleRow(checked = server.isEnabled, role = Role.Switch) {
+                                onToggleServer(server.name, !server.isEnabled)
+                            },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -3244,7 +3330,7 @@ private fun McpSubScreen(
 
                         Switch(
                             checked = server.isEnabled,
-                            onCheckedChange = { onToggleServer(server.name, it) },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = ClaudeTerracotta, checkedTrackColor = ClaudeTerracotta.copy(alpha = 0.4f))
                         )
                     }
@@ -3315,13 +3401,13 @@ private fun McpSubScreen(
                                     imageVector = Icons.Default.Folder,
                                     contentDescription = null,
                                     modifier = Modifier.size(12.dp),
-                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                    tint = accessibleMutedColor(background = cardBg, minRatio = 3.0f)
                                 )
                                 Text(
                                     text = L.settings.dialog.cwdCwd(server.spec!!.cwd),
                                     fontSize = 11.sp,
                                     fontFamily = FontFamily.Monospace,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                                    color = accessibleMutedColor(background = cardBg)
                                 )
                             }
                         }
@@ -3332,10 +3418,12 @@ private fun McpSubScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .minTouchTarget(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     expandedErrors = if (isErrorExpanded) expandedErrors - server.name else expandedErrors + server.name
-                                },
+                                }
+                                .semantics { liveRegion = LiveRegionMode.Polite },
                             shape = RoundedCornerShape(8.dp),
                             color = Color.Red.copy(alpha = 0.1f),
                             border = BorderStroke(1.dp, Color.Red.copy(alpha = 0.3f))
@@ -3352,7 +3440,7 @@ private fun McpSubScreen(
                                     }
                                     Icon(
                                         imageVector = if (isErrorExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        contentDescription = null,
+                                        contentDescription = if (isErrorExpanded) L.common.collapse else L.common.expand,
                                         tint = Color.Red,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -3375,6 +3463,7 @@ private fun McpSubScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .minTouchTarget(48.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable {
                                     expandedTools = if (isExpanded) expandedTools - server.name else expandedTools + server.name
@@ -3400,8 +3489,8 @@ private fun McpSubScreen(
                                     }
                                     Icon(
                                         imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                        contentDescription = if (isExpanded) L.common.collapse else L.common.expand,
+                                        tint = accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -3435,7 +3524,9 @@ private fun McpSubScreen(
 
                     // Card Action buttons
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -3443,6 +3534,7 @@ private fun McpSubScreen(
                         TextButton(
                             onClick = { onRefreshServer(server.name) },
                             enabled = !isRefreshing && !isLoading,
+                            modifier = Modifier.minTouchTarget(48.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             if (isThisRefreshing) {
@@ -3465,6 +3557,7 @@ private fun McpSubScreen(
                                 serverToEdit = server.spec ?: ai.antigem.domain.model.McpServerSpec(serverName = server.name)
                                 showDialog = true
                             },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
                             Icon(imageVector = Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -3476,6 +3569,7 @@ private fun McpSubScreen(
 
                         TextButton(
                             onClick = { serverToDelete = server.name },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             colors = ButtonDefaults.textButtonColors(contentColor = Color.Red),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
@@ -3499,6 +3593,7 @@ private fun McpSubScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Surface(
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp),
             tonalElevation = 6.dp,
@@ -3527,12 +3622,12 @@ private fun McpSubScreen(
                 )
                 IconButton(
                     onClick = onClearStatus,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = L.common.dismiss,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        tint = accessibleMutedColor(background = MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp), minRatio = 3.0f),
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -3820,7 +3915,9 @@ private fun AddEditMcpServerDialog(
             ) {
                 // Mode Selector: Stdio | SSE | Raw
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
@@ -3833,7 +3930,7 @@ private fun AddEditMcpServerDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable {
+                                .accessibleSelectionRow(selected = isSelected, role = Role.Tab) {
                                     if (mode != m) {
                                         if (m == McpEditMode.RAW) {
                                             rawJsonText = buildJsonFromFields()
@@ -3884,7 +3981,7 @@ private fun AddEditMcpServerDialog(
                                 text = L.settings.dialog.serverConfigurationJson,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = accessibleMutedColor(background = MaterialTheme.colorScheme.surface)
                             )
                             TextButton(
                                 onClick = {
@@ -3896,6 +3993,7 @@ private fun AddEditMcpServerDialog(
                                         validationError = L.settings.dialog.invalidJsonMessage(e.message)
                                     }
                                 },
+                                modifier = Modifier.minTouchTarget(48.dp),
                                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(L.settings.dialog.format, fontSize = 11.sp, color = ClaudeTerracotta)
@@ -3992,7 +4090,7 @@ private fun AddEditMcpServerDialog(
                             Text(
                                 text = L.settings.dialog.setCustomHeadersLikeApiKeys,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = accessibleMutedColor(background = MaterialTheme.colorScheme.surface)
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -4004,7 +4102,8 @@ private fun AddEditMcpServerDialog(
                         text = validationError ?: "",
                         fontSize = 12.sp,
                         color = Color.Red,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                 }
             }
@@ -4183,7 +4282,19 @@ private fun TerminalSubScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .let { mod ->
+                            if (!remoteMode) {
+                                mod
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .accessibleToggleRow(checked = useSshTerminal, role = Role.Switch) {
+                                        onToggleUseSshTerminal(!useSshTerminal)
+                                    }
+                            } else {
+                                mod
+                            }
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -4198,12 +4309,12 @@ private fun TerminalSubScreen(
                         Text(
                             text = if (remoteMode) L.settings.dialog.runsOnYourRemoteServerOver else if (useSshTerminal) L.settings.dialog.directSshToTermuxSshdWithout else L.settings.dialog.builtInChrootRootfsEnvironment,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = accessibleMutedColor(background = cardBg)
                         )
                     }
                     if (!remoteMode) Switch(
                         checked = useSshTerminal,
-                        onCheckedChange = { onToggleUseSshTerminal(it) },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = QuotaGreen
@@ -4216,7 +4327,7 @@ private fun TerminalSubScreen(
                     Text(
                         text = L.settings.dialog.remoteServerModeIsOnThe((if (sshHost.isNotBlank()) " ($sshUser@$sshHost:$sshPort)" else "")),
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                 }
 
@@ -4287,7 +4398,8 @@ private fun TerminalSubScreen(
                             text = sshTestStatus ?: "",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Medium,
-                            color = if (sshTestStatus?.startsWith("✓") == true) QuotaGreen else Color.Red
+                            color = if (sshTestStatus?.startsWith("✓") == true) ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, MaterialTheme.colorScheme.surface) else MaterialTheme.colorScheme.error,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
 
@@ -4322,14 +4434,16 @@ private fun TerminalSubScreen(
                     if (sshSaveFeedback != null) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Surface(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { liveRegion = LiveRegionMode.Polite },
                             shape = RoundedCornerShape(8.dp),
                             color = QuotaGreen.copy(alpha = 0.12f)
                         ) {
                             Text(
                                 text = sshSaveFeedback ?: "",
                                 fontSize = 12.sp,
-                                color = QuotaGreen,
+                                color = ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, MaterialTheme.colorScheme.surface),
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(10.dp)
                             )
@@ -4357,9 +4471,12 @@ private fun TerminalSubScreen(
                     Text(
                         text = L.settings.dialog.terminalTabsOpenAShellWhere,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
-                    TextButton(onClick = onOpenRuntime) { Text(L.settings.dialog.whereAgentsRun, color = ClaudeTerracotta) }
+                    TextButton(
+                        onClick = onOpenRuntime,
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) { Text(L.settings.dialog.whereAgentsRun, color = ClaudeTerracotta) }
                 }
             }
         }
@@ -4369,7 +4486,8 @@ private fun TerminalSubScreen(
             text = L.settings.dialog.terminalCustomization,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.semantics { heading() }
         )
 
         Card(
@@ -4401,7 +4519,12 @@ private fun TerminalSubScreen(
 
                 // Cursor Style
                 Text(L.settings.dialog.cursorStyle, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     val cursorOptions = listOf("BLOCK" to "Block █", "UNDERLINE" to L.settings.dialog.underline, "BAR" to "Bar |")
                     cursorOptions.forEach { (style, label) ->
                         val isSel = cursorStyleState == style
@@ -4409,7 +4532,7 @@ private fun TerminalSubScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable {
+                                .accessibleSelectionRow(selected = isSel, role = Role.RadioButton) {
                                     cursorStyleState = style
                                     onSaveTerminalPreferences(fontSizeState, style, bufferSizeState, themeState)
                                 },
@@ -4429,7 +4552,8 @@ private fun TerminalSubScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
+                        .horizontalScroll(rememberScrollState())
+                        .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val buffers = listOf(
@@ -4445,7 +4569,7 @@ private fun TerminalSubScreen(
                         Surface(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable {
+                                .accessibleSelectionRow(selected = isSel, role = Role.RadioButton) {
                                     bufferSizeState = buf
                                     onSaveTerminalPreferences(fontSizeState, cursorStyleState, buf, themeState)
                                 },
@@ -4462,7 +4586,12 @@ private fun TerminalSubScreen(
 
                 // Floating session pill on/off
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .accessibleToggleRow(checked = sessionPillEnabled, role = Role.Switch) {
+                            coroutineScope.launch { terminalPrefs.saveTerminalSessionPillEnabled(!sessionPillEnabled) }
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -4472,12 +4601,12 @@ private fun TerminalSubScreen(
                         Text(
                             text = L.settings.dialog.theSessionNameAtTheTop,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = accessibleMutedColor(background = cardBg)
                         )
                     }
                     Switch(
                         checked = sessionPillEnabled,
-                        onCheckedChange = { enabled -> coroutineScope.launch { terminalPrefs.saveTerminalSessionPillEnabled(enabled) } },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ClaudeTerracotta
@@ -4492,11 +4621,13 @@ private fun TerminalSubScreen(
                     Text(
                         text = L.settings.dialog.withGestureNavigationASwipeFrom,
                         fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("TOP" to L.settings.dialog.top, "MIDDLE" to L.settings.dialog.middle, "BOTTOM" to L.settings.dialog.bottom).forEach { (area, label) ->
@@ -4505,7 +4636,9 @@ private fun TerminalSubScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { coroutineScope.launch { terminalPrefs.saveTerminalDrawerSwipeArea(area) } },
+                                    .accessibleSelectionRow(selected = isSel, role = Role.RadioButton) {
+                                        coroutineScope.launch { terminalPrefs.saveTerminalDrawerSwipeArea(area) }
+                                    },
                                 shape = RoundedCornerShape(8.dp),
                                 color = if (isSel) ClaudeTerracotta else MaterialTheme.colorScheme.surface,
                                 border = BorderStroke(1.dp, if (isSel) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
@@ -4520,7 +4653,12 @@ private fun TerminalSubScreen(
 
                 // Keyboard input mode: text mode (keyboard toolbar + clipboard) or key presses only (TYPE_NULL)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .accessibleToggleRow(checked = charBasedInput, role = Role.Switch) {
+                            coroutineScope.launch { terminalPrefs.saveTerminalCharBasedInput(!charBasedInput) }
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -4530,12 +4668,12 @@ private fun TerminalSubScreen(
                         Text(
                             text = L.settings.dialog.forKeyboardsThatMisbehaveInThe,
                             fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = accessibleMutedColor(background = cardBg)
                         )
                     }
                     Switch(
                         checked = charBasedInput,
-                        onCheckedChange = { enabled -> coroutineScope.launch { terminalPrefs.saveTerminalCharBasedInput(enabled) } },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ClaudeTerracotta
@@ -4881,7 +5019,9 @@ private fun BackupsSubScreen(
                 shape = RoundedCornerShape(14.dp),
                 color = ai.antigem.theme.AppColors.warning.copy(alpha = 0.08f),
                 border = BorderStroke(1.dp, ai.antigem.theme.AppColors.warning.copy(alpha = 0.25f)),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite }
             ) {
                 Row(
                     modifier = Modifier.padding(14.dp),
@@ -4905,7 +5045,7 @@ private fun BackupsSubScreen(
                         Text(
                             text = L.settings.dialog.stopItBeforeBackingUpOr,
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            color = accessibleMutedColor(background = MaterialTheme.colorScheme.background),
                             lineHeight = 17.sp
                         )
                         Spacer(modifier = Modifier.height(10.dp))
@@ -4915,7 +5055,7 @@ private fun BackupsSubScreen(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)),
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
                             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                            modifier = Modifier.height(36.dp)
+                            modifier = Modifier.minTouchTarget(48.dp)
                         ) {
                             Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
@@ -5071,10 +5211,13 @@ private fun BackupsSubScreen(
                         singleLine = true,
                         visualTransformation = if (showBackupPasswordText) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
-                            IconButton(onClick = { showBackupPasswordText = !showBackupPasswordText }) {
+                            IconButton(
+                                onClick = { showBackupPasswordText = !showBackupPasswordText },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) {
                                 Icon(
                                     imageVector = if (showBackupPasswordText) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null,
+                                    contentDescription = if (showBackupPasswordText) L.common.hide else L.common.show,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -5130,18 +5273,20 @@ private fun BackupsSubScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .clickable { envBackupIncludeSecrets = !envBackupIncludeSecrets }
+                            .accessibleToggleRow(checked = envBackupIncludeSecrets, role = Role.Checkbox) {
+                                envBackupIncludeSecrets = !envBackupIncludeSecrets
+                            }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Checkbox(checked = envBackupIncludeSecrets, onCheckedChange = { envBackupIncludeSecrets = it })
+                        Checkbox(checked = envBackupIncludeSecrets, onCheckedChange = null)
                         Column(modifier = Modifier.weight(1f)) {
                             Text(L.settings.dialog.includeSshKeysAndSignIns, fontSize = 13.5.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                             Text(
                                 L.settings.dialog.sshKeysAgentAndGithubLogins,
                                 fontSize = 12.sp,
                                 lineHeight = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                color = accessibleMutedColor(background = MaterialTheme.colorScheme.surface)
                             )
                         }
                     }
@@ -5196,7 +5341,10 @@ private fun BackupsSubScreen(
                         placeholder = { Text("/sdcard/Download/agy_chats_backup_....zip") },
                         singleLine = true,
                         trailingIcon = {
-                            IconButton(onClick = { filePickerLauncher.launch("*/*") }) {
+                            IconButton(
+                                onClick = { filePickerLauncher.launch("*/*") },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) {
                                 Icon(Icons.Outlined.FolderOpen, contentDescription = L.settings.dialog.chooseFile, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         },
@@ -5210,10 +5358,13 @@ private fun BackupsSubScreen(
                         singleLine = true,
                         visualTransformation = if (showRestorePasswordText) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = {
-                            IconButton(onClick = { showRestorePasswordText = !showRestorePasswordText }) {
+                            IconButton(
+                                onClick = { showRestorePasswordText = !showRestorePasswordText },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) {
                                 Icon(
                                     imageVector = if (showRestorePasswordText) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null,
+                                    contentDescription = if (showRestorePasswordText) L.common.hide else L.common.show,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -5282,8 +5433,10 @@ private fun BackupSectionLabel(text: String) {
         fontSize = 11.5.sp,
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.8.sp,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+        color = accessibleMutedColor(background = MaterialTheme.colorScheme.background),
+        modifier = Modifier
+            .padding(start = 4.dp, top = 4.dp)
+            .semantics { heading() }
     )
 }
 
@@ -5362,7 +5515,7 @@ private fun BackupActionCard(
                     Text(
                         text = subtitle,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                 }
             }
@@ -5382,14 +5535,14 @@ private fun BackupActionCard(
                         Icons.Outlined.Folder,
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                        tint = accessibleMutedColor(background = cardBg, minRatio = 3.0f)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = savesTo,
                         fontSize = 11.5.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                        color = accessibleMutedColor(background = cardBg),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -5414,7 +5567,7 @@ private fun BackupPrimaryButton(text: String, icon: androidx.compose.ui.graphics
         shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta, contentColor = Color.White),
         elevation = null,
-        modifier = Modifier.fillMaxWidth().height(44.dp)
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -5429,7 +5582,7 @@ private fun BackupSecondaryButton(text: String, icon: androidx.compose.ui.graphi
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
-        modifier = Modifier.fillMaxWidth().height(44.dp)
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(8.dp))
@@ -5702,16 +5855,20 @@ private fun ProjectsBackupRestoreDialog(
                                 text = L.settings.dialog.projectsBackupRestore,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = L.settings.dialog.backupIdeAgyWorkspacesOrRestore,
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = accessibleMutedColor(background = MaterialTheme.colorScheme.surface)
                             )
                         }
                     }
-                    IconButton(onClick = onDismiss) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.minTouchTarget(48.dp)
+                    ) {
                         Icon(Icons.Default.Close, contentDescription = L.common.close, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -5768,7 +5925,9 @@ private fun ProjectsBackupRestoreDialog(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectableGroup(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     // Git-Aware (Clean)
@@ -5778,7 +5937,8 @@ private fun ProjectsBackupRestoreDialog(
                                         border = BorderStroke(1.dp, if (backupMode == "git") ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .clickable { backupMode = "git" }
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .accessibleSelectionRow(selected = backupMode == "git", role = Role.RadioButton) { backupMode = "git" }
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(8.dp),
@@ -5805,7 +5965,8 @@ private fun ProjectsBackupRestoreDialog(
                                         border = BorderStroke(1.dp, if (backupMode == "full") ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .clickable { backupMode = "full" }
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .accessibleSelectionRow(selected = backupMode == "full", role = Role.RadioButton) { backupMode = "full" }
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(8.dp),
@@ -5846,12 +6007,14 @@ private fun ProjectsBackupRestoreDialog(
                                         selectedProjectPaths.clear()
                                         selectedProjectPaths.addAll(validProjects.map { it.path })
                                     },
+                                    modifier = Modifier.minTouchTarget(48.dp),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Text(L.settings.dialog.selectAll, fontSize = 11.5.sp, color = ClaudeTerracotta)
                                 }
                                 TextButton(
                                     onClick = { selectedProjectPaths.clear() },
+                                    modifier = Modifier.minTouchTarget(48.dp),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Text(L.settings.dialog.deselectAll, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -5946,7 +6109,8 @@ private fun ProjectsBackupRestoreDialog(
                                             ),
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clickable { toggleNode() }
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .accessibleToggleRow(checked = isSelected, role = Role.Checkbox) { toggleNode() }
                                         ) {
                                             Row(
                                                 modifier = Modifier.padding(10.dp),
@@ -5955,7 +6119,7 @@ private fun ProjectsBackupRestoreDialog(
                                             ) {
                                                 Checkbox(
                                                     checked = isSelected,
-                                                    onCheckedChange = { toggleNode() },
+                                                    onCheckedChange = null,
                                                     colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta),
                                                     modifier = Modifier.size(20.dp)
                                                 )
@@ -6104,7 +6268,9 @@ private fun ProjectsBackupRestoreDialog(
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.padding(vertical = 4.dp)
+                                modifier = Modifier
+                                    .padding(vertical = 4.dp)
+                                    .semantics { liveRegion = LiveRegionMode.Polite }
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = ClaudeTerracotta)
                                 Text(L.settings.dialog.inspectingArchiveContentsManifest, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -6112,7 +6278,12 @@ private fun ProjectsBackupRestoreDialog(
                         }
 
                         archiveError?.let { err ->
-                            Text(text = err, color = ai.antigem.theme.AppColors.danger, fontSize = 11.5.sp)
+                            Text(
+                                text = err,
+                                color = ai.antigem.theme.AppColors.danger,
+                                fontSize = 11.5.sp,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                            )
                         }
 
                         if (manifestProjects.isNotEmpty()) {
@@ -6170,7 +6341,12 @@ private fun ProjectsBackupRestoreDialog(
                             border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(10.dp)
+                                    .selectableGroup(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 Text(
                                     text = L.settings.dialog.ifTargetProjectFolderAlreadyExists,
                                     fontSize = 12.sp,
@@ -6183,7 +6359,9 @@ private fun ProjectsBackupRestoreDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(6.dp))
-                                        .clickable { conflictStrategy = "bak" }
+                                        .accessibleSelectionRow(selected = conflictStrategy == "bak", role = Role.RadioButton) {
+                                            conflictStrategy = "bak"
+                                        }
                                         .padding(4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -6205,7 +6383,9 @@ private fun ProjectsBackupRestoreDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(6.dp))
-                                        .clickable { conflictStrategy = "overwrite" }
+                                        .accessibleSelectionRow(selected = conflictStrategy == "overwrite", role = Role.RadioButton) {
+                                            conflictStrategy = "overwrite"
+                                        }
                                         .padding(4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -6226,12 +6406,18 @@ private fun ProjectsBackupRestoreDialog(
 
                         // Optional: Custom Root Target Directory
                         Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleToggleRow(checked = useCustomRestoreDir, role = Role.Checkbox) {
+                                    useCustomRestoreDir = !useCustomRestoreDir
+                                },
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Checkbox(
                                 checked = useCustomRestoreDir,
-                                onCheckedChange = { useCustomRestoreDir = it },
+                                onCheckedChange = null,
                                 colors = CheckboxDefaults.colors(checkedColor = ClaudeTerracotta),
                                 modifier = Modifier.size(20.dp)
                             )
@@ -6398,18 +6584,20 @@ private fun ScriptExecutionDialog(
                                 text = info.title,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = if (isRunning) L.settings.dialog.executingInRootfsEnvironment else if (exitCode == 0) L.settings.dialog.completedInValueSExit0((durationMs / 1000.0)) else L.settings.dialog.finishedWithErrorExitExitcode(exitCode),
                                 fontSize = 11.5.sp,
-                                color = if (isRunning) GeminiBlue else if (exitCode == 0) QuotaGreen else Color.Red
+                                color = if (isRunning) GeminiBlue else if (exitCode == 0) QuotaGreen else Color.Red,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                     }
 
                     if (!isRunning) {
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(Icons.Default.Close, contentDescription = L.common.close, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -6601,18 +6789,20 @@ private fun CommandExecutionDialog(
                                 text = title,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.semantics { heading() }
                             )
                             Text(
                                 text = if (isRunning) L.settings.dialog.executingInTerminalEnvironment else if (exitCode == 0) L.settings.dialog.completedSuccessfullyInValueS((durationMs / 1000.0)) else L.settings.dialog.finishedWithExitCodeExitcode(exitCode),
                                 fontSize = 11.5.sp,
-                                color = if (isRunning) GeminiBlue else if (exitCode == 0) QuotaGreen else Color.Red
+                                color = if (isRunning) GeminiBlue else if (exitCode == 0) QuotaGreen else Color.Red,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                             )
                         }
                     }
 
                     if (!isRunning) {
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        IconButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) {
                             Icon(Icons.Default.Close, contentDescription = L.common.close, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -6757,12 +6947,13 @@ private fun DataProtectionSubScreen(
                         text = L.settings.dialog.dataLossPrevention,
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Text(
                         text = L.settings.dialog.protectYourLocalLinuxEnvironmentCli,
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        color = accessibleMutedColor(background = cardBg),
                         lineHeight = 16.sp
                     )
                 }
@@ -6790,7 +6981,7 @@ private fun DataProtectionSubScreen(
                             Icon(
                                 imageVector = if (isAdminActive) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
                                 contentDescription = null,
-                                tint = if (isAdminActive) QuotaGreen else Color.Gray,
+                                tint = if (isAdminActive) QuotaGreen else accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -6800,13 +6991,15 @@ private fun DataProtectionSubScreen(
                             text = L.settings.dialog.accidentalUninstallProtection,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = if (isAdminActive) L.settings.dialog.statusProtectedDeviceAdminActive else L.settings.dialog.statusInactiveOptional,
                             fontSize = 12.sp,
-                            color = if (isAdminActive) QuotaGreen else Color.Gray,
-                            fontWeight = FontWeight.SemiBold
+                            color = if (isAdminActive) ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, MaterialTheme.colorScheme.surface) else accessibleMutedColor(background = cardBg),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                         )
                     }
                 }
@@ -6815,7 +7008,7 @@ private fun DataProtectionSubScreen(
                 Text(
                     text = L.settings.dialog.whyEnableThisAntigemHostsA,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = accessibleMutedColor(background = cardBg),
                     lineHeight = 16.sp
                 )
 
@@ -6897,7 +7090,9 @@ private fun DataProtectionSubScreen(
                                             context.startActivity(appInfoIntent)
                                         } catch (_: Exception) {}
                                     },
-                                    modifier = Modifier.align(Alignment.End)
+                                    modifier = Modifier
+                                        .align(Alignment.End)
+                                        .minTouchTarget(48.dp)
                                 ) {
                                     Text(L.settings.dialog.openAppInfo, fontSize = 11.5.sp)
                                 }
@@ -6917,6 +7112,14 @@ private fun DataProtectionSubScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = isShieldEnabled, role = Role.Switch) {
+                            val enabled = !isShieldEnabled
+                            ManageSpaceActivity.setShieldEnabled(context, enabled)
+                            isShieldEnabled = ManageSpaceActivity.isShieldEnabled(context)
+                        },
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -6929,7 +7132,7 @@ private fun DataProtectionSubScreen(
                             Icon(
                                 imageVector = Icons.Outlined.CleaningServices,
                                 contentDescription = null,
-                                tint = if (isShieldEnabled) GeminiBlue else Color.Gray,
+                                tint = if (isShieldEnabled) GeminiBlue else accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -6939,20 +7142,18 @@ private fun DataProtectionSubScreen(
                             text = L.settings.dialog.appInfoClearDataShield,
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Text(
                             text = L.settings.dialog.replacesClearDataWithTheSpace,
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = accessibleMutedColor(background = cardBg)
                         )
                     }
                     Switch(
                         checked = isShieldEnabled,
-                        onCheckedChange = { enabled ->
-                            ManageSpaceActivity.setShieldEnabled(context, enabled)
-                            isShieldEnabled = ManageSpaceActivity.isShieldEnabled(context)
-                        }
+                        onCheckedChange = null
                     )
                 }
 
@@ -6960,7 +7161,7 @@ private fun DataProtectionSubScreen(
                 Text(
                     text = L.settings.dialog.whenEnabledDefaultTappingClearData,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = accessibleMutedColor(background = cardBg),
                     lineHeight = 16.sp
                 )
 
@@ -7069,7 +7270,8 @@ private fun CommandsSubScreen(
                         text = L.settings.dialog.globalSecurityPolicies,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -7080,7 +7282,7 @@ private fun CommandsSubScreen(
                 }
                 IconButton(
                     onClick = onRefreshSecurityAndProjects,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.minTouchTarget(48.dp)
                 ) {
                     if (isGlobalSettingsLoading) {
                         CircularProgressIndicator(
@@ -7124,7 +7326,9 @@ private fun CommandsSubScreen(
                 }
             } else {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics { liveRegion = LiveRegionMode.Polite },
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
@@ -7199,7 +7403,8 @@ private fun CommandsSubScreen(
                     text = L.settings.dialog.globalSecurityPolicies,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
@@ -7210,7 +7415,7 @@ private fun CommandsSubScreen(
             }
             IconButton(
                 onClick = onRefreshSecurityAndProjects,
-                modifier = Modifier.size(36.dp)
+                modifier = Modifier.minTouchTarget(48.dp)
             ) {
                 if (isGlobalSettingsLoading || isProjectsLoading) {
                     CircularProgressIndicator(
@@ -7237,7 +7442,8 @@ private fun CommandsSubScreen(
                 text = L.settings.dialog.artifactReviewPolicy,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
@@ -7248,7 +7454,9 @@ private fun CommandsSubScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             val isAutoReview = activeArtifactReview.contains("TURBO", ignoreCase = true)
@@ -7259,7 +7467,9 @@ private fun CommandsSubScreen(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSetGlobalArtifactReviewMode("ARTIFACT_REVIEW_MODE_TURBO") },
+                    .accessibleSelectionRow(selected = isAutoReview, role = Role.RadioButton) {
+                        onSetGlobalArtifactReviewMode("ARTIFACT_REVIEW_MODE_TURBO")
+                    },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isAutoReview) ClaudeTerracotta.copy(alpha = 0.08f) else cardBg
@@ -7283,7 +7493,7 @@ private fun CommandsSubScreen(
                         )
                         RadioButton(
                             selected = isAutoReview,
-                            onClick = { onSetGlobalArtifactReviewMode("ARTIFACT_REVIEW_MODE_TURBO") },
+                            onClick = null,
                             colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta),
                             modifier = Modifier.size(18.dp)
                         )
@@ -7303,7 +7513,9 @@ private fun CommandsSubScreen(
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSetGlobalArtifactReviewMode("ARTIFACT_REVIEW_MODE_ALWAYS") },
+                    .accessibleSelectionRow(selected = isAlwaysReview, role = Role.RadioButton) {
+                        onSetGlobalArtifactReviewMode("ARTIFACT_REVIEW_MODE_ALWAYS")
+                    },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = if (isAlwaysReview) ClaudeTerracotta.copy(alpha = 0.08f) else cardBg
@@ -7327,7 +7539,7 @@ private fun CommandsSubScreen(
                         )
                         RadioButton(
                             selected = isAlwaysReview,
-                            onClick = { onSetGlobalArtifactReviewMode("ARTIFACT_REVIEW_MODE_ALWAYS") },
+                            onClick = null,
                             colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta),
                             modifier = Modifier.size(18.dp)
                         )
@@ -7353,7 +7565,8 @@ private fun CommandsSubScreen(
                 text = L.settings.dialog.securityPresets,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
@@ -7386,180 +7599,176 @@ private fun CommandsSubScreen(
             ) to (L.settings.dialog.custom to ai.antigem.theme.AppColors.accentAlt)
         )
 
-        presets.forEach { (presetInfo, badgeInfo) ->
-            val (presetKey, title, desc) = presetInfo
-            val (badgeText, badgeColor) = badgeInfo
-            val isSelected = when (presetKey) {
-                "DEFAULT" -> isDefaultMode
-                "FULL_MACHINE" -> isMachineMode
-                "TURBO" -> isTurboMode
-                "CUSTOM" -> customExpanded || (!isDefaultMode && !isMachineMode && !isTurboMode)
-                else -> false
-            }
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable {
-                        when (presetKey) {
-                            "DEFAULT" -> {
-                                customExpanded = false
-                                onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_OFF", "AGENT_SETTING_POLICY_ASK")
-                            }
-                            "FULL_MACHINE" -> {
-                                customExpanded = false
-                                onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_OFF", "AGENT_SETTING_POLICY_ALLOW")
-                            }
-                            "TURBO" -> {
-                                customExpanded = false
-                                onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_EAGER", "AGENT_SETTING_POLICY_ALLOW")
-                            }
-                            "CUSTOM" -> {
-                                customExpanded = true
-                            }
+        Column(
+            modifier = Modifier.selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            presets.forEach { (presetInfo, badgeInfo) ->
+                val (presetKey, title, desc) = presetInfo
+                val (badgeText, badgeColor) = badgeInfo
+                val isSelected = when (presetKey) {
+                    "DEFAULT" -> isDefaultMode
+                    "FULL_MACHINE" -> isMachineMode
+                    "TURBO" -> isTurboMode
+                    "CUSTOM" -> customExpanded || (!isDefaultMode && !isMachineMode && !isTurboMode)
+                    else -> false
+                }
+                val selectPreset = {
+                    when (presetKey) {
+                        "DEFAULT" -> {
+                            customExpanded = false
+                            onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_OFF", "AGENT_SETTING_POLICY_ASK")
                         }
-                    },
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSelected) ClaudeTerracotta.copy(alpha = 0.08f) else cardBg
-                ),
-                border = BorderStroke(
-                    if (isSelected) 1.5.dp else 1.dp,
-                    if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                )
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = {
-                                when (presetKey) {
-                                    "DEFAULT" -> {
-                                        customExpanded = false
-                                        onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_OFF", "AGENT_SETTING_POLICY_ASK")
-                                    }
-                                    "FULL_MACHINE" -> {
-                                        customExpanded = false
-                                        onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_OFF", "AGENT_SETTING_POLICY_ALLOW")
-                                    }
-                                    "TURBO" -> {
-                                        customExpanded = false
-                                        onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_EAGER", "AGENT_SETTING_POLICY_ALLOW")
-                                    }
-                                    "CUSTOM" -> {
-                                        customExpanded = true
-                                    }
-                                }
-                            },
-                            colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = title,
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = badgeColor.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = badgeText,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = badgeColor,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                        "FULL_MACHINE" -> {
+                            customExpanded = false
+                            onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_OFF", "AGENT_SETTING_POLICY_ALLOW")
+                        }
+                        "TURBO" -> {
+                            customExpanded = false
+                            onSetGlobalSecurityPreset("CASCADE_COMMANDS_AUTO_EXECUTION_EAGER", "AGENT_SETTING_POLICY_ALLOW")
+                        }
+                        "CUSTOM" -> {
+                            customExpanded = true
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = desc,
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(start = 32.dp)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) ClaudeTerracotta.copy(alpha = 0.08f) else cardBg
+                    ),
+                    border = BorderStroke(
+                        if (isSelected) 1.5.dp else 1.dp,
+                        if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                     )
-
-                    // Granular Controls inside Custom Mode
-                    if (presetKey == "CUSTOM" && isSelected) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Granular: Terminal Execution
-                        Text(
-                            text = L.settings.dialog.terminalCommandExecution,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) { selectPreset() }
                         ) {
-                            val isTermOff = activeAutoExec.contains("OFF", ignoreCase = true)
-                            val isTermEager = activeAutoExec.contains("EAGER", ignoreCase = true)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = isSelected,
+                                    onClick = null,
+                                    colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = title,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) ClaudeTerracotta else MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = badgeColor.copy(alpha = 0.15f)
+                                ) {
+                                    Text(
+                                        text = badgeText,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = badgeColor,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
 
-                            FilterChip(
-                                selected = isTermOff,
-                                onClick = { onSetGlobalCustomTerminalPolicy("CASCADE_COMMANDS_AUTO_EXECUTION_OFF") },
-                                label = { Text(L.settings.dialog.askEveryTime, fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = isTermEager,
-                                onClick = { onSetGlobalCustomTerminalPolicy("CASCADE_COMMANDS_AUTO_EXECUTION_EAGER") },
-                                label = { Text(L.settings.dialog.autoRunEager, fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = desc,
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp,
+                                modifier = Modifier.padding(start = 32.dp)
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        // Granular Controls inside Custom Mode
+                        if (presetKey == "CUSTOM" && isSelected) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            Spacer(modifier = Modifier.height(10.dp))
 
-                        // Granular: Files Outside Workspace
-                        Text(
-                            text = L.settings.dialog.filesOutsideWorkspace,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val isFileAsk = activeFileAccess.contains("ASK", ignoreCase = true)
-                            val isFileAllow = activeFileAccess.contains("ALLOW", ignoreCase = true)
-                            val isFileDeny = activeFileAccess.contains("DENY", ignoreCase = true)
+                            // Granular: Terminal Execution
+                            Text(
+                                text = L.settings.dialog.terminalCommandExecution,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectableGroup(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val isTermOff = activeAutoExec.contains("OFF", ignoreCase = true)
+                                val isTermEager = activeAutoExec.contains("EAGER", ignoreCase = true)
 
-                            FilterChip(
-                                selected = isFileAsk,
-                                onClick = { onSetGlobalCustomFileAccessPolicy("AGENT_SETTING_POLICY_ASK") },
-                                label = { Text("✋ Ask", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
+                                FilterChip(
+                                    selected = isTermOff,
+                                    onClick = { onSetGlobalCustomTerminalPolicy("CASCADE_COMMANDS_AUTO_EXECUTION_OFF") },
+                                    label = { Text(L.settings.dialog.askEveryTime, fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp)
+                                )
+                                FilterChip(
+                                    selected = isTermEager,
+                                    onClick = { onSetGlobalCustomTerminalPolicy("CASCADE_COMMANDS_AUTO_EXECUTION_EAGER") },
+                                    label = { Text(L.settings.dialog.autoRunEager, fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Granular: Files Outside Workspace
+                            Text(
+                                text = L.settings.dialog.filesOutsideWorkspace,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            FilterChip(
-                                selected = isFileAllow,
-                                onClick = { onSetGlobalCustomFileAccessPolicy("AGENT_SETTING_POLICY_ALLOW") },
-                                label = { Text("✅ Allow", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = isFileDeny,
-                                onClick = { onSetGlobalCustomFileAccessPolicy("AGENT_SETTING_POLICY_DENY") },
-                                label = { Text("🚫 Deny", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectableGroup(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val isFileAsk = activeFileAccess.contains("ASK", ignoreCase = true)
+                                val isFileAllow = activeFileAccess.contains("ALLOW", ignoreCase = true)
+                                val isFileDeny = activeFileAccess.contains("DENY", ignoreCase = true)
+
+                                FilterChip(
+                                    selected = isFileAsk,
+                                    onClick = { onSetGlobalCustomFileAccessPolicy("AGENT_SETTING_POLICY_ASK") },
+                                    label = { Text("✋ Ask", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp)
+                                )
+                                FilterChip(
+                                    selected = isFileAllow,
+                                    onClick = { onSetGlobalCustomFileAccessPolicy("AGENT_SETTING_POLICY_ALLOW") },
+                                    label = { Text("✅ Allow", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp)
+                                )
+                                FilterChip(
+                                    selected = isFileDeny,
+                                    onClick = { onSetGlobalCustomFileAccessPolicy("AGENT_SETTING_POLICY_DENY") },
+                                    label = { Text("🚫 Deny", fontSize = 11.sp) },
+                                    modifier = Modifier.weight(1f).minTouchTarget(48.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -7584,7 +7793,12 @@ private fun CommandsSubScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = activeSandbox, role = Role.Switch) {
+                            onSetGlobalTerminalSandbox(!activeSandbox)
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -7605,7 +7819,7 @@ private fun CommandsSubScreen(
                     }
                     Switch(
                         checked = activeSandbox,
-                        onCheckedChange = { onSetGlobalTerminalSandbox(it) },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ClaudeTerracotta
@@ -7616,7 +7830,12 @@ private fun CommandsSubScreen(
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = requireApprovalForFileEdits, role = Role.Switch) {
+                            onSetRequireApprovalForFileEdits(!requireApprovalForFileEdits)
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -7637,7 +7856,7 @@ private fun CommandsSubScreen(
                     }
                     Switch(
                         checked = requireApprovalForFileEdits,
-                        onCheckedChange = onSetRequireApprovalForFileEdits,
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ClaudeTerracotta
@@ -7680,7 +7899,8 @@ private fun CommandsSubScreen(
                         text = L.settings.dialog.granularPermissionGrants,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.semantics { heading() }
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
@@ -7692,6 +7912,7 @@ private fun CommandsSubScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = { showAddRuleDialog = true },
+                    modifier = Modifier.minTouchTarget(48.dp),
                     shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ClaudeTerracotta),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -7708,7 +7929,8 @@ private fun CommandsSubScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
+                    .horizontalScroll(rememberScrollState())
+                    .selectableGroup(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val filters = listOf(
@@ -7724,6 +7946,7 @@ private fun CommandsSubScreen(
                     FilterChip(
                         selected = isSel,
                         onClick = { selectedFilter = key },
+                        modifier = Modifier.minTouchTarget(48.dp),
                         label = { Text(label, fontSize = 11.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
@@ -7803,12 +8026,12 @@ private fun CommandsSubScreen(
 
                                 IconButton(
                                     onClick = { onRemovePermissionRule(rule.rawString) },
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.minTouchTarget(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.DeleteOutline,
                                         contentDescription = L.settings.dialog.deleteRule,
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                                        tint = MaterialTheme.colorScheme.error,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 }
@@ -7818,7 +8041,9 @@ private fun CommandsSubScreen(
 
                             // Decision segmented selector: Allow | Deny | Ask
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectableGroup(),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 val decisions = listOf(
@@ -7833,7 +8058,7 @@ private fun CommandsSubScreen(
                                         modifier = Modifier
                                             .weight(1f)
                                             .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
+                                            .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
                                                 if (!isSelected) {
                                                     onChangePermissionRuleDecision(rule.rawString, decKey)
                                                 }
@@ -7891,7 +8116,10 @@ private fun CommandsSubScreen(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(end = 8.dp)
+                        .semantics { heading() }
                 )
                 if (projectsList.isNotEmpty()) {
                     Text(
@@ -8064,7 +8292,8 @@ private fun CommandsSubScreen(
                 text = L.settings.dialog.defaultApprovalScope,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
@@ -8075,7 +8304,9 @@ private fun CommandsSubScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val scopes = listOf(
@@ -8090,7 +8321,9 @@ private fun CommandsSubScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable { onSetDefaultApprovalScope(scopeKey) },
+                        .accessibleSelectionRow(selected = isSelected, role = Role.RadioButton) {
+                            onSetDefaultApprovalScope(scopeKey)
+                        },
                     shape = RoundedCornerShape(10.dp),
                     color = if (isSelected) ClaudeTerracotta.copy(alpha = 0.12f) else cardBg,
                     border = BorderStroke(
@@ -8123,7 +8356,9 @@ private fun CommandsSubScreen(
             shape = RoundedCornerShape(10.dp),
             color = QuotaGreen.copy(alpha = 0.08f),
             border = BorderStroke(1.dp, QuotaGreen.copy(alpha = 0.25f)),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { liveRegion = LiveRegionMode.Polite }
         ) {
             Row(
                 modifier = Modifier.padding(12.dp),
@@ -8226,14 +8461,17 @@ private fun AddPermissionRuleDialog(
             ) {
                 // Step 1: Select Action
                 Text(L.settings.dialog.n1OperationType, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    modifier = Modifier.selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     actionOptions.forEach { (key, label, desc) ->
                         val isSel = selectedAction == key
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable {
+                                .accessibleSelectionRow(selected = isSel, role = Role.RadioButton) {
                                     selectedAction = key
                                     if (patternText.isBlank() || patternText == "*") {
                                         patternText = if (key == "mcp" || key == "command") "*" else ""
@@ -8252,7 +8490,7 @@ private fun AddPermissionRuleDialog(
                             ) {
                                 RadioButton(
                                     selected = isSel,
-                                    onClick = { selectedAction = key },
+                                    onClick = null,
                                     colors = RadioButtonDefaults.colors(selectedColor = ClaudeTerracotta),
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -8299,6 +8537,7 @@ private fun AddPermissionRuleDialog(
                     quickTemplates.forEach { tpl ->
                         SuggestionChip(
                             onClick = { patternText = tpl },
+                            modifier = Modifier.minTouchTarget(48.dp),
                             label = { Text(tpl, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace) }
                         )
                     }
@@ -8307,7 +8546,9 @@ private fun AddPermissionRuleDialog(
                 // Step 3: Decision
                 Text(L.settings.dialog.n3PolicyDecision, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     val decs = listOf(
@@ -8321,7 +8562,7 @@ private fun AddPermissionRuleDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { selectedDecision = key },
+                                .accessibleSelectionRow(selected = isSel, role = Role.RadioButton) { selectedDecision = key },
                             shape = RoundedCornerShape(8.dp),
                             color = if (isSel) col.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                             border = BorderStroke(
@@ -8472,7 +8713,12 @@ private fun DiagnosticsSubScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = isNetworkInspectorEnabled, role = Role.Switch) {
+                            pendingInspectorRestart = !isNetworkInspectorEnabled
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -8490,7 +8736,7 @@ private fun DiagnosticsSubScreen(
                                 Icon(
                                     imageVector = Icons.Default.Language,
                                     contentDescription = null,
-                                    tint = if (isNetworkInspectorEnabled) ai.antigem.theme.AppColors.info else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    tint = if (isNetworkInspectorEnabled) ai.antigem.theme.AppColors.info else accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -8505,15 +8751,13 @@ private fun DiagnosticsSubScreen(
                             Text(
                                 text = L.settings.dialog.inspectIdeBridgeHttpAgyDaemon,
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = accessibleMutedColor(background = cardBg)
                             )
                         }
                     }
                     Switch(
                         checked = isNetworkInspectorEnabled,
-                        onCheckedChange = { targetState ->
-                            pendingInspectorRestart = targetState
-                        },
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = ai.antigem.theme.AppColors.info
@@ -8525,7 +8769,7 @@ private fun DiagnosticsSubScreen(
                 Text(
                     text = L.settings.dialog.zeroOverheadArchitectureWhenDisabled,
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    color = accessibleMutedColor(background = cardBg),
                     lineHeight = 16.sp
                 )
 
@@ -8536,7 +8780,12 @@ private fun DiagnosticsSubScreen(
 
                     // Floating Inspector Bubble toggle
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .accessibleToggleRow(checked = isFloatingNetworkInspectorEnabled, role = Role.Switch) {
+                                onToggleFloatingNetworkInspector(!isFloatingNetworkInspectorEnabled)
+                            },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -8550,12 +8799,12 @@ private fun DiagnosticsSubScreen(
                             Text(
                                 text = L.settings.dialog.showOnScreenDraggablePillWith,
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = accessibleMutedColor(background = cardBg)
                             )
                         }
                         Switch(
                             checked = isFloatingNetworkInspectorEnabled,
-                            onCheckedChange = onToggleFloatingNetworkInspector,
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = Color.White,
                                 checkedTrackColor = ai.antigem.theme.AppColors.info
@@ -8600,7 +8849,12 @@ private fun DiagnosticsSubScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = isFloatingDiagnosticsEnabled, role = Role.Switch) {
+                            onToggleFloatingDiagnostics(!isFloatingDiagnosticsEnabled)
+                        },
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -8618,7 +8872,7 @@ private fun DiagnosticsSubScreen(
                                 Icon(
                                     imageVector = Icons.Outlined.Speed,
                                     contentDescription = null,
-                                    tint = if (isFloatingDiagnosticsEnabled) QuotaGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    tint = if (isFloatingDiagnosticsEnabled) QuotaGreen else accessibleMutedColor(background = cardBg, minRatio = 3.0f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -8633,13 +8887,13 @@ private fun DiagnosticsSubScreen(
                             Text(
                                 text = L.settings.dialog.liveOnScreenThreadQueueConnection,
                                 fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = accessibleMutedColor(background = cardBg)
                             )
                         }
                     }
                     Switch(
                         checked = isFloatingDiagnosticsEnabled,
-                        onCheckedChange = onToggleFloatingDiagnostics,
+                        onCheckedChange = null,
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
                             checkedTrackColor = QuotaGreen
@@ -8672,7 +8926,8 @@ private fun DiagnosticsSubScreen(
                     text = L.settings.dialog.currentTelemetrySnapshot,
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), thickness = 0.8.dp)
@@ -8773,7 +9028,7 @@ private fun DiagnosticsSubScreen(
                         text = L.settings.dialog.threadBreakdown,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        color = accessibleMutedColor(background = cardBg)
                     )
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -8850,17 +9105,18 @@ private fun AboutSubScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 ai.antigem.ui.components.AppIconImage(
-                    contentDescription = "AntiGem",
+                    contentDescription = L.common.antiGem,
                     modifier = Modifier
                         .size(64.dp)
                         .clip(RoundedCornerShape(16.dp))
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "AntiGem",
+                    text = L.common.antiGem,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Text(
                     text = L.settings.dialog.antigravityMobileHubAiPairProgrammer,
@@ -8902,7 +9158,8 @@ private fun AboutSubScreen(
                     text = L.settings.dialog.buildPackageInformation,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 val bridgeVersion by ai.antigem.data.remote.BridgeInfo.version.collectAsState()
@@ -9023,7 +9280,8 @@ private fun AboutSubScreen(
                             text = L.settings.dialog.softwareUpdates,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                     }
                 }
@@ -9040,7 +9298,9 @@ private fun AboutSubScreen(
                         shape = RoundedCornerShape(8.dp),
                         color = if (isUpdateCheckError) ai.antigem.theme.AppColors.danger.copy(alpha = 0.12f) else QuotaGreen.copy(alpha = 0.12f),
                         border = BorderStroke(1.dp, if (isUpdateCheckError) ai.antigem.theme.AppColors.danger.copy(alpha = 0.3f) else QuotaGreen.copy(alpha = 0.3f)),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                     ) {
                         Row(
                             modifier = Modifier.padding(10.dp),
@@ -9144,7 +9404,8 @@ private fun AboutSubScreen(
                             text = L.settings.dialog.agyIdeBridgeBinary,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.semantics { heading() }
                         )
                     }
                     Surface(
@@ -9155,7 +9416,7 @@ private fun AboutSubScreen(
                             text = if (bridgeExists) "IN DOWNLOADS" else "NOT EXPORTED",
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (bridgeExists) QuotaGreen else Color.Gray,
+                            color = if (bridgeExists) ensureAccessibleContrast(QuotaGreen, cardBg, 4.5f, MaterialTheme.colorScheme.surface) else accessibleMutedColor(background = cardBg),
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
@@ -9277,7 +9538,8 @@ private fun AboutSubScreen(
                     text = L.settings.dialog.resourcesRepository,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() }
                 )
 
                 Surface(
@@ -9285,7 +9547,9 @@ private fun AboutSubScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
+                        .minTouchTarget(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(role = Role.Button) {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/pJvvTDTc6G"))
                             context.startActivity(intent)
                         }
@@ -9333,7 +9597,9 @@ private fun AboutSubScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
+                        .minTouchTarget(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(role = Role.Button) {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/santoshkurmi/antigem"))
                             context.startActivity(intent)
                         }
@@ -9381,7 +9647,9 @@ private fun AboutSubScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
+                        .minTouchTarget(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(role = Role.Button) {
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/santoshkurmi/antigem/releases"))
                             context.startActivity(intent)
                         }

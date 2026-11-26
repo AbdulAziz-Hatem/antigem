@@ -42,6 +42,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -50,7 +59,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import ai.antigem.domain.model.AgentKind
 import ai.antigem.ui.components.accent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
 import ai.antigem.ui.components.label
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 private data class AgentOption(val agent: AgentKind, val title: String, val description: String)
@@ -88,6 +101,7 @@ fun AgentSelector(selected: Set<AgentKind>, onSelect: (Set<AgentKind>) -> Unit, 
         AGENT_OPTIONS.forEach { option ->
             val isOn = option.agent in selected
             val accent = option.agent.accent()
+            val checkFg = ensureAccessibleContrast(Color.White, accent, minRatio = 4.5f, surfaceFallback = accent)
             Surface(
                 onClick = {
                     val next = if (isOn) selected - option.agent else selected + option.agent
@@ -96,14 +110,20 @@ fun AgentSelector(selected: Set<AgentKind>, onSelect: (Set<AgentKind>) -> Unit, 
                 shape = RoundedCornerShape(16.dp),
                 color = if (isOn) accent.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface,
                 border = BorderStroke(if (isOn) 1.5.dp else 1.dp, if (isOn) accent.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .minTouchTarget(48.dp)
+                    .semantics {
+                        role = Role.Checkbox
+                        toggleableState = ToggleableState(isOn)
+                    }
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     AgentMark(option.agent, size = 40.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(option.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        Text(option.description, fontSize = 12.sp, lineHeight = 16.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f))
+                        Text(option.description, fontSize = 12.sp, lineHeight = 16.sp, color = accessibleMutedColor(alpha = 0.72f))
                     }
                     Spacer(Modifier.width(10.dp))
                     Box(
@@ -111,10 +131,11 @@ fun AgentSelector(selected: Set<AgentKind>, onSelect: (Set<AgentKind>) -> Unit, 
                             .size(20.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .border(1.5.dp, if (isOn) accent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
-                            .background(if (isOn) accent else Color.Transparent),
+                            .background(if (isOn) accent else Color.Transparent)
+                            .clearAndSetSemantics {},
                         contentAlignment = Alignment.Center
                     ) {
-                        if (isOn) Text("✓", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        if (isOn) Text("✓", color = checkFg, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -123,8 +144,8 @@ fun AgentSelector(selected: Set<AgentKind>, onSelect: (Set<AgentKind>) -> Unit, 
             Text(
                 L.agents.setupUi.withSeveralAgentsOnPickThe,
                 fontSize = 11.5.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                modifier = Modifier.padding(horizontal = 4.dp)
+                color = accessibleMutedColor(alpha = 0.72f),
+                modifier = Modifier.padding(horizontal = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
     }
@@ -182,7 +203,7 @@ fun AgentsSettingsPage(
             L.agents.setupUi.agentsYouTurnOffDoNot,
             fontSize = 12.5.sp,
             lineHeight = 17.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+            color = accessibleMutedColor(alpha = 0.72f)
         )
         Spacer(Modifier.height(14.dp))
         AgentSelector(selected, { selected = it })
@@ -192,10 +213,10 @@ fun AgentsSettingsPage(
             enabled = selected != enabled && !isApplying,
             shape = RoundedCornerShape(14.dp),
             contentPadding = PaddingValues(vertical = 12.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
         ) {
             if (isApplying) {
-                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(10.dp))
                 Text(L.common.restarting)
             } else {
@@ -221,7 +242,13 @@ fun AgentsSettingsPage(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .accessibleToggleRow(checked = vibrateOnDone) { ai.antigem.data.agent.ChatCompletionMonitor.setVibrate(!vibrateOnDone) }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(L.agents.setupUi.vibrateWhenAChatFinishes, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Text(
@@ -231,14 +258,14 @@ fun AgentsSettingsPage(
                     )
                 }
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = vibrateOnDone, onCheckedChange = { ai.antigem.data.agent.ChatCompletionMonitor.setVibrate(it) })
+                Switch(checked = vibrateOnDone, onCheckedChange = null)
             }
         }
     }
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },
-            title = { Text(L.agents.setupUi.restartToApply, fontWeight = FontWeight.Bold) },
+            title = { Text(L.agents.setupUi.restartToApply, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }) },
             text = {
                 Text(
                     L.agents.setupUi.theLocalServerStopsAndThe,
@@ -246,12 +273,15 @@ fun AgentsSettingsPage(
                 )
             },
             confirmButton = {
-                Button(onClick = {
-                    confirm = false
-                    onApply(selected)
-                }) { Text(L.agents.setupUi.restartApp) }
+                Button(
+                    onClick = {
+                        confirm = false
+                        onApply(selected)
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(L.agents.setupUi.restartApp) }
             },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { confirm = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -261,12 +291,17 @@ fun AgentsSettingsPage(
 fun AgentsApplyingDialog() {
     Dialog(onDismissRequest = {}, properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)) {
         Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Row(Modifier.padding(horizontal = 22.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .padding(horizontal = 22.dp, vertical = 18.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp)
                 Spacer(Modifier.width(14.dp))
                 Column {
-                    Text(L.agents.setupUi.applyingAgents, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(L.agents.setupUi.stoppingTheLocalServerThenRestarting, fontSize = 12.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Text(L.agents.setupUi.applyingAgents, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.semantics { heading() })
+                    Text(L.agents.setupUi.stoppingTheLocalServerThenRestarting, fontSize = 12.5.sp, color = accessibleMutedColor(alpha = 0.72f))
                 }
             }
         }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -53,6 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +76,9 @@ import ai.antigem.ui.claude.ClaudeCard
 import ai.antigem.ui.components.AppToastHelper
 import ai.antigem.ui.components.ChatToastType
 import ai.antigem.ui.components.OpenCodeAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
 import ai.antigem.i18n.L
@@ -187,20 +195,24 @@ fun OpenCodeMcpPage(backend: OpenCodeChatBackend, onOpenRea: () -> Unit = {}, on
         choosePlugin = false
     }
 
+    val muted = accessibleMutedColor(alpha = 0.72f)
+    val surface = MaterialTheme.colorScheme.surface
+    val accentOnSurface = ensureAccessibleContrast(OpenCodeAccent, surface, minRatio = 4.5f)
+    val warningOnSurface = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, surface, minRatio = 4.5f)
     ClaudeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(L.opencode.mcp.toolsOpencodeCanCall, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(L.opencode.mcp.toolsOpencodeCanCall, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
                 Text(
                     L.opencode.mcp.serversAddedHereWorkInEvery,
-                    fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    fontSize = 11.5.sp, color = muted
                 )
             }
-            if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = OpenCodeAccent)
-            else IconButton(onClick = { scope.launch { reload() } }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+            if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = accentOnSurface)
+            else IconButton(onClick = { scope.launch { reload() } }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
         }
         Spacer(Modifier.height(10.dp))
-        Text(L.common.quickPresets, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+        Text(L.common.quickPresets, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = accessibleMutedColor(alpha = 0.78f))
         Spacer(Modifier.height(6.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             presets.chunked(2).forEach { row ->
@@ -232,29 +244,36 @@ fun OpenCodeMcpPage(backend: OpenCodeChatBackend, onOpenRea: () -> Unit = {}, on
     }
 
     ClaudeCard {
-        Text(L.opencode.mcp.serversCount(servers.size), fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        error?.let { Text(it, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)) }
+        Text(L.opencode.mcp.serversCount(servers.size), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
+        error?.let {
+            Text(
+                it,
+                fontSize = 11.5.sp,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }
+            )
+        }
         if (servers.isEmpty() && error == null) {
-            Text(L.opencode.mcp.noneYetAddOneFromThe, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f), modifier = Modifier.padding(top = 4.dp))
+            Text(L.opencode.mcp.noneYetAddOneFromThe, fontSize = 12.sp, color = muted, modifier = Modifier.padding(top = 4.dp))
         }
         servers.forEachIndexed { i, srv ->
             if (i > 0) HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             val (label, color) = when (srv.status) {
-                "connected" -> L.opencode.mcp.connected to OpenCodeAccent
+                "connected" -> L.opencode.mcp.connected to accentOnSurface
                 "failed" -> L.common.failed to MaterialTheme.colorScheme.error
-                "disabled" -> L.common.disabled to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                "needs_auth", "needs_client_registration" -> L.common.needsSignIn to ai.antigem.theme.AppColors.warning
-                "pending" -> L.common.connecting to ai.antigem.theme.AppColors.warning
-                null -> L.opencode.mcp.connectsWithTheNextChat to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                else -> srv.status to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                "disabled" -> L.common.disabled to muted
+                "needs_auth", "needs_client_registration" -> L.common.needsSignIn to warningOnSurface
+                "pending" -> L.common.connecting to warningOnSurface
+                null -> L.opencode.mcp.connectsWithTheNextChat to muted
+                else -> srv.status to muted
             }
             Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Hub, null, tint = OpenCodeAccent, modifier = Modifier.size(18.dp))
+                Icon(Icons.Outlined.Hub, null, tint = accentOnSurface, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(srv.name, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     val where = srv.config?.let { c -> c.str("url") ?: c.a("command")?.joinToString(" ") { (it as? JsonPrimitive)?.content.orEmpty() } }
-                    where?.let { Text(it, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f), maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    where?.let { Text(it, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace, color = muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     Text(
                         label + if (!srv.saved) L.opencode.mcp.fromYourOpencodeConfig else "",
                         fontSize = 11.sp, color = color
@@ -274,7 +293,7 @@ fun OpenCodeMcpPage(backend: OpenCodeChatBackend, onOpenRea: () -> Unit = {}, on
                             headers = c.o("headers")?.entries?.joinToString("\n") { "${it.key}: ${(it.value as? JsonPrimitive)?.content.orEmpty()}" }.orEmpty(),
                             isNew = false
                         )
-                    }) { Text(L.common.edit) }
+                    }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.edit) }
                     IconButton(onClick = {
                         scope.launch {
                             backend.client.removeMcp(srv.name)
@@ -282,7 +301,7 @@ fun OpenCodeMcpPage(backend: OpenCodeChatBackend, onOpenRea: () -> Unit = {}, on
                                 .onFailure { AppToastHelper.showToast(L.opencode.mcp.couldNotRemoveMessage(it.message), ChatToastType.ERROR) }
                             reload()
                         }
-                    }) { Icon(Icons.Outlined.Delete, L.common.remove, tint = MaterialTheme.colorScheme.error) }
+                    }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Delete, L.common.remove, tint = MaterialTheme.colorScheme.error) }
                 }
             }
         }
@@ -312,7 +331,7 @@ private fun McpServerDialog(initial: McpDraft, onDismiss: () -> Unit, onSave: (M
     val ok = nameOk && if (d.remote) d.url.trim().let { it.startsWith("http://") || it.startsWith("https://") } else splitCommand(d.command).isNotEmpty()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (initial.isNew) L.opencode.mcp.addAnMcpServer else L.opencode.mcp.editName(initial.name), fontWeight = FontWeight.Bold) },
+        title = { Text(if (initial.isNew) L.opencode.mcp.addAnMcpServer else L.opencode.mcp.editName(initial.name), fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
@@ -320,9 +339,9 @@ private fun McpServerDialog(initial: McpDraft, onDismiss: () -> Unit, onSave: (M
                     isError = d.name.isNotBlank() && !nameOk, modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = d.remote, onClick = { d = d.copy(remote = true) }, label = { Text(L.opencode.mcp.remoteHttp) })
-                    FilterChip(selected = !d.remote, onClick = { d = d.copy(remote = false) }, label = { Text(L.opencode.mcp.localCommand) })
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.selectableGroup()) {
+                    FilterChip(selected = d.remote, onClick = { d = d.copy(remote = true) }, label = { Text(L.opencode.mcp.remoteHttp) }, modifier = Modifier.minTouchTarget(48.dp))
+                    FilterChip(selected = !d.remote, onClick = { d = d.copy(remote = false) }, label = { Text(L.opencode.mcp.localCommand) }, modifier = Modifier.minTouchTarget(48.dp))
                 }
                 Spacer(Modifier.height(4.dp))
                 if (d.remote) {
@@ -337,13 +356,13 @@ private fun McpServerDialog(initial: McpDraft, onDismiss: () -> Unit, onSave: (M
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(d.env, { d = d.copy(env = it) }, label = { Text("Environment (one per line, KEY=value)") },
                         minLines = 2, modifier = Modifier.fillMaxWidth())
-                    Text(L.opencode.mcp.itRunsOnTheServerIn, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                    Text(L.opencode.mcp.itRunsOnTheServerIn, fontSize = 11.sp, color = accessibleMutedColor(alpha = 0.72f))
                 }
             }
         },
         confirmButton = {
-            Button(onClick = { saving = true; onSave(d) { saving = false } }, enabled = ok && !saving) { Text(if (saving) L.common.saving else L.common.save) }
+            Button(onClick = { saving = true; onSave(d) { saving = false } }, enabled = ok && !saving, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (saving) L.common.saving else L.common.save) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }

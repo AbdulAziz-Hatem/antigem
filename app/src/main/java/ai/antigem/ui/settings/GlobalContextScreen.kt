@@ -1,10 +1,9 @@
 package ai.antigem.ui.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -18,6 +17,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,7 +27,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import ai.antigem.data.context.GlobalContext
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.accessibleSelectionRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import ai.antigem.i18n.L
 
 /** The row on Settings → Agents that opens [GlobalContextScreen]. */
@@ -70,7 +76,7 @@ fun GlobalContextScreen() {
     var showBuiltIn by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<GlobalContext.Entry?>(null) }
     val builtIn = remember { GlobalContext.builtInText() }
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val muted = ensureAccessibleContrast(MaterialTheme.colorScheme.onSurfaceVariant, MaterialTheme.colorScheme.surfaceContainerLow, minRatio = 4.5f)
 
     Column(Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp)) {
         Text(
@@ -82,16 +88,22 @@ fun GlobalContextScreen() {
         // ----- built-in -----
         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .accessibleToggleRow(checked = builtInOn) { GlobalContext.setBuiltInEnabled(!builtInOn) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text(L.settings.globalContext.builtInContext, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(L.settings.globalContext.builtInContext, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Outlined.Lock, null, tint = muted, modifier = Modifier.size(12.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(L.settings.globalContext.byAntigemReadOnlyFirstMessage, fontSize = 12.sp, color = muted)
                         }
                     }
-                    Switch(checked = builtInOn, onCheckedChange = { GlobalContext.setBuiltInEnabled(it) })
+                    Switch(checked = builtInOn, onCheckedChange = null)
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -105,7 +117,11 @@ fun GlobalContextScreen() {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(L.settings.globalContext.theWhereYouRunPartFollows, fontSize = 11.5.sp, color = muted)
-                TextButton(onClick = { showBuiltIn = !showBuiltIn }, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                TextButton(
+                    onClick = { showBuiltIn = !showBuiltIn },
+                    modifier = Modifier.minTouchTarget(48.dp),
+                    contentPadding = PaddingValues(horizontal = 0.dp)
+                ) {
                     Text(if (showBuiltIn) L.settings.globalContext.hideTheText else L.settings.globalContext.showExactlyWhatIsSent)
                 }
                 if (showBuiltIn) {
@@ -130,10 +146,13 @@ fun GlobalContextScreen() {
         Spacer(Modifier.height(22.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(L.settings.globalContext.yourContext, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(L.settings.globalContext.yourContext, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
                 Text(L.settings.globalContext.yourOwnInstructionsForEveryChat, fontSize = 12.sp, color = muted)
             }
-            FilledTonalButton(onClick = { editing = GlobalContext.Entry(title = "", text = "") }) {
+            FilledTonalButton(
+                onClick = { editing = GlobalContext.Entry(title = "", text = "") },
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.Outlined.Add, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(L.common.add)
@@ -170,7 +189,7 @@ private fun EntryCard(e: GlobalContext.Entry, onToggle: (Boolean) -> Unit, onCli
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Row(Modifier.padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -185,7 +204,7 @@ private fun EntryCard(e: GlobalContext.Entry, onToggle: (Boolean) -> Unit, onCli
                     if (e.forJarvis) Chip(L.settings.globalContext.jarvisToo, highlight = false)
                 }
             }
-            Switch(checked = e.enabled, onCheckedChange = onToggle)
+            Switch(checked = e.enabled, onCheckedChange = onToggle, modifier = Modifier.minTouchTarget(48.dp))
         }
     }
 }
@@ -193,8 +212,9 @@ private fun EntryCard(e: GlobalContext.Entry, onToggle: (Boolean) -> Unit, onCli
 @Composable
 private fun Chip(label: String, highlight: Boolean) {
     val c = if (highlight) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+    val fg = ensureAccessibleContrast(c, MaterialTheme.colorScheme.surfaceContainerLow, minRatio = 4.5f)
     Text(
-        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = c,
+        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = fg,
         modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(c.copy(alpha = 0.13f)).padding(horizontal = 6.dp, vertical = 2.dp)
     )
 }
@@ -218,7 +238,7 @@ private fun EntryEditor(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
         modifier = Modifier.fillMaxWidth(0.94f).widthIn(max = 560.dp),
-        title = { Text(if (isNew) L.settings.globalContext.newContext else L.settings.globalContext.editContext, fontWeight = FontWeight.SemiBold) },
+        title = { Text(if (isNew) L.settings.globalContext.newContext else L.settings.globalContext.editContext, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() }) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
@@ -235,11 +255,17 @@ private fun EntryEditor(
                 )
                 Spacer(Modifier.height(14.dp))
                 Text(L.settings.globalContext.whenToSend, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                WhenOption(L.settings.globalContext.firstMessageOfEachChat, L.settings.globalContext.enoughForMostThingsSentAgain, !everyMessage) { everyMessage = false }
-                WhenOption(L.settings.globalContext.everyMessage, L.settings.globalContext.forRulesTheAgentMustNever, everyMessage) { everyMessage = true }
+                Column(Modifier.selectableGroup()) {
+                    WhenOption(L.settings.globalContext.firstMessageOfEachChat, L.settings.globalContext.enoughForMostThingsSentAgain, !everyMessage) { everyMessage = false }
+                    WhenOption(L.settings.globalContext.everyMessage, L.settings.globalContext.forRulesTheAgentMustNever, everyMessage) { everyMessage = true }
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { forJarvis = !forJarvis }.padding(vertical = 6.dp),
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .accessibleToggleRow(checked = forJarvis) { forJarvis = !forJarvis }
+                        .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
@@ -250,20 +276,21 @@ private fun EntryEditor(
                         )
                     }
                     Spacer(Modifier.width(8.dp))
-                    Switch(checked = forJarvis, onCheckedChange = { forJarvis = it })
+                    Switch(checked = forJarvis, onCheckedChange = null)
                 }
             }
         },
         confirmButton = {
             Button(
                 enabled = text.isNotBlank(),
-                onClick = { onSave(entry.copy(title = title.trim(), text = text.trim(), everyMessage = everyMessage, forJarvis = forJarvis)) }
+                onClick = { onSave(entry.copy(title = title.trim(), text = text.trim(), everyMessage = everyMessage, forJarvis = forJarvis)) },
+                modifier = Modifier.minTouchTarget(48.dp)
             ) { Text(L.common.save) }
         },
         dismissButton = {
             Row {
-                if (!isNew) TextButton(onClick = { confirmDelete = true }) { Text(L.common.delete, color = MaterialTheme.colorScheme.error) }
-                TextButton(onClick = onDismiss) { Text(L.common.cancel) }
+                if (!isNew) TextButton(onClick = { confirmDelete = true }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.delete, color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) }
             }
         }
     )
@@ -271,10 +298,10 @@ private fun EntryEditor(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete \"${entry.title.ifBlank { "Untitled" }}\"?") },
+            title = { Text("${L.common.delete} \"${entry.title.ifBlank { L.common.untitled }}\"?", modifier = Modifier.semantics { heading() }) },
             text = { Text(L.settings.globalContext.newMessagesWillNoLongerCarry) },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text(L.common.delete, color = MaterialTheme.colorScheme.error) } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(L.common.cancel) } }
+            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.delete, color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -285,11 +312,11 @@ private fun WhenOption(title: String, subtitle: String, selected: Boolean, onSel
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .selectable(selected = selected, onClick = onSelect)
+            .accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onSelect)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onSelect)
+        RadioButton(selected = selected, onClick = null)
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = 14.sp)
             Text(subtitle, fontSize = 11.5.sp, lineHeight = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

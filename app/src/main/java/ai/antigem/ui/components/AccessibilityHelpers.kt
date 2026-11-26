@@ -3,7 +3,9 @@ package ai.antigem.ui.components
 import android.content.Context
 import android.view.View
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -18,8 +20,13 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
@@ -177,3 +184,47 @@ fun terminalModifierStateLabel(isLocked: Boolean, isActive: Boolean): String = w
     isActive -> L.components.accessibilityHelpers.active
     else -> L.components.accessibilityHelpers.off
 }
+
+/**
+ * Unifies a toggle row (`Switch` or `Checkbox`) into a single >=48dp TalkBack node with proper
+ * toggleable role and state. Callers should pass `onCheckedChange = null` on the inner widget.
+ */
+fun Modifier.accessibleToggleRow(
+    checked: Boolean,
+    role: Role = Role.Switch,
+    onClick: () -> Unit
+): Modifier = this
+    .minTouchTarget(48.dp)
+    .clickable(role = role, onClick = onClick)
+    .semantics(mergeDescendants = true) {
+        toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+    }
+
+/**
+ * Unifies a selectable row (`RadioButton` or option card) into a single >=48dp TalkBack node with
+ * `selected` state semantics.
+ */
+fun Modifier.accessibleSelectionRow(
+    selected: Boolean,
+    role: Role = Role.RadioButton,
+    onClick: () -> Unit
+): Modifier = this
+    .minTouchTarget(48.dp)
+    .clickable(role = role, onClick = onClick)
+    .semantics(mergeDescendants = true) {
+        this.selected = selected
+    }
+
+/** Computes an on-surface muted color guaranteed to meet WCAG AA contrast against [background]. */
+@Composable
+fun accessibleMutedColor(
+    alpha: Float = 0.72f,
+    background: Color = MaterialTheme.colorScheme.surface,
+    minRatio: Float = 4.5f,
+    surfaceFallback: Color = MaterialTheme.colorScheme.surface
+): Color = ensureAccessibleContrast(
+    foreground = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha),
+    background = background,
+    minRatio = minRatio,
+    surfaceFallback = surfaceFallback
+)

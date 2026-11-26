@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
@@ -49,6 +50,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -57,7 +67,12 @@ import androidx.compose.ui.unit.sp
 import ai.antigem.i18n.L
 import ai.antigem.i18n.LanguageManager
 import ai.antigem.i18n.LanguageRepo
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
 import ai.antigem.ui.components.bouncyVerticalScroll
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -249,47 +264,53 @@ fun LanguageScreen(onOpenTexts: (String) -> Unit) {
 
     val packs = LanguageRepo.packs
     val states = LanguageRepo.states
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
     Column(
         Modifier.fillMaxSize().bouncyVerticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(L.settings.language.appLanguage, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(L.settings.language.appLanguage, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
         Text(L.settings.language.appLanguageAbout, fontSize = 12.5.sp, lineHeight = 17.sp, color = muted)
 
         if (loading && languages.isEmpty()) {
-            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(28.dp)) }
+            Box(
+                Modifier.fillMaxWidth().padding(24.dp).semantics { liveRegion = LiveRegionMode.Polite },
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator(Modifier.size(28.dp)) }
         }
-        languages.forEach { info ->
-            val update = if (info.origin == LanguageManager.Origin.REPO && states[info.packId] == LanguageRepo.State.UPDATE)
-                packs.firstOrNull { it.id == info.packId } else null
-            LanguageRow(
-                info = info,
-                selected = info.id == current,
-                busy = switching == info.id || info.packId in LanguageRepo.downloading,
-                update = update,
-                onSelect = { select(info.id) },
-                onUpdate = { update?.let(::download) },
-                onAbout = { details = LanguageDetails(info = info, pack = packs.firstOrNull { it.id == info.packId && info.packId.isNotBlank() }) },
-                onOpenTexts = { onOpenTexts(info.id) },
-                onDuplicate = { duplicate(info.id) },
-                onDetails = { editingInfo = info },
-                onSave = { saveFile(info) },
-                onShare = { share(info) },
-                onCopy = { copyJson(info) },
-                onSend = { sending = info },
-                onDelete = { deleting = info }
-            )
+        Column(modifier = Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            languages.forEach { info ->
+                val update = if (info.origin == LanguageManager.Origin.REPO && states[info.packId] == LanguageRepo.State.UPDATE)
+                    packs.firstOrNull { it.id == info.packId } else null
+                LanguageRow(
+                    info = info,
+                    selected = info.id == current,
+                    busy = switching == info.id || info.packId in LanguageRepo.downloading,
+                    update = update,
+                    onSelect = { select(info.id) },
+                    onUpdate = { update?.let(::download) },
+                    onAbout = { details = LanguageDetails(info = info, pack = packs.firstOrNull { it.id == info.packId && info.packId.isNotBlank() }) },
+                    onOpenTexts = { onOpenTexts(info.id) },
+                    onDuplicate = { duplicate(info.id) },
+                    onDetails = { editingInfo = info },
+                    onSave = { saveFile(info) },
+                    onShare = { share(info) },
+                    onCopy = { copyJson(info) },
+                    onSend = { sending = info },
+                    onDelete = { deleting = info }
+                )
+            }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            FilledTonalButton(onClick = { creating = true }, modifier = Modifier.weight(1f)) {
+            FilledTonalButton(onClick = { creating = true }, modifier = Modifier.weight(1f).minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Add, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(L.settings.language.newLanguage, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Box(Modifier.weight(1f)) {
-                OutlinedButton(onClick = { importMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { importMenu = true }, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.FileOpen, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(L.settings.language.importLanguage, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -373,21 +394,29 @@ fun LanguageScreen(onOpenTexts: (String) -> Unit) {
         val community = info.origin == LanguageManager.Origin.REPO
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text(if (community) L.settings.language.removeTitle(info.label) else L.settings.language.deleteTitle(info.name)) },
+            title = {
+                Text(
+                    if (community) L.settings.language.removeTitle(info.label) else L.settings.language.deleteTitle(info.name),
+                    modifier = Modifier.semantics { heading() }
+                )
+            },
             text = { Text(if (community) L.settings.language.removeText else L.settings.language.deleteText) },
             confirmButton = {
-                TextButton(onClick = {
-                    deleting = null
-                    scope.launch {
-                        withContext(Dispatchers.IO) {
-                            LanguageManager.delete(info.id)
-                            if (community) LanguageRepo.removed(info.packId)
+                TextButton(
+                    onClick = {
+                        deleting = null
+                        scope.launch {
+                            withContext(Dispatchers.IO) {
+                                LanguageManager.delete(info.id)
+                                if (community) LanguageRepo.removed(info.packId)
+                            }
+                            refresh()
                         }
-                        refresh()
-                    }
-                }) { Text(if (community) L.common.remove else L.common.delete, color = MaterialTheme.colorScheme.error) }
+                    },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) { Text(if (community) L.common.remove else L.common.delete, color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { deleting = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
     imported?.let { (lang, report) ->
@@ -405,10 +434,10 @@ fun LanguageScreen(onOpenTexts: (String) -> Unit) {
         AlertDialog(
             onDismissRequest = { ready = null },
             icon = { Icon(Icons.Outlined.CheckCircle, null, tint = ai.antigem.theme.AppColors.success) },
-            title = { Text(L.settings.language.readyTitle(lang.label), fontWeight = FontWeight.SemiBold) },
+            title = { Text(L.settings.language.readyTitle(lang.label), fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() }) },
             text = { lang.authors.takeIf { it.isNotEmpty() }?.let { a -> Text(L.settings.language.readyThanks(a.joinToString(", ") { it.name }), fontSize = 13.5.sp) } },
-            confirmButton = { TextButton(onClick = { ready = null; select(lang.id) }) { Text(L.settings.language.useNow) } },
-            dismissButton = { TextButton(onClick = { ready = null }) { Text(L.settings.language.later) } }
+            confirmButton = { TextButton(onClick = { ready = null; select(lang.id) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.useNow) } },
+            dismissButton = { TextButton(onClick = { ready = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.later) } }
         )
     }
     details?.let { d ->
@@ -459,16 +488,20 @@ private fun LanguageRow(
     onDelete: () -> Unit
 ) {
     val primary = MaterialTheme.colorScheme.primary
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = if (selected) primary.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
     val english = info.id == LanguageManager.ENGLISH
     val community = info.origin == LanguageManager.Origin.REPO
     var menu by remember { mutableStateOf(false) }
     Surface(
-        onClick = onSelect,
         shape = RoundedCornerShape(16.dp),
-        color = if (selected) primary.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surfaceContainerLow,
+        color = cardBg,
         border = if (selected) BorderStroke(1.5.dp, primary) else null,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .accessibleSelectionRow(selected = selected, role = Role.RadioButton, onClick = onSelect)
     ) {
         Row(Modifier.padding(start = 14.dp, end = 4.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             CodeBadge(info.code)
@@ -502,7 +535,11 @@ private fun LanguageRow(
                 }
                 if (info.variant.isNotBlank() || info.outdated > 0 || update != null) {
                     Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         if (info.variant.isNotBlank()) SmallChip(info.variant, primary)
                         if (info.outdated > 0) SmallChip(L.settings.language.outdatedCount(info.outdated), ai.antigem.theme.AppColors.warning)
                         if (update != null) SmallChip(L.settings.language.updateAvailable, ai.antigem.theme.AppColors.info)
@@ -511,12 +548,26 @@ private fun LanguageRow(
             }
             Spacer(Modifier.width(6.dp))
             when {
-                busy -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                update != null -> IconButton(onClick = onUpdate) { Icon(Icons.Outlined.Update, L.common.update, tint = ai.antigem.theme.AppColors.info) }
-                selected -> Icon(Icons.Outlined.CheckCircle, L.settings.language.onScreen, tint = primary)
+                busy -> CircularProgressIndicator(
+                    Modifier.size(20.dp).semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        contentDescription = L.common.working
+                    },
+                    strokeWidth = 2.dp
+                )
+                update != null -> IconButton(onClick = onUpdate, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(
+                        Icons.Outlined.Update,
+                        L.common.update,
+                        tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.info, cardBg, 3.0f, surfaceBg)
+                    )
+                }
+                selected -> Icon(Icons.Outlined.CheckCircle, null, tint = primary)
             }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, L.settings.language.more) }
+                IconButton(onClick = { menu = true }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(Icons.Outlined.MoreVert, L.settings.language.more)
+                }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     if (!english) DropdownMenuItem(
                         text = { Text(L.settings.language.aboutLanguage) },
@@ -610,7 +661,9 @@ private fun CommunityLanguages(
     val error = LanguageRepo.error
     val loadingList = LanguageRepo.loading
     val current = LanguageManager.currentId
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
     val primary = MaterialTheme.colorScheme.primary
     var query by remember { mutableStateOf("") }
     val updates = packs.count { states[it.id] == LanguageRepo.State.UPDATE }
@@ -621,55 +674,72 @@ private fun CommunityLanguages(
         }
     }
 
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    Surface(shape = RoundedCornerShape(16.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Public, null, tint = primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(L.settings.language.getMore, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(L.settings.language.getMore, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).semantics { heading() })
                 if (loadingList) CircularProgressIndicator(Modifier.padding(10.dp).size(20.dp), strokeWidth = 2.dp)
-                else IconButton(onClick = { scope.launch { LanguageRepo.refresh() } }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+                else IconButton(onClick = { scope.launch { LanguageRepo.refresh() } }, modifier = Modifier.minTouchTarget(48.dp)) {
+                    Icon(Icons.Outlined.Refresh, L.common.refresh)
+                }
             }
             Text(L.settings.language.getMoreAbout, fontSize = 12.5.sp, lineHeight = 17.sp, color = muted)
 
             if (error != null && !loadingList) {
-                Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                ) {
                     Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             repoErrorText(error) + if (packs.isNotEmpty()) "\n" + L.settings.language.showingSaved else "",
                             fontSize = 12.5.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = { scope.launch { LanguageRepo.refresh() } }) { Text(L.common.retry) }
+                        TextButton(onClick = { scope.launch { LanguageRepo.refresh() } }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.retry) }
                     }
                 }
             }
 
             if (updates > 0) {
-                Surface(shape = RoundedCornerShape(12.dp), color = ai.antigem.theme.AppColors.info.copy(alpha = 0.12f)) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = ai.antigem.theme.AppColors.info.copy(alpha = 0.12f),
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                ) {
                     Row(Modifier.padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Update, null, tint = ai.antigem.theme.AppColors.info, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Outlined.Update, null, tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.info, cardBg, 3.0f, surfaceBg), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(L.settings.language.updatesReady(updates), fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = onUpdateAll, enabled = LanguageRepo.downloading.isEmpty()) { Text(L.settings.language.updateAll) }
+                        TextButton(onClick = onUpdateAll, enabled = LanguageRepo.downloading.isEmpty(), modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.updateAll) }
                     }
                 }
             }
 
             when {
-                packs.isEmpty() && loadingList -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                packs.isEmpty() && loadingList -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 8.dp).semantics { liveRegion = LiveRegionMode.Polite }
+                ) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(10.dp))
                     Text(L.settings.language.checking, fontSize = 13.sp, color = muted)
                 }
                 packs.isEmpty() && error == null && LanguageRepo.fetchedAt > 0 ->
-                    Text(L.settings.language.noLanguagesYet, fontSize = 13.sp, lineHeight = 18.sp, color = muted)
+                    Text(L.settings.language.noLanguagesYet, fontSize = 13.sp, lineHeight = 18.sp, color = muted, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             }
 
             if (packs.size > 6) {
                 OutlinedTextField(
                     value = query, onValueChange = { query = it }, singleLine = true,
                     leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                    trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, null) } },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) IconButton(onClick = { query = "" }, modifier = Modifier.minTouchTarget(48.dp)) {
+                            Icon(Icons.Outlined.Close, L.common.clear)
+                        }
+                    },
                     placeholder = { Text(L.settings.language.searchLanguages) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -689,15 +759,15 @@ private fun CommunityLanguages(
             }
 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { openUrl(context, LanguageRepo.CONTRIBUTING) }) {
+                TextButton(onClick = { openUrl(context, LanguageRepo.CONTRIBUTING) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Translate, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(L.settings.language.addYourLanguage)
                 }
-                TextButton(onClick = { openUrl(context, LanguageRepo.REQUEST_FORM) }) {
+                TextButton(onClick = { openUrl(context, LanguageRepo.REQUEST_FORM) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Text(L.settings.language.askForLanguage)
                 }
-                TextButton(onClick = { openUrl(context, LanguageRepo.PAGE) }) {
+                TextButton(onClick = { openUrl(context, LanguageRepo.PAGE) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(L.settings.language.viewOnGitHub)
@@ -718,14 +788,18 @@ private fun PackRow(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
     val primary = MaterialTheme.colorScheme.primary
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surface,
+        color = surfaceBg,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .minTouchTarget(48.dp)
+            .semantics { role = Role.Button }
     ) {
         Row(Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             CodeBadge(pack.code, 38.dp)
@@ -758,19 +832,33 @@ private fun PackRow(
             }
             Spacer(Modifier.width(8.dp))
             when {
-                busy -> CircularProgressIndicator(Modifier.padding(horizontal = 14.dp).size(22.dp), strokeWidth = 2.dp)
-                state == LanguageRepo.State.AVAILABLE -> FilledTonalButton(onClick = onDownload, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                busy -> CircularProgressIndicator(
+                    Modifier.padding(horizontal = 14.dp).size(22.dp).semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        contentDescription = L.common.working
+                    },
+                    strokeWidth = 2.dp
+                )
+                state == LanguageRepo.State.AVAILABLE -> FilledTonalButton(
+                    onClick = onDownload,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
                     Icon(Icons.Outlined.CloudDownload, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(L.common.download, fontSize = 13.sp)
                 }
-                state == LanguageRepo.State.UPDATE -> FilledTonalButton(onClick = onDownload, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                state == LanguageRepo.State.UPDATE -> FilledTonalButton(
+                    onClick = onDownload,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
                     Icon(Icons.Outlined.Update, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text(L.common.update, fontSize = 13.sp)
                 }
                 onScreen -> Icon(Icons.Outlined.CheckCircle, L.settings.language.onScreen, tint = primary, modifier = Modifier.padding(horizontal = 12.dp))
-                else -> TextButton(onClick = onUse) { Text(L.settings.language.use) }
+                else -> TextButton(onClick = onUse, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.use) }
             }
         }
     }
@@ -794,7 +882,8 @@ private fun LanguageDetailsSheet(
     val context = LocalContext.current
     val info = details.info
     val pack = details.pack
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
     val primary = MaterialTheme.colorScheme.primary
     val name = info?.name ?: pack?.name.orEmpty()
     val nativeName = info?.nativeName ?: pack?.nativeName.orEmpty()
@@ -810,14 +899,21 @@ private fun LanguageDetailsSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
-            Modifier.fillMaxWidth().bouncyVerticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+            Modifier
+                .fillMaxWidth()
+                .bouncyVerticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, bottom = 28.dp)
+                .semantics {
+                    paneTitle = name
+                    isTraversalGroup = true
+                },
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CodeBadge(code, 52.dp)
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(name, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text(name, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
                     if (nativeName.isNotBlank() && nativeName != name) Text(nativeName, fontSize = 15.sp, color = muted)
                     Text(
                         when (info?.origin) {
@@ -866,38 +962,53 @@ private fun LanguageDetailsSheet(
             }
 
             HorizontalDivider()
-            Text(L.settings.language.authorLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(L.settings.language.authorLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
             if (authors.isEmpty()) Text(L.settings.language.noAuthors, fontSize = 13.sp, color = muted)
             authors.forEach { a -> AuthorRow(a) }
 
             HorizontalDivider()
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 when {
-                    busy -> CircularProgressIndicator(Modifier.padding(8.dp).size(24.dp), strokeWidth = 2.dp)
-                    pack != null && state == LanguageRepo.State.AVAILABLE -> Button(onClick = { onDownload(pack) }) {
+                    busy -> CircularProgressIndicator(
+                        Modifier.padding(8.dp).size(24.dp).semantics {
+                            liveRegion = LiveRegionMode.Polite
+                            contentDescription = L.common.working
+                        },
+                        strokeWidth = 2.dp
+                    )
+                    pack != null && state == LanguageRepo.State.AVAILABLE -> Button(onClick = { onDownload(pack) }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.CloudDownload, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.common.download)
                     }
-                    pack != null && state == LanguageRepo.State.UPDATE -> Button(onClick = { onDownload(pack) }) {
+                    pack != null && state == LanguageRepo.State.UPDATE -> Button(onClick = { onDownload(pack) }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.Update, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.common.update)
                     }
                 }
-                if (installed && !onScreen && info != null) FilledTonalButton(onClick = { onUse(info.id) }) { Text(L.settings.language.use) }
-                if (info != null) OutlinedButton(onClick = { onDuplicate(info.id) }) {
+                if (installed && !onScreen && info != null) FilledTonalButton(onClick = { onUse(info.id) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.use) }
+                if (info != null) OutlinedButton(onClick = { onDuplicate(info.id) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.duplicate)
                 }
-                if (info != null && info.origin == LanguageManager.Origin.USER) OutlinedButton(onClick = { onSend(info) }) {
+                if (info != null && info.origin == LanguageManager.Origin.USER) OutlinedButton(onClick = { onSend(info) }, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.Outlined.Upload, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.sendToCommunity)
                 }
             }
-            if (pack != null) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                TextButton(onClick = { openUrl(context, LanguageRepo.PROBLEM_FORM + "&title=" + android.net.Uri.encode("Translation problem: ${pack.label}")) }) {
+            if (pack != null) Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                TextButton(
+                    onClick = { openUrl(context, LanguageRepo.PROBLEM_FORM + "&title=" + android.net.Uri.encode("Translation problem: ${pack.label}")) },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
                     Icon(Icons.Outlined.Flag, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.reportProblem)
                 }
-                TextButton(onClick = { openUrl(context, pack.pageUrl) }) {
+                TextButton(
+                    onClick = { openUrl(context, pack.pageUrl) },
+                    modifier = Modifier.minTouchTarget(48.dp)
+                ) {
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.viewFile)
                 }
             }
-            if (info != null && info.origin == LanguageManager.Origin.REPO) TextButton(onClick = { onRemove(info) }) {
+            if (info != null && info.origin == LanguageManager.Origin.REPO) TextButton(onClick = { onRemove(info) }, modifier = Modifier.minTouchTarget(48.dp)) {
                 Icon(Icons.Outlined.Delete, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.width(6.dp))
                 Text(L.common.remove, color = MaterialTheme.colorScheme.error)
@@ -909,15 +1020,17 @@ private fun LanguageDetailsSheet(
 @Composable
 private fun AuthorRow(a: LanguageManager.Author) {
     val context = LocalContext.current
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
     val primary = MaterialTheme.colorScheme.primary
     val link = a.profileUrl
     Surface(
         onClick = { link?.let { openUrl(context, it) } },
         enabled = link != null,
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth()
+        color = cardBg,
+        modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(34.dp).clip(RoundedCornerShape(17.dp)).background(primary.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
@@ -946,11 +1059,12 @@ private fun SendToCommunityDialog(
     onGuide: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val dialogBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Upload, null) },
-        title = { Text(L.settings.language.sendTitle(info.label), fontWeight = FontWeight.SemiBold) },
+        title = { Text(L.settings.language.sendTitle(info.label), fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() }) },
         text = {
             Column(Modifier.bouncyVerticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(L.settings.language.sendAbout, fontSize = 13.5.sp, lineHeight = 19.sp)
@@ -958,7 +1072,7 @@ private fun SendToCommunityDialog(
                     Surface(shape = RoundedCornerShape(12.dp), color = ai.antigem.theme.AppColors.warning.copy(alpha = 0.12f)) {
                         Row(Modifier.padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(L.settings.language.sendNoAuthors, fontSize = 12.5.sp, lineHeight = 17.sp, modifier = Modifier.weight(1f))
-                            TextButton(onClick = onAddNames) { Text(L.settings.language.addNames) }
+                            TextButton(onClick = onAddNames, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.addNames) }
                         }
                     }
                 } else {
@@ -966,27 +1080,36 @@ private fun SendToCommunityDialog(
                 }
                 basedOn?.let { Text(L.settings.language.sendBasedOn(it), fontSize = 12.5.sp, lineHeight = 17.sp, color = muted) }
                 Text(L.settings.language.sendStep1, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = onSave) { Icon(Icons.Outlined.Save, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.saveToFile) }
-                    OutlinedButton(onClick = onShare) { Icon(Icons.Outlined.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.share) }
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalButton(onClick = onSave, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Outlined.Save, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.saveToFile)
+                    }
+                    OutlinedButton(onClick = onShare, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Outlined.Share, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.share)
+                    }
                 }
                 Text(L.settings.language.sendStep2, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                FilledTonalButton(onClick = onOpenForm) {
+                FilledTonalButton(onClick = onOpenForm, modifier = Modifier.minTouchTarget(48.dp)) {
                     Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(L.settings.language.openForm)
                 }
                 Text(L.settings.language.sendGit(info.code), fontSize = 12.sp, lineHeight = 16.sp, color = muted)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(L.common.close) } },
-        dismissButton = { TextButton(onClick = onGuide) { Text(L.settings.language.howToTranslate) } }
+        confirmButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.close) } },
+        dismissButton = { TextButton(onClick = onGuide, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.howToTranslate) } }
     )
 }
 
 @Composable
 private fun SmallChip(label: String, color: Color) {
+    val bg = color.copy(alpha = 0.13f)
+    val fg = ensureAccessibleContrast(color, bg, 4.5f, MaterialTheme.colorScheme.surface)
     Text(
-        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = color,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.13f)).padding(horizontal = 6.dp, vertical = 2.dp)
+        label, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = fg,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(bg).padding(horizontal = 6.dp, vertical = 2.dp)
     )
 }
 
@@ -997,19 +1120,21 @@ private fun AiReplyCard() {
     val saved = LanguageManager.aiReply
     var choice by remember { mutableIntStateOf(when (saved) { "" -> 0; LanguageManager.AI_REPLY_APP -> 1; else -> 2 }) }
     var custom by remember { mutableStateOf(if (choice == 2) saved else "") }
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    Surface(shape = RoundedCornerShape(16.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.AutoAwesome, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(L.settings.language.aiReplies, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(L.settings.language.aiReplies, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
             }
             Spacer(Modifier.height(4.dp))
             Text(L.settings.language.aiRepliesAbout, fontSize = 12.5.sp, lineHeight = 17.sp, color = muted)
             Spacer(Modifier.height(10.dp))
             val options = listOf(L.settings.language.aiOff, L.settings.language.aiApp, L.settings.language.aiOther)
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().selectableGroup()) {
                 options.forEachIndexed { i, label ->
                     SegmentedButton(
                         selected = choice == i,
@@ -1017,7 +1142,8 @@ private fun AiReplyCard() {
                             choice = i
                             LanguageManager.chooseAiReply(when (i) { 0 -> ""; 1 -> LanguageManager.AI_REPLY_APP; else -> custom })
                         },
-                        shape = SegmentedButtonDefaults.itemShape(i, options.size)
+                        shape = SegmentedButtonDefaults.itemShape(i, options.size),
+                        modifier = Modifier.minTouchTarget(48.dp)
                     ) { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp) }
                 }
             }
@@ -1032,12 +1158,17 @@ private fun AiReplyCard() {
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(
+                    modifier = Modifier.selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     COMMON_LANGUAGES.forEach { name ->
                         FilterChip(
                             selected = custom.equals(name, true),
                             onClick = { custom = name; LanguageManager.chooseAiReply(name) },
-                            label = { Text(name, fontSize = 12.sp) }
+                            label = { Text(name, fontSize = 12.sp) },
+                            modifier = Modifier.minTouchTarget(48.dp)
                         )
                     }
                 }
@@ -1051,7 +1182,8 @@ private fun AiReplyCard() {
                     else -> L.settings.language.aiNotSet
                 },
                 fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                color = if (now != null) MaterialTheme.colorScheme.primary else muted
+                color = if (now != null) MaterialTheme.colorScheme.primary else muted,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
         }
     }
@@ -1061,21 +1193,26 @@ private fun AiReplyCard() {
 @Composable
 private fun TranslateWithAiCard() {
     val context = LocalContext.current
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
+    Surface(shape = RoundedCornerShape(16.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Translate, null, tint = ai.antigem.theme.AppColors.accentTeal, modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.Translate, null, tint = ensureAccessibleContrast(ai.antigem.theme.AppColors.accentTeal, cardBg, 3.0f, surfaceBg), modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
-                Text(L.settings.language.translateWithAi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text(L.settings.language.translateWithAi, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
             }
             Spacer(Modifier.height(4.dp))
             Text(L.settings.language.translateWithAiAbout, fontSize = 12.5.sp, lineHeight = 17.sp, color = muted)
             Spacer(Modifier.height(10.dp))
-            FilledTonalButton(onClick = {
-                runCatching { clipboard(context).setPrimaryClip(ClipData.newPlainText("prompt", L.settings.language.aiPrompt)) }
-                toast(context, L.settings.language.promptCopied)
-            }) {
+            FilledTonalButton(
+                onClick = {
+                    runCatching { clipboard(context).setPrimaryClip(ClipData.newPlainText("prompt", L.settings.language.aiPrompt)) }
+                    toast(context, L.settings.language.promptCopied)
+                },
+                modifier = Modifier.minTouchTarget(48.dp)
+            ) {
                 Icon(Icons.Outlined.ContentCopy, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(L.settings.language.copyPrompt)
@@ -1121,11 +1258,12 @@ private fun LanguageInfoDialog(
     }
     var from by remember { mutableStateOf<LanguageManager.Info?>(null) }
     var fromMenu by remember { mutableStateOf(false) }
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val dialogBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = dialogBg)
     val valid = name.isNotBlank() && code.isNotBlank()
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.SemiBold) },
+        title = { Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() }) },
         text = {
             Column(Modifier.bouncyVerticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it }, singleLine = true, modifier = Modifier.fillMaxWidth(),
@@ -1138,14 +1276,20 @@ private fun LanguageInfoDialog(
                 OutlinedTextField(variant, { variant = it.take(40) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     label = { Text(L.settings.language.variantLabel) }, placeholder = { Text(L.settings.language.variantHint) },
                     supportingText = { Text(L.settings.language.variantAbout) })
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .accessibleToggleRow(checked = rtl, role = Role.Switch) { rtl = !rtl }
+                ) {
                     Text(L.settings.language.rtl, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Switch(checked = rtl, onCheckedChange = { rtl = it })
+                    Switch(checked = rtl, onCheckedChange = null)
                 }
                 if (languages != null) {
                     Text(L.settings.language.startFrom, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Box {
-                        OutlinedButton(onClick = { fromMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { fromMenu = true }, modifier = Modifier.fillMaxWidth().minTouchTarget(48.dp)) {
                             Text(from?.let { L.settings.language.copyOf(it.label) } ?: L.settings.language.startEmpty,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         }
@@ -1173,7 +1317,7 @@ private fun LanguageInfoDialog(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     OutlinedTextField(a.name, { a.name = it.take(80) }, singleLine = true, modifier = Modifier.weight(1f),
                                         label = { Text(L.common.name) })
-                                    IconButton(onClick = { authors.removeAt(i) }) { Icon(Icons.Outlined.Close, L.common.remove) }
+                                    IconButton(onClick = { authors.removeAt(i) }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Close, L.common.remove) }
                                 }
                                 OutlinedTextField(a.github, { a.github = it.trim().removePrefix("@").take(39) }, singleLine = true,
                                     modifier = Modifier.fillMaxWidth().padding(end = 6.dp),
@@ -1184,7 +1328,7 @@ private fun LanguageInfoDialog(
                             }
                         }
                     }
-                    TextButton(onClick = { authors.add(AuthorDraft()) }) {
+                    TextButton(onClick = { authors.add(AuthorDraft()) }, modifier = Modifier.minTouchTarget(48.dp)) {
                         Icon(Icons.Outlined.PersonAdd, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(L.settings.language.addPerson)
@@ -1193,23 +1337,33 @@ private fun LanguageInfoDialog(
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = {
-                onConfirm(LanguageInfoResult(
-                    code.trim(), name.trim(), native.trim(), rtl, from?.id, variant.trim(), description.trim(),
-                    authors.filter { it.name.isNotBlank() }.map { LanguageManager.Author(it.name.trim(), it.github.trim(), it.url, it.role.trim()) }
-                ))
-            }) { Text(confirm) }
+            TextButton(
+                enabled = valid,
+                modifier = Modifier.minTouchTarget(48.dp),
+                onClick = {
+                    onConfirm(LanguageInfoResult(
+                        code.trim(), name.trim(), native.trim(), rtl, from?.id, variant.trim(), description.trim(),
+                        authors.filter { it.name.isNotBlank() }.map { LanguageManager.Author(it.name.trim(), it.github.trim(), it.url, it.role.trim()) }
+                    ))
+                }
+            ) { Text(confirm) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
 @Composable
 private fun ImportResultDialog(lang: LanguageManager.Language?, report: LanguageManager.Report, onUse: () -> Unit, onDismiss: () -> Unit) {
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val muted = accessibleMutedColor(alpha = 0.72f, background = MaterialTheme.colorScheme.surface)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (lang != null) L.settings.language.importedTitle(lang.label) else L.settings.language.notALanguage, fontWeight = FontWeight.SemiBold) },
+        title = {
+            Text(
+                if (lang != null) L.settings.language.importedTitle(lang.label) else L.settings.language.notALanguage,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.semantics { heading() }
+            )
+        },
         text = {
             Column(Modifier.bouncyVerticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (lang == null) {
@@ -1227,10 +1381,10 @@ private fun ImportResultDialog(lang: LanguageManager.Language?, report: Language
             }
         },
         confirmButton = {
-            if (lang != null) TextButton(onClick = onUse) { Text(L.settings.language.useNow) }
-            else TextButton(onClick = onDismiss) { Text(L.common.ok) }
+            if (lang != null) TextButton(onClick = onUse, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.useNow) }
+            else TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.ok) }
         },
-        dismissButton = { if (lang != null) TextButton(onClick = onDismiss) { Text(L.settings.language.later) } }
+        dismissButton = { if (lang != null) TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.settings.language.later) } }
     )
 }
 
@@ -1339,18 +1493,20 @@ fun LanguageTextsScreen(id: String, onOpen: (String) -> Unit) {
     }
     val info = remember(l, s) { LanguageManager.info(l, s) }
     val forms = remember(l.code) { LanguageManager.pluralForms(l.code) }
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val muted = accessibleMutedColor(alpha = 0.72f, background = surfaceBg)
     val primary = MaterialTheme.colorScheme.primary
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item(key = "head") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(l.label, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(l.label, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
                 if (!english) {
                     Text(
                         L.settings.languageTexts.progress(info.translated, info.total) +
                             (if (info.outdated > 0) "  ·  " + L.settings.language.outdatedCount(info.outdated) else ""),
-                        fontSize = 12.5.sp, color = muted
+                        fontSize = 12.5.sp, color = muted,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
                     )
                     LinearProgressIndicator(
                         progress = { if (info.total == 0) 0f else info.translated.toFloat() / info.total },
@@ -1368,12 +1524,15 @@ fun LanguageTextsScreen(id: String, onOpen: (String) -> Unit) {
                                 if (l.origin == LanguageManager.Origin.REPO) L.settings.languageTexts.communityReadOnly(l.name) else L.settings.languageTexts.builtInReadOnly(l.name),
                                 fontSize = 12.5.sp, modifier = Modifier.weight(1f)
                             )
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val copy = withContext(Dispatchers.IO) { LanguageManager.duplicate(l.id) }
-                                    copy?.let { onOpen(it.id) }
-                                }
-                            }) { Text(L.settings.languageTexts.duplicateToEdit) }
+                            TextButton(
+                                onClick = {
+                                    scope.launch {
+                                        val copy = withContext(Dispatchers.IO) { LanguageManager.duplicate(l.id) }
+                                        copy?.let { onOpen(it.id) }
+                                    }
+                                },
+                                modifier = Modifier.minTouchTarget(48.dp)
+                            ) { Text(L.settings.languageTexts.duplicateToEdit) }
                         }
                     }
                 }
@@ -1386,14 +1545,22 @@ fun LanguageTextsScreen(id: String, onOpen: (String) -> Unit) {
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (!english) {
-                        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            Modifier.weight(1f).horizontalScroll(rememberScrollState()).selectableGroup(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             listOf(
                                 TextFilter.MISSING to L.settings.languageTexts.filterMissing,
                                 TextFilter.OUTDATED to L.settings.languageTexts.filterOutdated,
                                 TextFilter.TRANSLATED to L.settings.languageTexts.filterTranslated,
                                 TextFilter.ALL to L.settings.languageTexts.filterAll
                             ).forEach { (f, label) ->
-                                FilterChip(selected = filter == f, onClick = { filter = f; base = lang }, label = { Text(label, fontSize = 12.sp) })
+                                FilterChip(
+                                    selected = filter == f,
+                                    onClick = { filter = f; base = lang },
+                                    label = { Text(label, fontSize = 12.sp) },
+                                    modifier = Modifier.minTouchTarget(48.dp)
+                                )
                             }
                         }
                     } else Spacer(Modifier.weight(1f))
@@ -1401,7 +1568,8 @@ fun LanguageTextsScreen(id: String, onOpen: (String) -> Unit) {
                         AssistChip(
                             onClick = { areaMenu = true },
                             label = { Text(area ?: L.settings.languageTexts.allParts, fontSize = 12.sp, maxLines = 1) },
-                            leadingIcon = { Icon(Icons.Outlined.FilterList, null, Modifier.size(16.dp)) }
+                            leadingIcon = { Icon(Icons.Outlined.FilterList, null, Modifier.size(16.dp)) },
+                            modifier = Modifier.minTouchTarget(48.dp)
                         )
                         DropdownMenu(expanded = areaMenu, onDismissRequest = { areaMenu = false }) {
                             DropdownMenuItem(text = { Text(L.settings.languageTexts.allParts) }, onClick = { area = null; areaMenu = false })
@@ -1434,15 +1602,17 @@ private fun TextRow(
     forms: List<String>
 ) {
     val key = s.keys[i]
-    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
+    val muted = accessibleMutedColor(alpha = 0.72f, background = cardBg, surfaceFallback = surfaceBg)
     val status = LanguageManager.status(lang, s, i)
     val statusColor = when (status) {
         LanguageManager.Status.TRANSLATED -> ai.antigem.theme.AppColors.success
         LanguageManager.Status.OUTDATED -> ai.antigem.theme.AppColors.warning
-        LanguageManager.Status.MISSING -> muted.copy(alpha = 0.5f)
+        LanguageManager.Status.MISSING -> muted
     }
     val plural = s.isPlural(i)
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+    Surface(shape = RoundedCornerShape(14.dp), color = cardBg, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (!english) Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(statusColor))
@@ -1496,7 +1666,7 @@ private fun TextRow(
                         text = t
                         if (t.isEmpty() || LanguageManager.checkText(s, i, t) == null) TextSaver.put(lang.id, key, t.ifEmpty { null })
                     },
-                    placeholder = { Text(L.settings.languageTexts.translationHint, color = muted.copy(alpha = 0.6f)) },
+                    placeholder = { Text(L.settings.languageTexts.translationHint, color = muted) },
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (text.isNotEmpty()) Problem(s, i, text)
@@ -1510,14 +1680,16 @@ private fun TextRow(
 private fun Problem(s: LanguageManager.Source, i: Int, value: Any) {
     val bad = LanguageManager.placeholdersOf(value) - s.placeholders(i)
     val missing = LanguageManager.missingPlaceholders(s, i, value)
+    val surfaceBg = MaterialTheme.colorScheme.surface
+    val cardBg = MaterialTheme.colorScheme.surfaceContainerLow
     when {
         LanguageManager.checkText(s, i, value) != null -> Text(
             L.settings.languageTexts.notSaved(bad.joinToString(" ") { "{$it}" }),
-            fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error
+            fontSize = 11.5.sp, color = ensureAccessibleContrast(MaterialTheme.colorScheme.error, cardBg, 4.5f, surfaceBg)
         )
         missing.isNotEmpty() -> Text(
             L.settings.languageTexts.leavesOut(missing.joinToString(" ") { "{$it}" }),
-            fontSize = 11.5.sp, color = ai.antigem.theme.AppColors.warning
+            fontSize = 11.5.sp, color = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, cardBg, 4.5f, surfaceBg)
         )
     }
 }

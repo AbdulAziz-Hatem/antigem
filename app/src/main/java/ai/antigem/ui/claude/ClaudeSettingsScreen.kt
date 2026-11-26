@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -86,6 +87,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -106,6 +115,11 @@ import ai.antigem.theme.QuotaAmber
 import ai.antigem.theme.QuotaGreen
 import ai.antigem.theme.QuotaRed
 import ai.antigem.ui.components.ClaudeAccent
+import ai.antigem.ui.components.accessibleMutedColor
+import ai.antigem.ui.components.accessibleSelectionRow
+import ai.antigem.ui.components.accessibleToggleRow
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -221,12 +235,12 @@ fun ClaudeSettingsScreen(
 
 @Composable
 private fun SectionTitle(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
+    Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp).semantics { heading() })
 }
 
 @Composable
 private fun Hint(text: String) {
-    Text(text, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+    Text(text, fontSize = 11.5.sp, color = accessibleMutedColor(alpha = 0.72f))
 }
 
 private fun activeProjectPath(): String? =
@@ -249,21 +263,26 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
         deps.account.refreshUsage(force = true)
     }
 
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+
     ClaudeCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(L.claude.settings.claudeCodeCli, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { deps.account.refreshStatus() }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+            Text(L.claude.settings.claudeCodeCli, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
+            IconButton(onClick = { deps.account.refreshStatus() }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
         }
-        when (state) {
-            ClaudeStatus.CHECKING -> Text(L.common.checking, fontSize = 12.5.sp)
-            ClaudeStatus.BRIDGE_OFFLINE, ClaudeStatus.BRIDGE_OUTDATED, ClaudeStatus.ERROR -> {
-                Text(state.label, color = state.dotColor, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
-                statusError?.let { Hint(it) }
-            }
-            ClaudeStatus.NOT_INSTALLED -> Text(L.claude.settings.claudeCodeNotFoundOnThis, fontSize = 12.5.sp, color = state.dotColor)
-            else -> {
-                Text(status?.version ?: L.common.installed, fontSize = 13.sp)
-                status?.bin_path?.let { Hint(it) }
+        Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
+            when (state) {
+                ClaudeStatus.CHECKING -> Text(L.common.checking, fontSize = 12.5.sp)
+                ClaudeStatus.BRIDGE_OFFLINE, ClaudeStatus.BRIDGE_OUTDATED, ClaudeStatus.ERROR -> {
+                    Text(state.label, color = ensureAccessibleContrast(state.dotColor, MaterialTheme.colorScheme.surface, 4.5f), fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp)
+                    statusError?.let { Hint(it) }
+                }
+                ClaudeStatus.NOT_INSTALLED -> Text(L.claude.settings.claudeCodeNotFoundOnThis, fontSize = 12.5.sp, color = ensureAccessibleContrast(state.dotColor, MaterialTheme.colorScheme.surface, 4.5f))
+                else -> {
+                    Text(status?.version ?: L.common.installed, fontSize = 13.sp)
+                    status?.bin_path?.let { Hint(it) }
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -271,9 +290,10 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
             val running = job?.running == true
             if (state == ClaudeStatus.NOT_INSTALLED) {
                 Button(onClick = { deps.config.startCliJob("install") }, enabled = !running,
+                    modifier = Modifier.minTouchTarget(48.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.claude.settings.installClaudeCode) }
             } else if (status?.installed == true) {
-                OutlinedButton(onClick = { deps.config.startCliJob("update") }, enabled = !running) { Text(L.common.checkForUpdates) }
+                OutlinedButton(onClick = { deps.config.startCliJob("update") }, enabled = !running, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.checkForUpdates) }
             }
             if (running) CircularProgressIndicator(Modifier.size(20.dp).align(Alignment.CenterVertically), strokeWidth = 2.dp)
         }
@@ -282,7 +302,8 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
             Text(
                 "${j.kind}: " + if (j.running) L.claude.settings.running else L.claude.settings.finishedExitExitCode(j.exit_code),
                 fontSize = 12.sp,
-                color = if (!j.running && j.exit_code != 0) QuotaRed else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                color = if (!j.running && j.exit_code != 0) accessibleRed else accessibleMutedColor(alpha = 0.72f),
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
             )
             Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -295,13 +316,14 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
     }
 
     ClaudeCard {
-        Text(L.common.account, fontWeight = FontWeight.Bold)
+        Text(L.common.account, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
         Spacer(Modifier.height(6.dp))
         val auth = status?.auth
         if (auth?.loggedIn == true) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(36.dp).clip(CircleShape).background(ClaudeAccent.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
-                    Text((auth.email?.firstOrNull()?.uppercaseChar() ?: '✻').toString(), color = ClaudeAccent, fontWeight = FontWeight.Bold)
+                val avatarBg = ClaudeAccent.copy(alpha = 0.18f)
+                Box(Modifier.size(36.dp).clip(CircleShape).background(avatarBg).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
+                    Text((auth.email?.firstOrNull()?.uppercaseChar() ?: '✻').toString(), color = ensureAccessibleContrast(ClaudeAccent, avatarBg, 4.5f, MaterialTheme.colorScheme.surface), fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
@@ -310,7 +332,7 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
                         auth.authMethod?.let { "via $it" }).joinToString(" · "))
                 }
                 var confirmSignOut by remember { mutableStateOf(false) }
-                OutlinedButton(onClick = { confirmSignOut = true }, enabled = !busy) { Text(L.common.signOut, color = QuotaRed) }
+                OutlinedButton(onClick = { confirmSignOut = true }, enabled = !busy, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.signOut, color = accessibleRed) }
                 if (confirmSignOut) {
                     ai.antigem.ui.agents.ConfirmSignOutDialog(
                         ai.antigem.domain.model.AgentKind.CLAUDE.label(), auth.email,
@@ -322,6 +344,7 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
             Hint(L.claude.settings.signInWithYourClaudeSubscription)
             Spacer(Modifier.height(8.dp))
             Button(onClick = { showLogin = true }, enabled = !state.isBlocking && state != ClaudeStatus.CHECKING && (!busy || state == ClaudeStatus.SIGNING_IN),
+                modifier = Modifier.minTouchTarget(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) {
                 Text(if (state == ClaudeStatus.SIGNING_IN) L.claude.settings.signingIn else L.common.signIn)
             }
@@ -335,7 +358,7 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
         ClaudeCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(L.claude.settings.planUsage, fontWeight = FontWeight.Bold)
+                    Text(L.claude.settings.planUsage, fontWeight = FontWeight.Bold, modifier = Modifier.semantics { heading() })
                     Hint(
                         when {
                             usageRefreshing -> L.common.updating
@@ -345,9 +368,9 @@ private fun AccountPage(deps: ClaudeSettingsDeps) {
                     )
                 }
                 if (usageRefreshing) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp, color = ClaudeAccent)
-                else IconButton(onClick = { deps.account.refreshUsage(force = true) }) { Icon(Icons.Outlined.Refresh, L.claude.settings.refreshUsage) }
+                else IconButton(onClick = { deps.account.refreshUsage(force = true) }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.claude.settings.refreshUsage) }
             }
-            usageError?.let { Text(L.claude.settings.couldNotUpdateValue(it), fontSize = 12.sp, color = QuotaRed) }
+            usageError?.let { Text(L.claude.settings.couldNotUpdateValue(it), fontSize = 12.sp, color = accessibleRed, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             val u = usage ?: return@ClaudeCard
             val rl = u.rate_limits
             if (rl == null || !u.rate_limits_available) {
@@ -390,16 +413,25 @@ private fun DefaultsPage(deps: ClaudeSettingsDeps) {
     // no default in settings.json: new chats start in Auto
     val mode = deps.config.defaultMode()?.takeIf { it != "bypassPermissions" } ?: "auto"
 
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val chipMuted = accessibleMutedColor(alpha = 0.75f)
+
     Hint(L.claude.settings.theseApplyToNewClaudeChats)
 
     ClaudeCard {
         SectionTitle(L.claude.settings.defaultModel)
         Spacer(Modifier.height(6.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.selectableGroup()) {
             val options = models.map { it.value to it.displayName.ifBlank { it.value } }.ifEmpty { listOf("default" to L.common.default) }
             options.forEach { (value, label) ->
-                ControlChip(label, highlighted = value == model, color = if (value == model) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                    onClick = { deps.config.setValue("model", if (value == "default") null else JsonPrimitive(value)) })
+                val isSelected = value == model
+                ControlChip(
+                    label,
+                    highlighted = isSelected,
+                    color = if (isSelected) accessibleAccent else chipMuted,
+                    modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = isSelected },
+                    onClick = { deps.config.setValue("model", if (value == "default") null else JsonPrimitive(value)) }
+                )
             }
         }
         val levels = models.find { it.value == model }?.supportedEffortLevels ?: models.firstOrNull()?.supportedEffortLevels.orEmpty()
@@ -407,21 +439,34 @@ private fun DefaultsPage(deps: ClaudeSettingsDeps) {
             Spacer(Modifier.height(12.dp))
             SectionTitle(L.claude.settings.defaultEffort)
             Spacer(Modifier.height(6.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.selectableGroup()) {
                 (listOf<String?>(null) + levels).forEach { level ->
-                    ControlChip(effortLabel(level), highlighted = level == effort,
-                        color = if (level == effort) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                        onClick = { deps.config.setValue("effortLevel", level?.let { JsonPrimitive(it) }) })
+                    val isSelected = level == effort
+                    ControlChip(
+                        effortLabel(level),
+                        highlighted = isSelected,
+                        color = if (isSelected) accessibleAccent else chipMuted,
+                        modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = isSelected },
+                        onClick = { deps.config.setValue("effortLevel", level?.let { JsonPrimitive(it) }) }
+                    )
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .accessibleToggleRow(checked = thinking, role = Role.Switch) {
+                    deps.config.setValue("alwaysThinkingEnabled", JsonPrimitive(!thinking))
+                },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(Modifier.weight(1f)) {
                 SectionTitle(L.common.thinking)
                 Hint(L.claude.settings.reasonBeforeAnswering)
             }
-            Switch(checked = thinking, onCheckedChange = { deps.config.setValue("alwaysThinkingEnabled", JsonPrimitive(it)) },
+            Switch(checked = thinking, onCheckedChange = null,
                 colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent))
         }
     }
@@ -429,16 +474,19 @@ private fun DefaultsPage(deps: ClaudeSettingsDeps) {
     ClaudeCard {
         SectionTitle(L.claude.settings.defaultPermissionMode)
         Spacer(Modifier.height(6.dp))
-        ClaudeChatBackend.PERMISSION_MODES.forEach { (value, label) ->
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { deps.config.setDefaultMode(value) }
-                    .padding(vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                androidx.compose.material3.RadioButton(selected = value == mode, onClick = { deps.config.setDefaultMode(value) })
-                Column {
-                    Text(label, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
-                    Hint(permissionModeDescription(value))
+        Column(Modifier.selectableGroup()) {
+            ClaudeChatBackend.PERMISSION_MODES.forEach { (value, label) ->
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                        .accessibleSelectionRow(selected = value == mode, role = Role.RadioButton) { deps.config.setDefaultMode(value) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    androidx.compose.material3.RadioButton(selected = value == mode, onClick = null)
+                    Column {
+                        Text(label, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                        Hint(permissionModeDescription(value))
+                    }
                 }
             }
         }
@@ -449,11 +497,16 @@ private fun DefaultsPage(deps: ClaudeSettingsDeps) {
             SectionTitle(L.claude.settings.outputStyle)
             Hint(L.claude.settings.howClaudeWritesItsReplies)
             Spacer(Modifier.height(6.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.selectableGroup()) {
                 styles.forEach { st ->
-                    ControlChip(st, highlighted = st.equals(style, true),
-                        color = if (st.equals(style, true)) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                        onClick = { deps.config.setValue("outputStyle", if (st == "default") null else JsonPrimitive(st)) })
+                    val isSelected = st.equals(style, true)
+                    ControlChip(
+                        st,
+                        highlighted = isSelected,
+                        color = if (isSelected) accessibleAccent else chipMuted,
+                        modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = isSelected },
+                        onClick = { deps.config.setValue("outputStyle", if (st == "default") null else JsonPrimitive(st)) }
+                    )
                 }
             }
         }
@@ -467,7 +520,7 @@ private fun DefaultsPage(deps: ClaudeSettingsDeps) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(lang, { lang = it.trim() }, singleLine = true, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(8.dp))
-            Button(onClick = { deps.prefs.setVoiceLanguage(lang.ifBlank { "en" }) }, colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.save) }
+            Button(onClick = { deps.prefs.setVoiceLanguage(lang.ifBlank { "en" }) }, modifier = Modifier.minTouchTarget(48.dp), colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.save) }
         }
     }
 }
@@ -482,25 +535,40 @@ private fun PermissionsPage(deps: ClaudeSettingsDeps) {
     var behavior by remember { mutableStateOf("allow") }
     if (settings == null) Hint(L.claude.settings.loadingSettings)
 
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val chipMuted = accessibleMutedColor(alpha = 0.72f)
+
     // Claude Code's command sandbox: the safe way to have fewer prompts (Bypass is never used by this app)
     val sandbox by deps.config.sandbox.collectAsState()
     LaunchedEffect(Unit) { deps.config.loadSandbox() }
     ClaudeCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        val sandboxAvailable = sandbox?.available == true
+        val sandboxEnabled = sandbox?.enabled == true
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .then(
+                    if (sandboxAvailable) Modifier.accessibleToggleRow(checked = sandboxEnabled, role = Role.Switch) {
+                        deps.config.setSandboxEnabled(!sandboxEnabled)
+                    } else Modifier.minTouchTarget(48.dp).semantics(mergeDescendants = true) {}
+                ),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Column(Modifier.weight(1f)) {
                 SectionTitle(L.claude.settings.sandboxCommands)
                 Hint(
                     when {
                         sandbox == null -> L.claude.settings.checkingWhetherTheSandboxCanRun
-                        sandbox?.available == true -> L.claude.settings.runClaudesShellCommandsInAn
+                        sandboxAvailable -> L.claude.settings.runClaudesShellCommandsInAn
                         else -> L.claude.settings.notAvailableHereValueAutoMode(sandbox?.reason ?: L.claude.settings.unknownReason)
                     }
                 )
             }
             Switch(
-                checked = sandbox?.enabled == true,
-                enabled = sandbox?.available == true,
-                onCheckedChange = { deps.config.setSandboxEnabled(it) },
+                checked = sandboxEnabled,
+                enabled = sandboxAvailable,
+                onCheckedChange = null,
                 colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent)
             )
         }
@@ -513,14 +581,23 @@ private fun PermissionsPage(deps: ClaudeSettingsDeps) {
         OutlinedTextField(newRule, { newRule = it }, singleLine = true, placeholder = { Text(L.claude.settings.bashNpmRunTest) }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            listOf("allow" to QuotaGreen, "ask" to QuotaAmber, "deny" to QuotaRed).forEach { (b, c) ->
-                ControlChip(b.replaceFirstChar { it.uppercase() }, highlighted = behavior == b, color = if (behavior == b) c else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), onClick = { behavior = b })
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()).selectableGroup()) {
+                listOf("allow" to QuotaGreen, "ask" to QuotaAmber, "deny" to QuotaRed).forEach { (b, c) ->
+                    val isSelected = behavior == b
+                    val accessibleC = ensureAccessibleContrast(c, MaterialTheme.colorScheme.surface, 4.5f)
+                    ControlChip(
+                        b.replaceFirstChar { it.uppercase() },
+                        highlighted = isSelected,
+                        color = if (isSelected) accessibleC else chipMuted,
+                        modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = isSelected },
+                        onClick = { behavior = b }
+                    )
+                }
             }
-            Spacer(Modifier.weight(1f))
             Button(onClick = {
                 deps.config.addRule(behavior, newRule)
                 newRule = ""
-            }, enabled = newRule.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.add) }
+            }, enabled = newRule.isNotBlank(), modifier = Modifier.minTouchTarget(48.dp), colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.add) }
         }
     }
     listOf("allow" to L.claude.settings.allowedWithoutAsking, "ask" to L.claude.settings.alwaysAsk, "deny" to L.claude.settings.neverAllowed).forEach { (b, title) ->
@@ -531,7 +608,7 @@ private fun PermissionsPage(deps: ClaudeSettingsDeps) {
             rules.forEach { rule ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(rule, fontFamily = FontFamily.Monospace, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    IconButton(onClick = { deps.config.removeRule(b, rule) }) { Icon(Icons.Outlined.Delete, L.common.remove, tint = QuotaRed.copy(alpha = 0.8f)) }
+                    IconButton(onClick = { deps.config.removeRule(b, rule) }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Delete, L.common.remove, tint = accessibleRed) }
                 }
             }
         }
@@ -554,13 +631,17 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
     var expandedErrors by remember { mutableStateOf(setOf<String>()) }
     LaunchedEffect(Unit) { deps.config.loadMcp(cwd) }
 
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val mutedColor = accessibleMutedColor(alpha = 0.72f)
+
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(L.claude.settings.toolsClaudeCanCall, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(L.claude.settings.toolsClaudeCanCall, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.semantics { heading() })
             Hint(if (cwd != null) "Includes servers of the open project ($cwd)." else L.claude.settings.openAProjectToAlsoSee)
         }
         if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeAccent)
-        else IconButton(onClick = { deps.config.loadMcp(cwd) }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+        else IconButton(onClick = { deps.config.loadMcp(cwd) }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
     }
 
     // quick presets, like the Antigravity MCP screen
@@ -613,7 +694,7 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
         )
         chooseWebViewExtension = false
     }
-    Text(L.common.quickPresets, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+    Text(L.common.quickPresets, fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = mutedColor, modifier = Modifier.semantics { heading() })
     val tiles = listOf(
         ClaudeMcpPreset(L.common.customPluginMcp, L.common.pickAnInstalledPlugin, Icons.Outlined.Extension, ClaudeTerracotta, null),
     ) + presets +
@@ -655,13 +736,13 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
     }
 
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(L.claude.settings.configuredServersCount(servers.size), fontSize = 13.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        Text(L.claude.settings.configuredServersCount(servers.size), fontSize = 13.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f).semantics { heading() })
         if (servers.isNotEmpty()) Hint(L.claude.settings.countTools(servers.sumOf { it.tools.size }))
     }
 
     // servers being added show up right away with their progress
     ops.filterKeys { name -> servers.none { it.name == name } }.forEach { (name, op) ->
-        ClaudeCard {
+        ClaudeCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeAccent)
                 Spacer(Modifier.width(10.dp))
@@ -674,7 +755,7 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
     }
 
     when {
-        servers.isEmpty() && loading && ops.isEmpty() -> ClaudeCard {
+        servers.isEmpty() && loading && ops.isEmpty() -> ClaudeCard(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeAccent)
                 Spacer(Modifier.width(10.dp))
@@ -686,7 +767,7 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
         }
         servers.isEmpty() && ops.isEmpty() -> ClaudeCard {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Outlined.Hub, null, tint = ClaudeAccent.copy(alpha = 0.7f), modifier = Modifier.size(28.dp))
+                Icon(Icons.Outlined.Hub, null, tint = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 3.0f), modifier = Modifier.size(28.dp).clearAndSetSemantics {})
                 Spacer(Modifier.height(6.dp))
                 Text(L.claude.settings.noMcpServersYet, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 Hint(L.claude.settings.addOneFromThePresetsAbove)
@@ -702,8 +783,8 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
             srv.status == "pending" -> QuotaAmber to L.claude.settings.starting
             srv.status == "failed" -> QuotaRed to L.common.failed
             srv.status == "needs-auth" -> QuotaAmber to L.common.needsSignIn
-            srv.status == "disabled" -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) to L.common.disabled
-            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) to srv.status.ifBlank { L.claude.settings.unknown }.replaceFirstChar { it.uppercase() }
+            srv.status == "disabled" -> mutedColor to L.common.disabled
+            else -> mutedColor to srv.status.ifBlank { L.claude.settings.unknown }.replaceFirstChar { it.uppercase() }
         }
         val cfg = srv.config
         fun cfgStr(key: String) = (cfg?.get(key) as? JsonPrimitive)?.content
@@ -712,7 +793,7 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
             (cfg?.get("args") as? kotlinx.serialization.json.JsonArray)?.joinToString(" ") { (it as? JsonPrimitive)?.content.orEmpty() }).joinToString(" ").trim()
         ClaudeCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(transportColor(transport).copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(transportColor(transport).copy(alpha = 0.12f)).clearAndSetSemantics {}, contentAlignment = Alignment.Center) {
                     Icon(Icons.Outlined.Extension, null, tint = transportColor(transport), modifier = Modifier.size(18.dp))
                 }
                 Spacer(Modifier.width(10.dp))
@@ -726,27 +807,29 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
                 }
                 when {
                     op != null -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeAccent)
-                    srv.scope in setOf("user", "project", "local") -> IconButton(onClick = { toDelete = srv }) {
-                        Icon(Icons.Outlined.Delete, L.common.remove, tint = QuotaRed.copy(alpha = 0.8f))
+                    srv.scope in setOf("user", "project", "local") -> IconButton(onClick = { toDelete = srv }, modifier = Modifier.minTouchTarget(48.dp)) {
+                        Icon(Icons.Outlined.Delete, L.common.remove, tint = accessibleRed)
                     }
                 }
             }
             if (target.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
-                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)) {
+                val targetBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp), color = targetBg) {
                     Text(if (transport == "stdio") "> $target" else L.claude.settings.urlTarget(target), fontSize = 11.5.sp, fontFamily = FontFamily.Monospace,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, color = accessibleMutedColor(alpha = 0.8f, background = targetBg),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                 }
             }
             srv.error?.takeIf { it.isNotBlank() }?.let { err ->
                 val open = srv.name in expandedErrors
+                val errBg = QuotaRed.copy(alpha = 0.08f)
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { expandedErrors = if (open) expandedErrors - srv.name else expandedErrors + srv.name },
-                    shape = RoundedCornerShape(8.dp), color = QuotaRed.copy(alpha = 0.08f)
+                    Modifier.fillMaxWidth().minTouchTarget(48.dp).clip(RoundedCornerShape(8.dp)).clickable(role = Role.Button) { expandedErrors = if (open) expandedErrors - srv.name else expandedErrors + srv.name }.semantics { liveRegion = LiveRegionMode.Polite },
+                    shape = RoundedCornerShape(8.dp), color = errBg
                 ) {
-                    Text(err, fontSize = 11.5.sp, color = QuotaRed, maxLines = if (open) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
+                    Text(err, fontSize = 11.5.sp, color = ensureAccessibleContrast(QuotaRed, errBg, 4.5f, MaterialTheme.colorScheme.surface), maxLines = if (open) Int.MAX_VALUE else 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
                 }
             }
@@ -754,11 +837,11 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
                 val open = srv.name in expandedTools
                 Spacer(Modifier.height(6.dp))
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { expandedTools = if (open) expandedTools - srv.name else expandedTools + srv.name }.padding(vertical = 4.dp),
+                    Modifier.fillMaxWidth().minTouchTarget(48.dp).clip(RoundedCornerShape(6.dp)).clickable(role = Role.Button) { expandedTools = if (open) expandedTools - srv.name else expandedTools + srv.name }.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("${srv.tools.size} tools", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ClaudeAccent, modifier = Modifier.weight(1f))
-                    Text(if (open) L.common.hide else L.common.show, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                    Text("${srv.tools.size} tools", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = accessibleAccent, modifier = Modifier.weight(1f))
+                    Text(if (open) L.common.hide else L.common.show, fontSize = 11.5.sp, color = mutedColor)
                 }
                 if (open) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -790,12 +873,12 @@ private fun McpPage(deps: ClaudeSettingsDeps, onOpenRea: () -> Unit, onOpenReaGr
             title = { Text("Remove ${srv.name}?", fontWeight = FontWeight.Bold) },
             text = { Text(L.claude.settings.claudeWillNoLongerBeAble, fontSize = 13.5.sp) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                     deps.config.removeMcp(srv.name, srv.scope, cwd)
                     toDelete = null
-                }) { Text(L.common.remove, color = QuotaRed) }
+                }) { Text(L.common.remove, color = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)) }
             },
-            dismissButton = { TextButton(onClick = { toDelete = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { toDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -807,8 +890,10 @@ private fun TransportBadge(transport: String) = Badge(if (transport == "stdio") 
 
 @Composable
 private fun Badge(text: String, color: Color) {
-    Surface(shape = RoundedCornerShape(4.dp), color = color.copy(alpha = 0.15f)) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = color, modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+    val bg = color.copy(alpha = 0.15f)
+    val accessibleText = ensureAccessibleContrast(color, bg, 4.5f, MaterialTheme.colorScheme.surface)
+    Surface(shape = RoundedCornerShape(4.dp), color = bg) {
+        Text(text, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = accessibleText, modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
     }
 }
 
@@ -839,28 +924,35 @@ private fun AddMcpDialog(
             else initial.headers.entries.joinToString("\n") { "${it.key}: ${it.value}" }
         )
     }
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val chipMuted = accessibleMutedColor(alpha = 0.72f)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (initial.name.isBlank()) L.claude.settings.addMcpServer else L.claude.settings.addName(initial.name), fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 error?.let {
-                    Surface(shape = RoundedCornerShape(8.dp), color = QuotaRed.copy(alpha = 0.08f), modifier = Modifier.fillMaxWidth()) {
-                        Text(it, fontSize = 12.sp, color = QuotaRed, modifier = Modifier.padding(8.dp))
+                    val errBg = QuotaRed.copy(alpha = 0.08f)
+                    Surface(shape = RoundedCornerShape(8.dp), color = errBg, modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
+                        Text(it, fontSize = 12.sp, color = ensureAccessibleContrast(QuotaRed, errBg, 4.5f, MaterialTheme.colorScheme.surface), modifier = Modifier.padding(8.dp))
                     }
                 }
                 OutlinedTextField(name, { name = it.trim() }, label = { Text(L.common.name) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Text(L.claude.settings.transport, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(L.claude.settings.transport, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.selectableGroup()) {
                     listOf("stdio", "http", "sse").forEach { t ->
-                        ControlChip(t, highlighted = transport == t, color = if (transport == t) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), onClick = { transport = t })
+                        val isSelected = transport == t
+                        ControlChip(t, highlighted = isSelected, color = if (isSelected) accessibleAccent else chipMuted, modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = isSelected }, onClick = { transport = t })
                     }
                 }
-                Text(L.claude.settings.availableIn, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(L.claude.settings.availableIn, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.selectableGroup()) {
                     listOf("user" to L.common.allProjects, "local" to L.claude.settings.thisProjectMe, "project" to L.claude.settings.thisProjectMcpJson2).forEach { (sc, label) ->
                         val enabled = sc == "user" || cwd != null
-                        ControlChip(label, highlighted = scope == sc, color = if (scope == sc) ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.7f else 0.3f),
+                        val isSelected = scope == sc
+                        ControlChip(label, highlighted = isSelected, color = if (isSelected) accessibleAccent else if (enabled) chipMuted else accessibleMutedColor(alpha = 0.55f),
+                            modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = isSelected },
                             onClick = { if (enabled) scope = sc })
                     }
                 }
@@ -892,9 +984,10 @@ private fun AddMcpDialog(
                     )
                 )
             }, enabled = name.isNotBlank() && (if (transport == "stdio") command.isNotBlank() else url.isNotBlank()),
+                modifier = Modifier.minTouchTarget(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.add) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(L.common.cancel) } }
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
     )
 }
 
@@ -947,15 +1040,18 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
         searching = false
     }
 
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleGreen = ensureAccessibleContrast(QuotaGreen, MaterialTheme.colorScheme.surface, 4.5f)
+    val descMuted = accessibleMutedColor(alpha = 0.72f)
     Column(Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+        TabRow(selectedTabIndex = tab, containerColor = Color.Transparent, modifier = Modifier.selectableGroup()) {
             listOf(L.common.installed, L.claude.settings.discover, L.claude.settings.marketplaces).forEachIndexed { i, t ->
-                Tab(selected = tab == i, onClick = { tab = i }, text = { Text(t, fontSize = 13.sp) })
+                Tab(selected = tab == i, onClick = { tab = i }, modifier = Modifier.minTouchTarget(48.dp), text = { Text(t, fontSize = 13.sp) })
             }
         }
         val d = data
         if (d == null) {
-            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.padding(16.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = ClaudeAccent)
                 Spacer(Modifier.width(8.dp))
                 Hint(L.claude.settings.loadingPluginsTheCatalogCanTake)
@@ -994,7 +1090,15 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                         val p = d.plugins.installed[i]
                         val op = ops[p.key]
                         ClaudeCard {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            val canToggle = op == null && p.enabled != null
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = if (canToggle) {
+                                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).accessibleToggleRow(checked = p.enabled!!, role = Role.Switch) {
+                                        deps.config.pluginAction(if (!p.enabled) "enable" else "disable", ClaudePluginAction(plugin = p.key, scope = p.scope))
+                                    }
+                                } else Modifier.fillMaxWidth()
+                            ) {
                                 Column(Modifier.weight(1f)) {
                                     Text(p.name.ifBlank { p.key }, fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp)
                                     Hint(listOfNotNull(p.version?.let { "v$it" }, p.scope, p.key.substringAfter('@', "").takeIf { it.isNotBlank() }).joinToString(" · "))
@@ -1002,16 +1106,16 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                                 if (op != null) PluginProgress(op)
                                 else if (p.enabled != null) Switch(
                                     checked = p.enabled,
-                                    onCheckedChange = { deps.config.pluginAction(if (it) "enable" else "disable", ClaudePluginAction(plugin = p.key, scope = p.scope)) },
+                                    onCheckedChange = null,
                                     colors = SwitchDefaults.colors(checkedTrackColor = ClaudeAccent)
                                 )
                             }
                             if (p.description.isNotBlank()) Text(p.description, fontSize = 11.5.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                                color = descMuted)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
-                                OutlinedButton(onClick = { deps.config.pluginAction("update", ClaudePluginAction(plugin = p.key)) }, enabled = op == null) { Text(L.common.update, fontSize = 12.sp) }
-                                OutlinedButton(onClick = { deps.config.pluginAction("uninstall", ClaudePluginAction(plugin = p.key, scope = p.scope)) }, enabled = op == null) {
-                                    Text(L.common.uninstall, fontSize = 12.sp, color = QuotaRed)
+                                OutlinedButton(onClick = { deps.config.pluginAction("update", ClaudePluginAction(plugin = p.key)) }, enabled = op == null, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.update, fontSize = 12.sp) }
+                                OutlinedButton(onClick = { deps.config.pluginAction("uninstall", ClaudePluginAction(plugin = p.key, scope = p.scope)) }, enabled = op == null, modifier = Modifier.minTouchTarget(48.dp)) {
+                                    Text(L.common.uninstall, fontSize = 12.sp, color = accessibleRed)
                                 }
                             }
                         }
@@ -1038,13 +1142,14 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                                 }
                                 when {
                                     op != null -> PluginProgress(op)
-                                    p.key in installedIds -> Text(L.common.installed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = QuotaGreen)
+                                    p.key in installedIds -> Text(L.common.installed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = accessibleGreen)
                                     else -> Button(onClick = { deps.config.pluginAction("install", ClaudePluginAction(plugin = p.key, scope = "user")) },
+                                        modifier = Modifier.minTouchTarget(48.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.install, fontSize = 12.sp) }
                                 }
                             }
                             if (p.description.isNotBlank()) Text(p.description, fontSize = 11.5.sp, maxLines = 3, overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                                color = descMuted)
                         }
                     }
                 }
@@ -1068,7 +1173,7 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                                     namesBeforeAdd = d.marketplaces.map { it.name }.toSet()
                                     addingMarket = marketSource
                                     deps.config.pluginAction("marketplace-add", ClaudePluginAction(source = marketSource))
-                                }, enabled = marketSource.isNotBlank() && !adding, colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) {
+                                }, enabled = marketSource.isNotBlank() && !adding, modifier = Modifier.minTouchTarget(48.dp), colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) {
                                     if (adding) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White) else Text(L.common.add)
                                 }
                             }
@@ -1082,7 +1187,7 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                             ClaudeCard {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Row(
-                                        Modifier.weight(1f).clickable { expandedMarket = if (open) null else m.name; marketQuery = "" },
+                                        Modifier.weight(1f).minTouchTarget(48.dp).clickable(role = Role.Button) { expandedMarket = if (open) null else m.name; marketQuery = "" },
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Column(Modifier.weight(1f)) {
@@ -1093,11 +1198,11 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                                     }
                                     if (op != null) PluginProgress(op)
                                     else {
-                                        IconButton(onClick = { deps.config.pluginAction("marketplace-update", ClaudePluginAction(name = m.name)) }) {
+                                        IconButton(onClick = { deps.config.pluginAction("marketplace-update", ClaudePluginAction(name = m.name)) }, modifier = Modifier.minTouchTarget(48.dp)) {
                                             Icon(Icons.Outlined.Refresh, L.claude.settings.refreshCatalog)
                                         }
-                                        IconButton(onClick = { deps.config.pluginAction("marketplace-remove", ClaudePluginAction(name = m.name)) }) {
-                                            Icon(Icons.Outlined.Delete, L.common.remove, tint = QuotaRed.copy(alpha = 0.8f))
+                                        IconButton(onClick = { deps.config.pluginAction("marketplace-remove", ClaudePluginAction(name = m.name)) }, modifier = Modifier.minTouchTarget(48.dp)) {
+                                            Icon(Icons.Outlined.Delete, L.common.remove, tint = accessibleRed)
                                         }
                                     }
                                 }
@@ -1125,13 +1230,14 @@ private fun PluginsPage(deps: ClaudeSettingsDeps) {
                                         }
                                         when {
                                             pop != null -> PluginProgress(pop)
-                                            p.key in installedIds -> Text(L.common.installed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = QuotaGreen)
+                                            p.key in installedIds -> Text(L.common.installed, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = accessibleGreen)
                                             else -> Button(onClick = { deps.config.pluginAction("install", ClaudePluginAction(plugin = p.key, scope = "user")) },
+                                                modifier = Modifier.minTouchTarget(48.dp),
                                                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.common.install, fontSize = 12.sp) }
                                         }
                                     }
                                     if (p.description.isNotBlank()) Text(p.description, fontSize = 11.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f))
+                                        color = descMuted)
                                 }
                             }
                         }
@@ -1193,13 +1299,16 @@ private fun MemoryPage(deps: ClaudeSettingsDeps) {
     LaunchedEffect(cwd) { deps.config.loadAutoMemory(cwd) }
 
     // ---- CLAUDE.md
+    val accessibleAccent = ensureAccessibleContrast(ClaudeAccent, MaterialTheme.colorScheme.surface, 4.5f)
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
+    val chipMuted = accessibleMutedColor(alpha = 0.72f)
     ClaudeCard {
         SectionTitle(L.claude.settings.instructionsClaudeMd)
         Hint(L.claude.settings.rulesClaudeFollowsInEveryChat)
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ControlChip(L.common.allProjects, highlighted = scope == "user", color = if (scope == "user") ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), onClick = { scope = "user" })
-            ControlChip(projectName, highlighted = scope == "project", color = if (scope == "project") ClaudeAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f), onClick = { scope = "project" })
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.selectableGroup()) {
+            ControlChip(L.common.allProjects, highlighted = scope == "user", color = if (scope == "user") accessibleAccent else chipMuted, modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = scope == "user" }, onClick = { scope = "user" })
+            ControlChip(projectName, highlighted = scope == "project", color = if (scope == "project") accessibleAccent else chipMuted, modifier = Modifier.minTouchTarget(48.dp).semantics { role = Role.RadioButton; selected = scope == "project" }, onClick = { scope = "project" })
         }
         Spacer(Modifier.height(8.dp))
         val m = memory
@@ -1222,6 +1331,7 @@ private fun MemoryPage(deps: ClaudeSettingsDeps) {
             Button(
                 onClick = { deps.config.saveMemory(scope, if (scope == "project") cwd else null, text) },
                 enabled = text != m.content,
+                modifier = Modifier.minTouchTarget(48.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)
             ) { Text(L.common.save) }
         }
@@ -1234,12 +1344,12 @@ private fun MemoryPage(deps: ClaudeSettingsDeps) {
                 SectionTitle(L.claude.settings.claudesMemoryProjectname(projectName))
                 Hint(L.claude.settings.notesClaudeSavedByItselfWhile)
             }
-            IconButton(onClick = { deps.config.loadAutoMemory(cwd) }) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
+            IconButton(onClick = { deps.config.loadAutoMemory(cwd) }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Refresh, L.common.refresh) }
         }
         val a = auto
         when {
             a == null -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = ClaudeAccent)
-            a.error != null -> Text(a.error, fontSize = 12.sp, color = QuotaRed)
+            a.error != null -> Text(a.error, fontSize = 12.sp, color = accessibleRed, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             a.files.isEmpty() -> Hint(L.claude.settings.noNotesYetAskClaudeTo)
             else -> {
                 Hint(a.dir)
@@ -1247,14 +1357,14 @@ private fun MemoryPage(deps: ClaudeSettingsDeps) {
                     val open = openNote == f.name
                     HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable { openNote = if (open) null else f.name },
+                        Modifier.fillMaxWidth().minTouchTarget(48.dp).clip(RoundedCornerShape(6.dp)).clickable(role = Role.Button) { openNote = if (open) null else f.name },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(f.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, fontFamily = FontFamily.Monospace)
                             Hint(java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(f.modified)))
                         }
-                        IconButton(onClick = { noteToDelete = f.name }) { Icon(Icons.Outlined.Delete, L.common.delete, tint = QuotaRed.copy(alpha = 0.8f)) }
+                        IconButton(onClick = { noteToDelete = f.name }, modifier = Modifier.minTouchTarget(48.dp)) { Icon(Icons.Outlined.Delete, L.common.delete, tint = accessibleRed) }
                     }
                     if (open) {
                         Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), modifier = Modifier.fillMaxWidth()) {
@@ -1272,12 +1382,12 @@ private fun MemoryPage(deps: ClaudeSettingsDeps) {
             title = { Text("Delete $name?", fontWeight = FontWeight.Bold) },
             text = { Text(L.claude.settings.claudeForgetsWhatThisNoteSays, fontSize = 13.5.sp) },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(modifier = Modifier.minTouchTarget(48.dp), onClick = {
                     deps.config.deleteAutoMemory(cwd, name)
                     noteToDelete = null
-                }) { Text(L.common.delete, color = QuotaRed) }
+                }) { Text(L.common.delete, color = accessibleRed) }
             },
-            dismissButton = { TextButton(onClick = { noteToDelete = null }) { Text(L.common.cancel) } }
+            dismissButton = { TextButton(onClick = { noteToDelete = null }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.cancel) } }
         )
     }
 }
@@ -1291,12 +1401,13 @@ private fun AdvancedPage(deps: ClaudeSettingsDeps) {
     val error by deps.config.settingsError.collectAsState()
     var text by remember { mutableStateOf("") }
     var parseError by remember { mutableStateOf<String?>(null) }
+    val accessibleRed = ensureAccessibleContrast(QuotaRed, MaterialTheme.colorScheme.surface, 4.5f)
     LaunchedEffect(Unit) { deps.config.loadSettings() }
     LaunchedEffect(settings) { settings?.let { text = prettyJson.encodeToString(JsonObject.serializer(), it) } }
 
     Hint(L.claude.settings.everyClaudeCodeSettingLivesHere)
     if (path.isNotBlank()) Hint(path)
-    error?.let { Text(it, color = QuotaRed, fontSize = 12.sp) }
+    error?.let { Text(it, color = accessibleRed, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
     OutlinedTextField(
         value = text,
         onValueChange = {
@@ -1307,9 +1418,9 @@ private fun AdvancedPage(deps: ClaudeSettingsDeps) {
         modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp),
         isError = parseError != null
     )
-    parseError?.let { Text(it, color = QuotaRed, fontSize = 12.sp) }
+    parseError?.let { Text(it, color = accessibleRed, fontSize = 12.sp, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { deps.config.loadSettings() }) { Text(L.common.reload) }
+        OutlinedButton(onClick = { deps.config.loadSettings() }, modifier = Modifier.minTouchTarget(48.dp)) { Text(L.common.reload) }
         Button(onClick = {
             val parsed: JsonElement? = runCatching { Json.parseToJsonElement(text) }.getOrElse {
                 parseError = L.claude.settings.invalidJsonMessage(it.message)
@@ -1320,7 +1431,7 @@ private fun AdvancedPage(deps: ClaudeSettingsDeps) {
                 is JsonObject -> deps.config.saveSettings(parsed, L.claude.settings.settingsJsonSaved)
                 else -> parseError = L.claude.settings.settingsJsonMustBeAJson
             }
-        }, colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.claude.settings.validateSave) }
+        }, modifier = Modifier.minTouchTarget(48.dp), colors = ButtonDefaults.buttonColors(containerColor = ClaudeAccent)) { Text(L.claude.settings.validateSave) }
     }
 }
 

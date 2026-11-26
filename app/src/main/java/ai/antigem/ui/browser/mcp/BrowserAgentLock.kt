@@ -47,13 +47,21 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ai.antigem.i18n.L
 import ai.antigem.ui.browser.BrowserAutomationScripts
 import ai.antigem.ui.browser.BrowserSessionManager
 import ai.antigem.ui.browser.BrowserTabSession
+import ai.antigem.ui.components.ensureAccessibleContrast
+import ai.antigem.ui.components.minTouchTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -230,6 +238,9 @@ fun BrowserAgentLockOverlay(onUnlock: () -> Unit, modifier: Modifier = Modifier)
     ) {
         val areaW = constraints.maxWidth.toFloat()
         val areaH = constraints.maxHeight.toFloat()
+        val pillBg = Color(0xF2202124)
+        val dragTint = ensureAccessibleContrast(Color.White.copy(alpha = 0.78f), pillBg, 4.5f)
+        val unlockColor = ensureAccessibleContrast(ai.antigem.theme.AppColors.warning, pillBg, 4.5f)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -246,17 +257,18 @@ fun BrowserAgentLockOverlay(onUnlock: () -> Unit, modifier: Modifier = Modifier)
                     }
                 }
                 .shadow(6.dp, RoundedCornerShape(50))
-                .background(Color(0xF2202124), RoundedCornerShape(50))
+                .background(pillBg, RoundedCornerShape(50))
+                .semantics { liveRegion = LiveRegionMode.Polite }
                 .padding(start = 4.dp, end = 4.dp, top = 3.dp, bottom = 3.dp)
         ) {
-            Icon(Icons.Filled.DragIndicator, contentDescription = "Drag", tint = Color.White.copy(alpha = 0.55f), modifier = Modifier.size(18.dp))
+            Icon(Icons.Filled.DragIndicator, contentDescription = L.common.drag, tint = dragTint, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(2.dp))
             Icon(Icons.Outlined.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(6.dp))
             Text("AI controls this tab", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.width(2.dp))
-            TextButton(onClick = onUnlock, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.height(30.dp)) {
-                Text("Unlock", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ai.antigem.theme.AppColors.warning)
+            TextButton(onClick = onUnlock, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp), modifier = Modifier.minTouchTarget(48.dp)) {
+                Text("Unlock", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = unlockColor)
             }
         }
     }
@@ -268,6 +280,12 @@ fun BrowserJsDialogCard(tab: BrowserTabSession, modifier: Modifier = Modifier) {
     val dialog = tab.pendingDialog ?: return
     var reply by remember(dialog) { mutableStateOf(dialog.defaultText) }
     val host = remember(dialog) { runCatching { Uri.parse(dialog.url).host }.getOrNull().orEmpty() }
+    val dialogTitle = when (dialog.type) {
+        "confirm" -> "This page asks"
+        "prompt" -> "This page asks for input"
+        "beforeunload" -> "Leave this page?"
+        else -> "This page says"
+    }
     fun answer(accept: Boolean) {
         dialog.answer(accept, reply)
         if (tab.pendingDialog === dialog) tab.pendingDialog = null
@@ -279,16 +297,23 @@ fun BrowserJsDialogCard(tab: BrowserTabSession, modifier: Modifier = Modifier) {
             .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } },
         contentAlignment = Alignment.Center
     ) {
-        Surface(shape = RoundedCornerShape(18.dp), tonalElevation = 6.dp, shadowElevation = 8.dp, modifier = Modifier.padding(24.dp).widthIn(max = 380.dp)) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            tonalElevation = 6.dp,
+            shadowElevation = 8.dp,
+            modifier = Modifier
+                .padding(24.dp)
+                .widthIn(max = 380.dp)
+                .semantics {
+                    paneTitle = dialogTitle
+                    liveRegion = LiveRegionMode.Polite
+                }
+        ) {
             Column(Modifier.padding(20.dp)) {
                 Text(
-                    when (dialog.type) {
-                        "confirm" -> "This page asks"
-                        "prompt" -> "This page asks for input"
-                        "beforeunload" -> "Leave this page?"
-                        else -> "This page says"
-                    },
-                    style = MaterialTheme.typography.titleMedium
+                    dialogTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { heading() }
                 )
                 if (host.isNotEmpty()) Text(host, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(12.dp))
@@ -301,8 +326,8 @@ fun BrowserJsDialogCard(tab: BrowserTabSession, modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.height(12.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    if (dialog.type != "alert") TextButton(onClick = { answer(false) }) { Text(if (dialog.type == "beforeunload") "Stay" else "Cancel") }
-                    TextButton(onClick = { answer(true) }) { Text(if (dialog.type == "beforeunload") "Leave" else "OK") }
+                    if (dialog.type != "alert") TextButton(onClick = { answer(false) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (dialog.type == "beforeunload") "Stay" else "Cancel") }
+                    TextButton(onClick = { answer(true) }, modifier = Modifier.minTouchTarget(48.dp)) { Text(if (dialog.type == "beforeunload") "Leave" else "OK") }
                 }
             }
         }
